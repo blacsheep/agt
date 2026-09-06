@@ -56,13 +56,16 @@ pub(crate) fn tool(command: ToolCommand, home: &Path, output: OutputMode) -> Res
             name,
             args,
         } => {
-            let args: Value = serde_json::from_str(&args)?;
-            let result = service(home, identity)?.call(&name, args).map_err(|_| {
-                anyhow::anyhow!(
-                    "operation rejected; check schema, references, membership and permissions"
-                )
+            let args: Value = serde_json::from_str(&args).map_err(|_| {
+                agt_service::ToolError::new("invalid_arguments", "Arguments must be valid JSON.")
             })?;
-            emit(&result, output)
+            match service(home, identity)?.call(&name, args) {
+                Ok(result) => emit(&result, output),
+                Err(error) => {
+                    emit(&error.as_value(), output)?;
+                    Err(error.into())
+                }
+            }
         }
     }
 }

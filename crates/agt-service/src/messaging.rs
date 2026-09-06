@@ -59,18 +59,44 @@ impl Messaging {
             .left_message_seq
             .is_some()
         {
-            bail!("not an active member");
+            return Err(crate::ToolError::new(
+                "permission_denied",
+                "Active conversation membership is required.",
+            )
+            .into());
         }
         Ok(())
     }
     pub fn send(&self, mut input: MessageInput) -> Result<SendMessageOutcome> {
         self.member(&input.conversation)?;
-        if input.body.trim().is_empty()
-            || input.body.len() > 256 * 1024
-            || input.request_key.trim().is_empty()
-            || input.request_key.len() > 256
-        {
-            bail!("invalid message body or request key");
+        if input.body.trim().is_empty() || input.body.len() > 256 * 1024 {
+            return Err(crate::ToolError::invalid(
+                Some("body"),
+                "Body must be nonblank and at most 262144 UTF-8 bytes.",
+            )
+            .into());
+        }
+        if input.request_key.trim().is_empty() || input.request_key.len() > 256 {
+            return Err(crate::ToolError::invalid(
+                Some("request_key"),
+                "Request key must be nonblank and at most 256 UTF-8 bytes.",
+            )
+            .into());
+        }
+        // Compatibility for clients that fill optional string fields with empty values.
+        input.reply_to = input.reply_to.filter(|id| !id.as_str().trim().is_empty());
+        if let Some(id) = &input.reply_to {
+            let reply = self.im.get_message(id).map_err(|error| match error {
+                agt_im::ImError::MessageNotFound(_) => anyhow::Error::from(crate::ToolError::invalid(Some("reply_to"), "Reply target must exist in this conversation; omit/null for a new message.")),
+                other => other.into(),
+            })?;
+            if reply.conversation_id != input.conversation {
+                return Err(crate::ToolError::invalid(
+                    Some("reply_to"),
+                    "Reply target must exist in this conversation; omit/null for a new message.",
+                )
+                .into());
+            }
         }
         input.mentions.sort();
         input.mentions.dedup();
@@ -81,7 +107,11 @@ impl Messaging {
                 .left_message_seq
                 .is_some()
             {
-                bail!("mentioned principal is not a member");
+                return Err(crate::ToolError::invalid(
+                    Some("mentions"),
+                    "Mentioned identities must be active conversation members.",
+                )
+                .into());
             }
         }
         self.im.send_message(SendMessageRequest{
@@ -104,7 +134,7 @@ impl Messaging {
             &self.actor.principal,
             MessageListOptions {
                 limit,
-                before,
+                before: before.filter(|cursor| !cursor.trim().is_empty()),
                 after: None,
             },
         )?)

@@ -381,3 +381,175 @@ fn deleting_hosted_agent_requires_explicit_unbinding() {
             .is_ok()
     );
 }
+
+#[test]
+fn optional_reply_and_cursor_values_are_consistent_and_idempotent() {
+    let home = home();
+    let owner = service(home.path(), "owner", true);
+    let direct = owner
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    let base = json!({"conversation":direct["id"],"body":"hello","request_key":"optional"});
+    let first = owner.call("message_send", base.clone()).unwrap();
+    for empty in [Value::Null, json!(""), json!(" \t ")] {
+        let mut args = base.clone();
+        args["reply_to"] = empty.clone();
+        assert_eq!(owner.call("message_send", args).unwrap()["duplicate"], true);
+        let page = owner
+            .call(
+                "message_history",
+                json!({"conversation":direct["id"],"before":empty}),
+            )
+            .unwrap();
+        assert_eq!(page["messages"].as_array().unwrap().len(), 1);
+    }
+    let reply = owner.call("message_send", json!({"conversation":direct["id"],"body":"reply","request_key":"reply","reply_to":first["message"]["id"]})).unwrap();
+    assert_eq!(reply["message"]["reply_to_id"], first["message"]["id"]);
+    for target in [json!("missing-secret-id"), json!(true)] {
+        let error = owner.call("message_send", json!({"conversation":direct["id"],"body":"private-body","request_key":"bad","reply_to":target})).unwrap_err();
+        assert_eq!(error.code, "invalid_arguments");
+        assert_eq!(error.field.as_deref(), Some("reply_to"));
+        assert!(!error.as_value().to_string().contains("secret"));
+    }
+    let other = owner
+        .call("direct_create", json!({"principal":"b"}))
+        .unwrap();
+    let error = owner.call("message_send", json!({"conversation":other["id"],"body":"cross","request_key":"cross","reply_to":first["message"]["id"]})).unwrap_err();
+    assert_eq!(error.field.as_deref(), Some("reply_to"));
+    assert_eq!(
+        owner
+            .call("message_history", json!({"conversation":other["id"]}))
+            .unwrap()["messages"],
+        json!([])
+    );
+    let schemas = owner.schemas();
+    for (name, field, types) in [
+        ("message_send", "reply_to", json!(["string", "null"])),
+        ("message_history", "before", json!(["string", "null"])),
+        ("resource_delete", "confirm", json!(["array", "null"])),
+    ] {
+        assert_eq!(
+            schemas.iter().find(|s| s["name"] == name).unwrap()["inputSchema"]["properties"][field]
+                ["type"],
+            types
+        );
+    }
+}
+
+#[test]
+fn argument_errors_identify_safe_fields_without_echoing_untrusted_values() {
+    let home = home();
+    let owner = service(home.path(), "owner", true);
+    for (name, args, field) in [
+        ("message_ack", json!({"id":0}), Some("id")),
+        ("message_ack", json!({"id":-1}), Some("id")),
+        ("message_inbox", json!({"limit":201}), Some("limit")),
+        ("message_inbox", json!({"limit":-1}), Some("limit")),
+        ("message_inbox", json!({"limit":null}), Some("limit")),
+        ("direct_create", json!({}), Some("principal")),
+        (
+            "direct_create",
+            json!({"principal":true}),
+            Some("principal"),
+        ),
+        (
+            "principal_list",
+            json!({"secret-unknown-key":"secret-value"}),
+            None,
+        ),
+        ("principal_list", json!([]), None),
+        (
+            "group_create",
+            json!({"title":"test","members":[1]}),
+            Some("members"),
+        ),
+    ] {
+        let error = owner.call(name, args).unwrap_err();
+        assert_eq!(error.code, "invalid_arguments");
+        assert_eq!(error.field.as_deref(), field);
+        assert!(!error.as_value().to_string().contains("secret"));
+    }
+    let direct = owner
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    let error = service(home.path(), "outsider", false)
+        .call("message_history", json!({"conversation":direct["id"]}))
+        .unwrap_err();
+    assert_eq!(error.code, "permission_denied");
+    assert_eq!(
+        owner
+            .call("direct_create", json!({"principal":"missing-secret"}))
+            .unwrap_err()
+            .code,
+        "not_found"
+    );
+    assert_eq!(
+        service(home.path(), "a", false)
+            .call("resource_write", json!({}))
+            .unwrap_err()
+            .code,
+        "tool_unavailable"
+    );
+    assert_eq!(
+        owner
+            .call(
+                "resource_read",
+                json!({"kind":"prompt","reference":"missing"})
+            )
+            .unwrap_err()
+            .code,
+        "not_found"
+    );
+    let args = json!({"kind":"prompt","reference":"p","create":true,"data":{"text":"private"}});
+    owner.call("resource_write", args.clone()).unwrap();
+    assert_eq!(
+        owner.call("resource_write", args).unwrap_err().code,
+        "already_exists"
+    );
+    for confirm in [None, Some(Value::Null)] {
+        let mut args = json!({"kind":"prompt","reference":"p"});
+        if let Some(confirm) = confirm {
+            args["confirm"] = confirm;
+        }
+        assert_eq!(
+            owner.call("resource_delete", args).unwrap()["requires_confirmation"],
+            true
+        );
+    }
+    assert_eq!(
+        owner
+            .call(
+                "resource_delete",
+                json!({"kind":"prompt","reference":"p","confirm":[]})
+            )
+            .unwrap_err()
+            .code,
+        "confirmation_mismatch"
+    );
+}
+
+#[test]
+fn mcp_returns_the_same_safe_structured_error_as_the_service() {
+    let home = home();
+    let service = service(home.path(), "owner", true);
+    let args = json!({"id":-1});
+    let expected = service
+        .call("message_ack", args.clone())
+        .unwrap_err()
+        .as_value();
+    let input = [
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"test"}}}),
+        json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"message_ack","arguments":args}}),
+    ].iter().map(Value::to_string).collect::<Vec<_>>().join("\n")+"\n";
+    let mut output = Vec::new();
+    agt_service::mcp_server::serve(&service, input.as_bytes(), &mut output).unwrap();
+    let output = String::from_utf8(output).unwrap();
+    let response: Value = serde_json::from_str(output.lines().last().unwrap()).unwrap();
+    assert_eq!(response["result"]["isError"], true);
+    assert_eq!(
+        serde_json::from_str::<Value>(response["result"]["content"][0]["text"].as_str().unwrap())
+            .unwrap(),
+        expected
+    );
+}

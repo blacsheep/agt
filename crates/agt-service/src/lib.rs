@@ -1,11 +1,13 @@
 mod bindings;
 pub mod deletion;
+mod error;
 pub mod mcp_server;
 mod messaging;
 mod resources;
 mod tools;
 
 pub use bindings::{Binding, BindingStore, ResponsePolicy};
+pub use error::ToolError;
 pub use messaging::{Actor, MessageInput, Messaging, Role};
 pub use resources::Resources;
 pub use tools::ToolService;

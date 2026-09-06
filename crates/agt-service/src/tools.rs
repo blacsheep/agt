@@ -1,4 +1,4 @@
-use crate::{Actor, Binding, BindingStore, MessageInput, Messaging, Resources, Role};
+use crate::{Actor, Binding, BindingStore, MessageInput, Messaging, Resources, Role, ToolError};
 use agt_im::{ConversationId, PrincipalId, PrincipalInput, PrincipalKind};
 use anyhow::{Result, bail};
 use serde::Deserialize;
@@ -20,10 +20,22 @@ impl ToolService {
     pub fn schemas(&self) -> Vec<Value> {
         schemas(self.messaging.actor.role)
     }
-    pub fn call(&self, name: &str, args: Value) -> Result<Value> {
-        if !self.schemas().iter().any(|s| s["name"] == name) {
-            bail!("tool unavailable for this role");
-        }
+    pub fn call(&self, name: &str, args: Value) -> std::result::Result<Value, ToolError> {
+        let schema = self
+            .schemas()
+            .into_iter()
+            .find(|s| s["name"] == name)
+            .ok_or_else(|| {
+                ToolError::new(
+                    "tool_unavailable",
+                    "Tool is unknown or unavailable to your fixed role; use tools/list.",
+                )
+            })?;
+        validate_arguments(&schema["inputSchema"], &args)?;
+        self.call_inner(name, args).map_err(ToolError::classify)
+    }
+
+    fn call_inner(&self, name: &str, args: Value) -> Result<Value> {
         let m = &self.messaging;
         let resources = Resources::new(&self.home);
         Ok(match name {
@@ -226,13 +238,13 @@ fn schemas(role: Role) -> Vec<Value> {
         schema(
             "message_send",
             "Send as your fixed identity. Reuse request_key only for identical content. Use mentions to request group responses; sending does not synchronously wait for agents.",
-            json!({"conversation":string,"body":string,"request_key":string,"mentions":{"type":"array","items":string},"reply_to":string}),
+            json!({"conversation":string,"body":string,"request_key":string,"mentions":{"type":"array","items":string},"reply_to":{"type":["string","null"],"description":"Existing message ID in this conversation. Omit or null for a new message; blank strings are treated as absent."}}),
             &["conversation", "body", "request_key"],
         ),
         schema(
             "message_history",
             "Read shared messages oldest-to-newest within a page. Pass next_cursor as before for older history.",
-            json!({"conversation":string,"before":string,"limit":{"type":"integer","minimum":1,"maximum":200,"default":50}}),
+            json!({"conversation":string,"before":{"type":["string","null"],"description":"Use next_cursor from this conversation; omit/null/blank for latest page."},"limit":{"type":"integer","minimum":1,"maximum":200,"default":50}}),
             &["conversation"],
         ),
         schema(
@@ -254,7 +266,7 @@ fn schemas(role: Role) -> Vec<Value> {
             schema("resource_list","List resource summaries. Secrets are redacted.",json!({"kind":kind}),&["kind"]),
             schema("resource_read","Read a resource by category/name (default category optional). Skills support @scope/package. Secrets are redacted.",json!({"kind":kind,"reference":string}),&["kind","reference"]),
             schema("resource_write","Create or update resource. data: provider create {base_url,api_key_env}, update either field; model create {provider,model,params?: ModelConfigUpdate}, update ModelConfigUpdate fields directly; prompt {text}; skill create {description}, update {text: full SKILL.md}; mcp single-server {mcpServers:{name:config}}; agent {model,prompt?,skills?,mcps?,description?}, model required on create. Agent arrays replace mounts (empty unmounts all); omitted fields unchanged. Categories must exist. Provider env credentials resolve in the server process, never returned.",json!({"kind":kind,"reference":string,"create":{"type":"boolean"},"data":{"type":"object"}}),&["kind","reference","create","data"]),
-            schema("resource_delete","First omit confirm to get dependency-aware deletion plan; then pass exact ordered items as confirm. Protects default prompt/gateway.",json!({"kind":kind,"reference":string,"recursive":{"type":"boolean","default":false},"confirm":{"type":"array","items":string}}),&["kind","reference"]),
+            schema("resource_delete","First omit confirm (or use null) to get dependency-aware deletion plan; then pass exact ordered items as confirm. Empty array does not authorize a nonempty plan. Protects default prompt/gateway.",json!({"kind":kind,"reference":string,"recursive":{"type":"boolean","default":false},"confirm":{"type":["array","null"],"items":string}}),&["kind","reference"]),
             schema("principal_create","Register external user/service or agent identity. Does not start inference.",json!({"id":string,"name":string,"kind":{"enum":["user","agent","bot","service","other"]}}),&["id","name","kind"]),
             schema("agent_bind","Host an Agent principal using an agent definition. Binding affects future unprepared deliveries. allow_mcp also requires worker --allow-mcp. max_depth bounds automated reply chains; default policy is mentioned.",json!({"principal":string,"agent":string,"working_directory":string,"policy":{"enum":["all","mentioned","manual"]},"max_steps":{"type":"integer","minimum":1,"maximum":100},"max_depth":{"type":"integer","minimum":1,"maximum":8},"allow_mcp":{"type":"boolean","default":false}}),&["principal","agent","working_directory","max_steps","max_depth"]),
             schema("agent_unbind","Stop hosting a participant; existing records remain.",json!({"principal":string}),&["principal"]),
@@ -262,6 +274,73 @@ fn schemas(role: Role) -> Vec<Value> {
         ]);
     }
     tools
+}
+
+// Validate the small schema vocabulary used by our own tool envelopes. Nested
+// resource documents remain validated by their typed resource parsers, not here.
+fn validate_arguments(schema: &Value, args: &Value) -> std::result::Result<(), ToolError> {
+    let args = args
+        .as_object()
+        .ok_or_else(|| ToolError::invalid(None, "Arguments must be a JSON object."))?;
+    let properties = schema["properties"].as_object().expect("tool properties");
+    if args.keys().any(|key| !properties.contains_key(key)) {
+        return Err(ToolError::invalid(
+            None,
+            "Unknown argument; use only fields declared in the tool schema.",
+        ));
+    }
+    for required in schema["required"].as_array().expect("required fields") {
+        let field = required.as_str().expect("field name");
+        if !args.contains_key(field) {
+            return Err(ToolError::invalid(
+                Some(field),
+                "Required argument is missing.",
+            ));
+        }
+    }
+    // Field names come from our schema, never untrusted input.
+    for (field, spec) in properties {
+        if let Some(value) = args.get(field)
+            && !matches_spec(spec, value)
+        {
+            return Err(ToolError::invalid(
+                Some(field),
+                "Argument must match the type, enum and bounds declared in the tool schema.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn matches_spec(spec: &Value, value: &Value) -> bool {
+    let type_matches = |kind: &str| match kind {
+        "null" => value.is_null(),
+        "string" => value.is_string(),
+        "boolean" => value.is_boolean(),
+        "integer" => value.is_i64() || value.is_u64(),
+        "array" => value.is_array(),
+        "object" => value.is_object(),
+        _ => false,
+    };
+    let valid_type = match &spec["type"] {
+        Value::String(kind) => type_matches(kind),
+        Value::Array(kinds) => kinds.iter().any(|k| k.as_str().is_some_and(type_matches)),
+        Value::Null => true, // enum-only property
+        _ => false,
+    };
+    valid_type
+        && spec
+            .get("enum")
+            .is_none_or(|values| values.as_array().expect("enum").contains(value))
+        && spec["minimum"]
+            .as_f64()
+            .is_none_or(|min| value.as_f64().is_some_and(|n| n >= min))
+        && spec["maximum"]
+            .as_f64()
+            .is_none_or(|max| value.as_f64().is_some_and(|n| n <= max))
+        && value
+            .as_array()
+            .is_none_or(|values| values.iter().all(|item| matches_spec(&spec["items"], item)))
 }
 
 #[derive(Deserialize)]

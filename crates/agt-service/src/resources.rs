@@ -197,7 +197,7 @@ impl Resources {
         let items = plan.iter().map(ResourceKey::display).collect::<Vec<_>>();
         if let Some(expected) = confirm {
             if expected != items {
-                bail!("confirmation does not match current delete plan");
+                return Err(crate::ToolError::new("confirmation_mismatch", "Fetch a fresh deletion plan by omitting confirm, then submit its exact ordered items.").into());
             }
             crate::deletion::execute_delete(&self.home, &target, recursive, &plan)?;
             Ok(json!({"deleted":items}))

@@ -83,9 +83,8 @@ pub fn serve(service: &ToolService, mut input: impl BufRead, mut output: impl Wr
                             Ok(value) => {
                                 json!({"content":[{"type":"text","text":value.to_string()}],"isError":false})
                             }
-                            // Upstream parser errors may contain resource secrets. Keep them private.
-                            Err(_) => {
-                                json!({"content":[{"type":"text","text":"Operation rejected. Check the tool schema, resource references, membership and role. Existing resources require create=false; deletion requires the exact current plan."}],"isError":true})
+                            Err(error) => {
+                                json!({"content":[{"type":"text","text":error.as_value().to_string()}],"isError":true})
                             }
                         })
                     }
