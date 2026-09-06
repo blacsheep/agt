@@ -1,8 +1,11 @@
 # agt — resources, IM and explicit agent execution
 
 这是从原始 agt runtime 中提取出的本地资源管理器，并提供一个通用的本地
-IM 后端。资源管理器和 IM 都可独立使用；新增的 `agt-runtime` 支持显式执行和
-有限的双 Agent 委派。IM 不会自动启动 runtime、Gateway 或 session。
+IM 后端。资源管理器和 IM 都可独立使用；`agt-runtime` 支持显式执行、有限委派，
+以及由 worker 驱动的私聊/群聊 Agent 协作。IM 不会自动启动推理。
+
+新增框架入口与完整验收步骤见 [框架验收指南](docs/framework-acceptance.md)，
+当前规划见 [资源与消息框架计划](docs/messaging-tools-plan.md)。
 
 ## 保留的模块
 
@@ -17,7 +20,8 @@ agt-skill      SKILL.md（支持 scoped package）
 agt-mcp        mcp.json（stdio/http 配置）
 agt-agent      agent.yaml 及 model/prompt/skill/MCP 挂载
 agt-im         通用参与者、私聊/群聊、消息、已读和事件存储（SQLite）
-agt-runtime    显式执行、模型/工具循环、父子 Run、请求幂等和委派
+agt-service    资源工具、身份权限、Agent 绑定、响应策略和 stdio MCP 服务
+agt-runtime    模型/工具循环、持久化 Run、消息投递调度和显式委派
 agt-cli        agt 命令行
 ```
 
@@ -145,7 +149,8 @@ agt im conversation reactivate <conversation-id> --actor alice
 默认最新消息页通过 `next_cursor` 向旧消息方向翻页（把游标作为 `--before`）；使用
 `--after` 时则向新消息方向翻页（把游标继续作为 `--after`）。删除消息或会话采用
 软删除/状态标记，归档和删除后的会话可以由仍在会话中的参与者显式 `reactivate`
-恢复。当前 IM CLI 不执行 Agent 推理，也不负责网络服务。
+恢复。IM CLI 不执行 Agent 推理；`agt worker` 显式消费托管 Agent 的投递，
+`agt serve` 则通过 stdio MCP 开放资源和通信工具。
 新成员加入后可以读取会话已有历史；但未读数从加入时的消息序号开始计算。
 
 事件名称和操作者语义是稳定底座契约：`conversation.created`、`member.joined`、
