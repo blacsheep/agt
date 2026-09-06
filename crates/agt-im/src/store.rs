@@ -617,6 +617,16 @@ impl ImStore {
             "message.created",
             &serde_json::to_value(&message)?,
         )?;
+        transaction.execute(
+            "INSERT INTO message_deliveries (message_id,principal_id)
+             SELECT ?1, principal_id FROM conversation_members
+             WHERE conversation_id = ?2 AND left_message_seq IS NULL AND principal_id != ?3",
+            params![
+                message.id.as_str(),
+                conversation_id.as_str(),
+                message.sender_id.as_str()
+            ],
+        )?;
 
         if let Some(idempotency_key) = request.idempotency_key.as_deref() {
             transaction.execute(
@@ -639,6 +649,27 @@ impl ImStore {
             message,
             duplicate: false,
         })
+    }
+
+    /// Bounded history at an exact message boundary, independent of newer arrivals.
+    pub fn history_through(
+        &self,
+        message: &Message,
+        viewer: &PrincipalId,
+        limit: usize,
+    ) -> Result<MessagePage> {
+        self.list_messages(
+            &message.conversation_id,
+            viewer,
+            MessageListOptions {
+                limit,
+                before: Some(encode_message_cursor(
+                    &message.conversation_id,
+                    message.seq.saturating_add(1),
+                )),
+                after: None,
+            },
+        )
     }
 
     pub fn list_messages(
@@ -952,7 +983,7 @@ impl ImStore {
         self.get_conversation(conversation_id)
     }
 
-    fn lock(&self) -> Result<MutexGuard<'_, Connection>> {
+    pub(crate) fn lock(&self) -> Result<MutexGuard<'_, Connection>> {
         self.connection.lock().map_err(|_| ImError::LockPoisoned)
     }
 }
@@ -967,8 +998,15 @@ fn configure_connection(connection: &Connection, enable_wal: bool) -> Result<()>
 }
 
 fn initialize_schema(connection: &Connection) -> Result<()> {
-    connection.execute_batch(
-        "PRAGMA user_version = 1;
+    let transaction = Transaction::new_unchecked(connection, TransactionBehavior::Immediate)?;
+    let version: u32 = transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version > 2 {
+        return Err(ImError::InvalidStoredData(
+            "unsupported IM schema version".into(),
+        ));
+    }
+    transaction.execute_batch(
+        "
          CREATE TABLE IF NOT EXISTS principals (
              id TEXT PRIMARY KEY NOT NULL,
              kind TEXT NOT NULL,
@@ -1047,6 +1085,21 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
          CREATE INDEX IF NOT EXISTS direct_pair_lookup
              ON direct_pairs (principal_a, principal_b);",
     )?;
+    transaction.execute_batch(
+        "CREATE TABLE IF NOT EXISTS message_deliveries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id TEXT NOT NULL REFERENCES messages(id),
+            principal_id TEXT NOT NULL REFERENCES principals(id),
+            state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','processing','completed','skipped','failed')),
+            request_json TEXT,
+            run_id TEXT,
+            error TEXT,
+            UNIQUE(message_id, principal_id)
+         );
+         CREATE INDEX IF NOT EXISTS delivery_inbox ON message_deliveries(principal_id,state,id);
+         PRAGMA user_version = 2;"
+    )?;
+    transaction.commit()?;
     Ok(())
 }
 

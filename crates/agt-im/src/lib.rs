@@ -1,7 +1,9 @@
+mod delivery;
 mod error;
 mod model;
 mod store;
 
+pub use delivery::{Delivery, DeliveryState};
 pub use error::{ImError, Result};
 pub use model::{
     Conversation, ConversationId, ConversationKind, ConversationMember, ConversationState,
