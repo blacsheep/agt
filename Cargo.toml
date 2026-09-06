@@ -1,0 +1,53 @@
+[workspace]
+members = [
+    "crates/agt-agent",
+    "crates/agt-cli",
+    "crates/agt-config",
+    "crates/agt-core",
+    "crates/agt-im",
+    "crates/agt-model",
+    "crates/agt-mcp",
+    "crates/agt-provider",
+    "crates/agt-prompt",
+    "crates/agt-skill",
+    "crates/agt-storage",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/blacsheep/agt"
+rust-version = "1.96.1"
+version = "0.1.0"
+
+[workspace.dependencies]
+agt-agent = { path = "crates/agt-agent" }
+agt-config = { path = "crates/agt-config" }
+agt-core = { path = "crates/agt-core" }
+agt-im = { path = "crates/agt-im" }
+agt-model = { path = "crates/agt-model" }
+agt-mcp = { path = "crates/agt-mcp" }
+agt-provider = { path = "crates/agt-provider" }
+agt-prompt = { path = "crates/agt-prompt" }
+agt-skill = { path = "crates/agt-skill" }
+agt-storage = { path = "crates/agt-storage" }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+http = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls", "stream"] }
+rmcp = { version = "=2.2.0", default-features = false, features = ["client", "transport-streamable-http-client"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+serde_yaml = "0.9"
+sse-stream = "0.2.1"
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
+toml = "0.8"
+url = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }

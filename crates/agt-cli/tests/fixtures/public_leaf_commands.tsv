@@ -1,0 +1,131 @@
+command	required_headless_input	finite_choices	side_effect	payload
+doctor	none	no	read	doctor_report
+init	--home recommended	no	write	init_result
+interact	--input|--stdin	no	runtime	interact_turn
+gateway serve	--env or active env	no	runtime	mcp_stdio_frames
+gateway info	none	no	read	gateway_info
+gateway cleanup	none	no	write	gateway_cleanup
+approval list	none	no	write	approval_list
+approval info	approval-id	no	write	approval
+approval approve	approval-id, --yes	no	write	approval
+approval deny	approval-id	no	write	approval
+conversation direct send	source, target, --input|--stdin	no	session	conversation_operation
+conversation direct request	source, target, --input|--stdin	no	runtime	conversation_operation
+conversation direct dialogue	source, target, --input|--stdin	no	runtime	conversation_dialogue
+conversation group create	group-id, --participant|--env	no	write	conversation_group
+conversation group list	none	no	read	conversation_group_list
+conversation group info	group-id	no	read	conversation_group
+conversation group delete	group-id, --yes	no	write	delete_result
+conversation group send	group-id, --from, --input|--stdin	no	session	conversation_operation
+conversation group request	group-id, --from, --input|--stdin	no	runtime	conversation_operation
+conversation group dialogue	group-id, --from, --input|--stdin	no	runtime	conversation_dialogue
+conversation cancel	session-id, job-id	no	runtime	conversation_job
+conversation resume	approval-id, --session optional	no	runtime	conversation_operation
+agent create	name, --model	yes	write	agent
+agent list	none	no	read	agent_list
+agent info	agent or category+agent	yes	read	agent
+agent query	agent, --input|--stdin	yes	runtime	agent_query
+agent run	agent, --input|--stdin	yes	runtime	agent_turn
+agent set-model	agent, model refs	yes	write	agent
+agent set-prompt	agent, prompt refs	yes	write	agent
+agent add-skill	agent, skill refs	yes	write	agent
+agent remove-skill	agent, skill refs	yes	write	agent
+agent add-mcp	agent, mcp refs	yes	write	agent
+agent remove-mcp	agent, mcp refs	yes	write	agent
+agent add-kb	agent, kb refs	yes	write	agent
+agent remove-kb	agent, kb refs	yes	write	agent
+agent delete	exact|--match|--all, --yes	yes	write	delete_result
+env create	env	yes	write	env
+env list	none	no	read	env_list
+env info	env or category+env	yes	read	env
+env activate	env or category+env	yes	write	env_activation
+env delete	exact|--match|--all, --yes	yes	write	delete_result
+env add-agent	env, agent refs	yes	write	env
+env remove-agent	env, agent refs	yes	write	env
+env set-lead	env, agent refs	yes	write	env
+env clear-lead	env or category+env	yes	write	env
+env set-interaction-mode	env, mode	yes	write	env
+env topology	env optional	yes	read	topology_graph
+kb add-dify	name, endpoint, dataset-id, api-key	no	write	kb
+kb list	none	no	read	kb_list
+kb info	kb or category+kb	yes	read	kb
+kb test	kb or category+kb	yes	network	kb_test
+kb delete	exact|--match|--all, --yes	yes	write	delete_result
+model add-alias	alias, reference	no	write	model
+model list	none	no	read	model_list
+model info	model or category+model	yes	read	model
+model config	model plus update flags	yes	write	model
+model delete	exact|--match|--all, --yes	yes	write	delete_result
+orchestra run create	--request|--stdin	no	write	orchestra_run
+orchestra run attach	run-id, --session	no	write	orchestra_run
+orchestra run step	run-id	no	runtime	orchestra_run
+orchestra run status	none	no	read	orchestra_runs
+orchestra run resume	run-id	no	runtime	orchestra_run
+orchestra run cancel	run-id, --yes	no	write	orchestra_run
+mcp add	--json|--from-file|--stdin	no	write	mcp
+mcp import	--from and conflict policy	no	write	mcp_import
+mcp list	none	no	read	mcp_list
+mcp info	mcp or category+mcp	yes	read	mcp_info
+mcp test	mcp or category+mcp	yes	process	mcp_test
+mcp delete	exact|--match|--all, --yes	yes	write	delete_result
+permission list	none	no	read	permission_list
+prompt create	name, --text|--file|--stdin	no	write	prompt
+prompt list	none	no	read	prompt_list
+prompt info	prompt or category+prompt	yes	read	prompt
+prompt update	prompt, --text|--file|--stdin	no	write	prompt
+prompt delete	exact|--match|--all, --yes	yes	write	delete_result
+provider list	none	no	read	provider_list
+provider info	provider or category+provider	yes	read	provider
+provider test	provider or category+provider	yes	network	provider_test
+provider list-models	provider or category+provider	yes	network	provider_models
+provider delete	exact|--match|--all, --yes	yes	write	delete_result
+session create	--env	yes	write	session
+session list	none	no	read	session_list
+session info	session-id	yes	read	session
+session archive	session-id	yes	write	session
+session delete	exact|--match|--all, --yes	yes	write	delete_result
+skill create	name, --description	no	write	skill
+skill add	path	yes	write	skill
+skill import	path and conflict policy	yes	write	skill_import
+skill list	none	no	read	skill_list
+skill info	skill or category+skill	yes	read	skill
+skill delete	exact|--match|--all, --yes	yes	write	delete_result
+trust project	path optional	no	write	trust_record
+trust revoke	path optional	no	write	trust_record
+trust status	path optional	no	read	trust_record
+agent category create	category	no	write	category_result
+agent category list	none	no	read	category_list
+agent category info	category	no	read	category_result
+agent category delete	category, --yes	no	write	category_result
+env category create	category	no	write	category_result
+env category list	none	no	read	category_list
+env category info	category	no	read	category_result
+env category delete	category, --yes	no	write	category_result
+kb category create	category	no	write	category_result
+kb category list	none	no	read	category_list
+kb category info	category	no	read	category_result
+kb category delete	category, --yes	no	write	category_result
+model category create	category	no	write	category_result
+model category list	none	no	read	category_list
+model category info	category	no	read	category_result
+model category delete	category, --yes	no	write	category_result
+mcp category create	category	no	write	category_result
+mcp category list	none	no	read	category_list
+mcp category info	category	no	read	category_result
+mcp category delete	category, --yes	no	write	category_result
+permission set agent	agent, action, policy	no	write	permission_mutation
+permission set mcp	mcp, action, policy	no	write	permission_mutation
+permission set gateway	update flags	no	write	permission_mutation
+prompt category create	category	no	write	category_result
+prompt category list	none	no	read	category_list
+prompt category info	category	no	read	category_result
+prompt category delete	category, --yes	no	write	category_result
+provider add openai-compatible	name, base-url, api-key	no	write	provider
+provider category create	category	no	write	category_result
+provider category list	none	no	read	category_list
+provider category info	category	no	read	category_result
+provider category delete	category, --yes	no	write	category_result
+skill category create	category	no	write	category_result
+skill category list	none	no	read	category_list
+skill category info	category	no	read	category_result
+skill category delete	category, --yes	no	write	category_result

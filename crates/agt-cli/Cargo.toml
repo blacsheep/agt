@@ -1,0 +1,28 @@
+[package]
+name = "agt-cli"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "agt"
+path = "src/main.rs"
+
+[dependencies]
+agt-agent.workspace = true
+agt-config.workspace = true
+agt-core.workspace = true
+agt-im.workspace = true
+agt-model.workspace = true
+agt-mcp.workspace = true
+agt-provider.workspace = true
+agt-prompt.workspace = true
+agt-skill.workspace = true
+agt-storage.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

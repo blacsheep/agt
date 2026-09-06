@@ -1,0 +1,16 @@
+[package]
+name = "agt-model"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+agt-config.workspace = true
+agt-core.workspace = true
+agt-provider.workspace = true
+agt-storage.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true

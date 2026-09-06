@@ -1,0 +1,24 @@
+[package]
+name = "agt-mcp"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+agt-config.workspace = true
+agt-core.workspace = true
+agt-storage.workspace = true
+futures-util.workspace = true
+http.workspace = true
+reqwest.workspace = true
+rmcp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sse-stream.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true
+url.workspace = true

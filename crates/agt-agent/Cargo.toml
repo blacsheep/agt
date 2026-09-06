@@ -1,0 +1,22 @@
+[package]
+name = "agt-agent"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+agt-config.workspace = true
+agt-core.workspace = true
+agt-model.workspace = true
+agt-mcp.workspace = true
+agt-prompt.workspace = true
+agt-skill.workspace = true
+agt-storage.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+agt-provider.workspace = true

@@ -1,0 +1,12 @@
+[package]
+name = "agt-config"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+agt-core.workspace = true
+agt-storage.workspace = true
+thiserror.workspace = true

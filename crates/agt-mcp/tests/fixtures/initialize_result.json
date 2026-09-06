@@ -1,0 +1,27 @@
+{
+  "protocolVersion": "2025-11-25",
+  "capabilities": {
+    "tools": {
+      "listChanged": true
+    },
+    "vendorCapability": {
+      "enabled": true
+    }
+  },
+  "serverInfo": {
+    "name": "fixture-server",
+    "version": "1.0.0",
+    "title": "Fixture Server",
+    "icons": [
+      {
+        "src": "data:image/png;base64,AA==",
+        "mimeType": "image/png"
+      }
+    ],
+    "vendorField": "preserved"
+  },
+  "instructions": "Use the fixture server carefully.",
+  "_meta": {
+    "trace": "fixture"
+  }
+}
