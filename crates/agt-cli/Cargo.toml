@@ -19,6 +19,7 @@ agt-model.workspace = true
 agt-mcp.workspace = true
 agt-provider.workspace = true
 agt-prompt.workspace = true
+agt-runtime.workspace = true
 agt-skill.workspace = true
 agt-storage.workspace = true
 anyhow.workspace = true
@@ -26,3 +27,6 @@ clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

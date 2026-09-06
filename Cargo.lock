@@ -37,12 +37,14 @@ dependencies = [
  "agt-model",
  "agt-prompt",
  "agt-provider",
+ "agt-runtime",
  "agt-skill",
  "agt-storage",
  "anyhow",
  "clap",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
 ]
 
@@ -136,6 +138,30 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "thiserror",
+]
+
+[[package]]
+name = "agt-runtime"
+version = "0.1.0"
+dependencies = [
+ "agt-agent",
+ "agt-config",
+ "agt-core",
+ "agt-im",
+ "agt-mcp",
+ "agt-model",
+ "agt-prompt",
+ "agt-provider",
+ "agt-skill",
+ "agt-storage",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "uuid",
 ]
 
 [[package]]

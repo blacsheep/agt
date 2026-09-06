@@ -1,8 +1,8 @@
-# agt resource manager
+# agt — resources, IM and explicit agent execution
 
 这是从原始 agt runtime 中提取出的本地资源管理器，并提供一个通用的本地
-IM 后端。资源管理器和 IM 都可独立使用；IM 不会自动启动 agent runtime、
-Gateway 或 session。
+IM 后端。资源管理器和 IM 都可独立使用；新增的 `agt-runtime` 支持显式执行和
+有限的双 Agent 委派。IM 不会自动启动 runtime、Gateway 或 session。
 
 ## 保留的模块
 
@@ -17,6 +17,7 @@ agt-skill      SKILL.md（支持 scoped package）
 agt-mcp        mcp.json（stdio/http 配置）
 agt-agent      agent.yaml 及 model/prompt/skill/MCP 挂载
 agt-im         通用参与者、私聊/群聊、消息、已读和事件存储（SQLite）
+agt-runtime    显式执行、模型/工具循环、父子 Run、请求幂等和委派
 agt-cli        agt 命令行
 ```
 
@@ -200,6 +201,57 @@ Skill 或 MCP 会级联引用它们的 Agent。Agent 使用的其他共享资源
 
 当前没有 `rename/move` 命令；因此不会伪装成“递归修改”去批量重写引用。若未来
 需要修改 identity，将单独实现带冲突检查、引用重写和事务回滚的 rename 操作。
+
+## 显式 Agent 执行（实验性）
+
+在已有 Provider、Model 和 Agent 定义的 home 中执行：
+
+```bash
+agt agent run coder --input '分析这段需求并给出建议' --request-key task-001
+echo '请总结这段内容' | agt agent run coder --stdin
+
+# coder 可以选择调用 delegate，把明确任务交给 reviewer，再汇总结果。
+# reviewer 需事先通过 agt agent create 创建。
+agt agent run coder --input '请委派 reviewer 审查这份方案，然后汇总意见：...' \
+  --delegate reviewer --request-key review-001 --max-steps 12
+
+agt run list --limit 20
+agt run info <run-id>
+agt run children <run-id>
+```
+
+`--home` 和输出参数仍是全局选项。`--cwd` 指定 MCP 工作目录，默认当前目录。
+附加到 Agent 的 MCP 会被连接，模型可以调用其工具；持久化 Skill 正文会在执行
+开始时加入系统提示词。`--delegate` 是本次执行的允许名单，不保证模型一定委派。
+子 Agent 不可继续委派；所有父子模型调用共享 `--max-steps`（1–100，默认 12）。
+
+每次调用生成独立 Run，状态保存在 `<home>/runtime/runs.db`。同一 `--request-key`
+和相同输入、Agent、允许名单、步数与规范化工作目录会返回原记录，不重新调用模型；
+参数不同会冲突。省略 key 时自动生成新 key。失败和取消也是该 key 的终态，重试
+必须显式使用新 key。非 `completed` 状态会输出记录并返回非零退出码。
+
+父子 Run 通过 `parent_run_id` 关联。委派双方使用 `runtime:category/name` IM 身份，
+私聊只记录委派输入和子 Agent 最终回复，模型/工具的私有上下文不会写入 IM。
+同一个定义可用于多个 Run；每次 Run 不自动加载群聊历史或跨 Run 记忆。
+开始执行时会加载根 Agent 和全部允许委派对象的配置，并保存指纹；正在运行的
+执行不受后续文件修改影响。指纹用于辨认配置，不是可重建完整配置的归档。
+
+第一版的边界：
+
+- 模型协议只支持文本 Chat Completions，包括函数工具调用；不接受图片输入。
+  模型标记为具备 vision 能力仍可执行文本任务。Responses、Gateway、持久记忆、非持久化 Skill 来源、Skill `allowed-tools`、
+  `thinking_budget_tokens` 和 `show_reasoning` 暂不支持，相应不受支持的执行配置会报错。
+- 指定 `reasoning_effort` 时发送该参数并省略 temperature；输出上限使用
+  `max_completion_tokens`。具体模型须支持这些参数，运行时不会自动切换协议。
+- MCP 结果支持文本与 structuredContent；客户端 `_meta` 不发给模型。
+  模型响应上限 4 MiB，累计请求上下文上限 1 MiB；暂不做 token 计数或自动压缩。
+- Rust API 接受 `CancellationToken`，可在步骤边界取消，MCP 调用支持中途取消。
+  HTTP 请求按模型 timeout 超时，期间的取消在请求返回后观察到。CLI 被终止时，
+  未完成记录会保留为 `running`；可用 `agt run list` 找回，不会自动重放工具。
+- 这是同步、显式执行，不消费 IM 事件。Run 与 IM 分别提交；子执行成功后若回复
+  发布失败，父 Run 会失败，子结果仍可查询，当前没有自动补发或恢复执行入口。
+
+架构、后续里程碑与验收说明见 [runtime plan](docs/runtime-plan.md)。
 
 ## 开发与验证
 

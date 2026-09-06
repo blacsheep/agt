@@ -25,6 +25,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use serde_json::Value;
 
+mod runtime;
+
 #[derive(Debug, Parser)]
 #[command(name = "agt", version, about = "CLI-first agent resource manager")]
 struct Cli {
@@ -74,6 +76,9 @@ enum Command {
     /// manage agent definitions
     #[command(subcommand)]
     Agent(AgentCommand),
+    /// inspect persisted agent executions
+    #[command(subcommand)]
+    Run(runtime::RunCommand),
     /// manage generic IM participants, conversations and messages
     #[command(subcommand, alias = "conversation")]
     Im(ImCommand),
@@ -335,6 +340,8 @@ struct McpWriteArgs {
 
 #[derive(Debug, Subcommand)]
 enum AgentCommand {
+    /// execute an agent with optional explicit delegation
+    Run(runtime::AgentRunArgs),
     #[command(alias = "add")]
     Create(AgentCreateArgs),
     #[command(alias = "ls")]
@@ -705,6 +712,7 @@ fn dispatch(command: Command, home: &Path, output: OutputMode, yes: bool) -> Res
         Command::Skill(command) => dispatch_skill(command, home, output, yes),
         Command::Mcp(command) => dispatch_mcp(command, home, output, yes),
         Command::Agent(command) => dispatch_agent(command, home, output, yes),
+        Command::Run(command) => runtime::inspect(command, home, output),
         Command::Im(command) => dispatch_im(command, home, output),
         Command::Init(_) => unreachable!(),
     }
@@ -1256,6 +1264,7 @@ fn dispatch_mcp(command: McpCommand, home: &Path, output: OutputMode, yes: bool)
 fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: bool) -> Result<()> {
     let store = AgentStore::new(home);
     match command {
+        AgentCommand::Run(args) => runtime::execute(args, home, output),
         AgentCommand::Create(args) => {
             let category = parse_category(args.category.as_deref())?;
             PromptStore::new(home).ensure_default_prompt()?;
