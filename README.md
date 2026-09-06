@@ -7,6 +7,9 @@ IM 后端。资源管理器和 IM 都可独立使用；`agt-runtime` 支持显�
 新增框架入口与完整验收步骤见 [框架验收指南](docs/framework-acceptance.md)，
 当前规划见 [资源与消息框架计划](docs/messaging-tools-plan.md)。
 
+想通过界面手动验收？见 [AGT Studio 本地控制台](web/README.md)：构建 CLI 后运行
+`node web/server.mjs`，即可配置角色、私聊/群聊、显式执行并查看调用记录。
+
 ## 保留的模块
 
 ```text
