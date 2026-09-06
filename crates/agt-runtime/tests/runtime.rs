@@ -98,6 +98,207 @@ fn request() -> RunRequest {
 }
 
 #[test]
+fn hosted_tool_corrections_are_audited_redacted_and_not_replayed() {
+    let home = home();
+    let user = hosted(home.path(), agt_service::ResponsePolicy::Mentioned);
+    let direct = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    let trigger = user
+        .call(
+            "message_send",
+            json!({"conversation":direct["id"],"body":"test","request_key":"trigger"}),
+        )
+        .unwrap();
+    let mut request = request();
+    request.trigger = Some(agt_runtime::MessageTrigger {
+        message_id: agt_im::MessageId::new(trigger["message"]["id"].as_str().unwrap()),
+        conversation_id: agt_im::ConversationId::new(direct["id"].as_str().unwrap()),
+        principal: PrincipalId::new("a"),
+        depth: 1,
+        allow_mcp: false,
+    });
+    let base = json!({"conversation":direct["id"],"body":"private-body-do-not-log","request_key":"private-request-key","reply_to":""});
+    let mut unknown = base.clone();
+    unknown["secret-unknown-field"] = json!("secret-value");
+    let mut missing = base.clone();
+    missing["reply_to"] = json!("secret-missing-message");
+    let mut model = Script::new(vec![
+        (
+            "default/a",
+            calls(vec![call("bad-shape", "framework_message_send", unknown)]),
+        ),
+        (
+            "default/a",
+            calls(vec![call("bad-target", "framework_message_send", missing)]),
+        ),
+        (
+            "default/a",
+            calls(vec![call("fixed", "framework_message_send", base)]),
+        ),
+        ("default/a", text("[[silent]]")),
+    ]);
+    let mut runtime = Runtime::open(home.path(), &mut model, &DefaultMcpClientFactory).unwrap();
+    let run = runtime
+        .run(request.clone(), &CancellationToken::new())
+        .unwrap();
+    assert_eq!(run.state, RunState::Completed);
+    assert_eq!(run.tool_failures, 2);
+    let records = runtime.runs().calls(&run.id, 0, 200).unwrap();
+    assert_eq!(records.len(), 7);
+    let tools: Vec<_> = records.iter().filter(|r| r.kind == "tool").collect();
+    assert_eq!(tools[0].state, agt_runtime::CallState::Failed);
+    assert_eq!(tools[0].argument_summary["unknown_field_count"], 1);
+    assert_eq!(tools[1].error.as_ref().unwrap()["field"], "reply_to");
+    assert_eq!(tools[2].state, agt_runtime::CallState::Succeeded);
+    assert_eq!(
+        tools[2].argument_summary["fields"]["reply_to"]["blank"],
+        true
+    );
+    assert!(records.iter().all(|r| r.finished_at.is_some()));
+    let encoded = serde_json::to_string(&records).unwrap();
+    for private in [
+        "private-body",
+        "private-request",
+        "secret-unknown",
+        "secret-value",
+        "secret-missing",
+        "test-secret",
+    ] {
+        assert!(!encoded.contains(private));
+    }
+    assert_eq!(
+        runtime
+            .runs()
+            .calls(&run.id, records[2].id, 2)
+            .unwrap()
+            .len(),
+        2
+    );
+    drop(runtime);
+    let mut runtime = Runtime::open(home.path(), &mut model, &DefaultMcpClientFactory).unwrap();
+    assert_eq!(
+        runtime
+            .run(request, &CancellationToken::new())
+            .unwrap()
+            .tool_failures,
+        2
+    );
+    assert_eq!(runtime.runs().calls(&run.id, 0, 200).unwrap().len(), 7);
+    drop(runtime);
+    assert_eq!(model.seen.len(), 4);
+    let error: Value =
+        serde_json::from_str(model.seen[2].1.last().unwrap()["content"].as_str().unwrap()).unwrap();
+    assert_eq!(error["error"]["code"], "invalid_arguments");
+    assert_eq!(error["error"]["field"], "reply_to");
+    assert_eq!(
+        user.call("message_history", json!({"conversation":direct["id"]}))
+            .unwrap()["messages"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn failed_tool_then_silent_remains_visible_on_completed_run() {
+    let home = home();
+    let user = hosted(home.path(), agt_service::ResponsePolicy::Mentioned);
+    let direct = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    user.call(
+        "message_send",
+        json!({"conversation":direct["id"],"body":"test","request_key":"start"}),
+    )
+    .unwrap();
+    let mut model = Script::new(vec![
+        (
+            "default/a",
+            calls(vec![call("bad", "framework_message_ack", json!({"id":-1}))]),
+        ),
+        ("default/a", text("[[silent]]")),
+    ]);
+    agt_runtime::Dispatcher::new(home.path())
+        .drain(
+            &mut model,
+            &DefaultMcpClientFactory,
+            50,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+    let store = RunStore::open(home.path()).unwrap();
+    let run = &store.list(10).unwrap()[0];
+    assert_eq!(run.state, RunState::Completed);
+    assert_eq!(run.tool_failures, 1);
+    assert_eq!(
+        store.calls(&run.id, 0, 50).unwrap()[1]
+            .error
+            .as_ref()
+            .unwrap()["field"],
+        "id"
+    );
+}
+
+#[test]
+fn model_errors_and_invalid_batches_have_safe_audit_records() {
+    let home = home();
+    let mut model = Script::new(vec![(
+        "default/a",
+        calls(vec![call(
+            "x",
+            "secret-unknown-tool",
+            json!({"secret":"private"}),
+        )]),
+    )]);
+    let mut runtime = Runtime::open(home.path(), &mut model, &DefaultMcpClientFactory).unwrap();
+    let run = runtime.run(request(), &CancellationToken::new()).unwrap();
+    assert_eq!(run.state, RunState::Failed);
+    let records = runtime.runs().calls(&run.id, 0, 50).unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].state, agt_runtime::CallState::Failed);
+    assert!(!serde_json::to_string(&records).unwrap().contains("secret"));
+}
+
+#[test]
+fn runtime_audit_migrates_v1_and_keeps_old_records_readable() {
+    let home = home();
+    let mut model = Script::new(vec![("default/a", text("done"))]);
+    let mut runtime = Runtime::open(home.path(), &mut model, &DefaultMcpClientFactory).unwrap();
+    let run = runtime.run(request(), &CancellationToken::new()).unwrap();
+    drop(runtime);
+    let db = rusqlite::Connection::open(home.path().join("runtime/runs.db")).unwrap();
+    let mut old = serde_json::to_value(&run).unwrap();
+    old.as_object_mut().unwrap().remove("tool_failures");
+    db.execute(
+        "UPDATE runs SET record_json=?1 WHERE id=?2",
+        rusqlite::params![old.to_string(), run.id],
+    )
+    .unwrap();
+    db.execute_batch("DROP TABLE run_calls; PRAGMA user_version=1;")
+        .unwrap();
+    let store = RunStore::open(home.path()).unwrap();
+    assert_eq!(store.get(&run.id).unwrap().tool_failures, 0);
+    assert!(store.calls(&run.id, 0, 50).unwrap().is_empty());
+    assert!(store.calls("missing", 0, 50).is_err());
+    assert!(store.calls(&run.id, -1, 50).is_err());
+    assert_eq!(
+        db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
+            .unwrap(),
+        2
+    );
+    drop(store);
+    db.pragma_update(None, "user_version", 99).unwrap();
+    assert!(RunStore::open(home.path()).is_err());
+    assert_eq!(
+        db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
+            .unwrap(),
+        99
+    );
+}
+
+#[test]
 fn completed_run_replays_after_reopening_without_loading_changed_configuration() {
     let home = home();
     let mut model = Script::new(vec![("default/a", text("done"))]);
@@ -294,6 +495,11 @@ fn model_cancellation_is_observed_before_returning_success() {
         .unwrap();
     assert_eq!(record.state, RunState::Canceled);
     assert!(record.output.is_none());
+    let calls = RunStore::open(home.path())
+        .unwrap()
+        .calls(&record.id, 0, 50)
+        .unwrap();
+    assert_eq!(calls[0].state, agt_runtime::CallState::Canceled);
 }
 
 #[test]
@@ -324,6 +530,13 @@ fn interrupted_run_is_not_automatically_executed_again() {
         .unwrap();
     assert_eq!(replay.state, RunState::Running);
     assert_eq!(replay.model_steps, 1);
+    let calls = RunStore::open(home.path())
+        .unwrap()
+        .calls(&replay.id, 0, 50)
+        .unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].state, agt_runtime::CallState::Started);
+    assert!(calls[0].finished_at.is_none());
 }
 
 #[test]
@@ -412,12 +625,78 @@ fn mcp_tool_loop_preserves_call_id_and_excludes_client_only_metadata() {
     assert_eq!(output["tool_call_id"], "lookup-1");
     assert!(output["content"].as_str().unwrap().contains("pong"));
     assert!(!output.to_string().contains("client-secret"));
+    let calls = RunStore::open(home.path())
+        .unwrap()
+        .calls(&record.id, 0, 50)
+        .unwrap();
+    assert_eq!(calls[1].tool_name.as_deref(), Some("mcp_0_0"));
+    assert_eq!(calls[1].state, agt_runtime::CallState::Succeeded);
+    assert_eq!(calls[1].argument_summary["unknown_field_count"], 1);
+    let serialized = serde_json::to_string(&calls).unwrap();
+    assert!(!serialized.contains("client-secret"));
+    assert!(!serialized.contains("query"));
+    assert!(!serialized.contains("pong"));
     assert!(
         model.seen[0].2[0]["function"]["description"]
             .as_str()
             .unwrap()
             .contains("读取/a__b")
     );
+}
+
+#[test]
+fn mcp_business_and_transport_failures_are_audited_without_raw_results() {
+    for mode in ["tool_error", "transport_error"] {
+        let home = home();
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mcp.py");
+        McpStore::new(home.path())
+            .add(
+                McpDocument::stdio(
+                    "helper",
+                    "python3",
+                    vec![fixture.to_string_lossy().into_owned()],
+                    [("AGT_AUDIT_TEST_MODE".into(), mode.into())],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        AgentStore::new(home.path()).add_mcp("a", "helper").unwrap();
+        let mut answers = vec![(
+            "default/a",
+            calls(vec![call("lookup", "mcp_0_0", json!({"query":"test"}))]),
+        )];
+        if mode == "tool_error" {
+            answers.push(("default/a", text("[[silent]]")));
+        }
+        let mut model = Script::new(answers);
+        let mut runtime = Runtime::open(home.path(), &mut model, &DefaultMcpClientFactory).unwrap();
+        let run = runtime.run(request(), &CancellationToken::new()).unwrap();
+        assert_eq!(run.tool_failures, 1);
+        assert_eq!(
+            run.state,
+            if mode == "tool_error" {
+                RunState::Completed
+            } else {
+                RunState::Failed
+            }
+        );
+        let records = runtime.runs().calls(&run.id, 0, 50).unwrap();
+        assert_eq!(records[1].state, agt_runtime::CallState::Failed);
+        assert_eq!(
+            records[1].error.as_ref().unwrap()["code"],
+            if mode == "tool_error" {
+                "mcp_tool_error"
+            } else {
+                "tool_error"
+            }
+        );
+        assert!(
+            !serde_json::to_string(&records)
+                .unwrap()
+                .contains("client-secret")
+        );
+        assert!(!serde_json::to_string(&records).unwrap().contains("pong"));
+    }
 }
 
 #[test]

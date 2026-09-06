@@ -1,9 +1,11 @@
 //! Explicit, bounded agent execution. IM remains a runtime-independent store.
+mod audit;
 mod dispatch;
 mod engine;
 mod model;
 mod resolve;
 mod store;
+pub use audit::{CallRecord, CallState};
 pub use dispatch::{DispatchOutcome, Dispatcher};
 
 pub use engine::Runtime;

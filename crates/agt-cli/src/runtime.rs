@@ -44,6 +44,14 @@ pub(crate) enum RunCommand {
     Children {
         id: String,
     },
+    /// Inspect redacted model/tool invocation metadata (not private transcripts)
+    Calls {
+        id: String,
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(i64).range(0..))]
+        after: i64,
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
+        limit: u32,
+    },
 }
 
 pub(crate) fn execute(args: AgentRunArgs, home: &Path, output: OutputMode) -> Result<()> {
@@ -81,6 +89,7 @@ pub(crate) fn inspect(command: RunCommand, home: &Path, output: OutputMode) -> R
     match command {
         RunCommand::List { limit } => emit(&store.list(limit)?, output),
         RunCommand::Info { id } => emit(&store.get(&id)?, output),
+        RunCommand::Calls { id, after, limit } => emit(&store.calls(&id, after, limit)?, output),
         RunCommand::Children { id } => {
             store.get(&id)?;
             emit(&store.children(&id)?, output)

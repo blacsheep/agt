@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 
 for line in sys.stdin:
@@ -17,9 +18,12 @@ for line in sys.stdin:
     elif method == "tools/call":
         assert request["params"]["name"] == "读取/a__b"
         assert request["params"]["arguments"] == {"query": "test"}
+        if os.environ.get("AGT_AUDIT_TEST_MODE") == "transport_error":
+            sys.exit(1)
         result = {
             "content": [{"type": "text", "text": "pong", "_meta": {"secret": "client-secret"}}],
             "_meta": {"secret": "client-secret"},
+            "isError": os.environ.get("AGT_AUDIT_TEST_MODE") == "tool_error",
         }
     else:
         raise AssertionError(method)

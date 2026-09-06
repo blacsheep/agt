@@ -7,7 +7,9 @@ use agt_mcp::{McpClient, McpClientFactory, McpLimits};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::audit::{argument_summary, runtime_error};
 use crate::store::database_path;
+use crate::{CallRecord, CallState};
 use crate::{
     ModelClient, ResolvedAgent, Result, RunRecord, RunRequest, RunState, RunStore, RuntimeError,
     fingerprint,
@@ -173,37 +175,62 @@ impl<'a> Runtime<'a> {
             *remaining -= 1;
             record.model_steps = initial_budget - *remaining;
             self.store.save(record)?;
-            let message = self.model.complete(agent, &messages, &tools.schemas)?;
-            check_canceled(cancellation)?;
-            let calls = validate_message(&message)?;
-            if calls.is_empty() {
-                return message["content"]
-                    .as_str()
-                    .filter(|text| !text.trim().is_empty())
-                    .map(str::to_owned)
-                    .ok_or(RuntimeError::Model("empty final response"));
-            }
-            // Validate the entire batch before allowing any side effect.
-            for call in &calls {
-                if !seen_calls.insert(call.id.clone()) {
-                    return Err(RuntimeError::Model("duplicate tool call ID"));
-                }
-                if call.function.name == "delegate" && !record.request.delegates.is_empty() {
-                    let args: Delegation = serde_json::from_str(&call.function.arguments)
-                        .map_err(|_| RuntimeError::Tool("invalid delegation arguments"))?;
-                    if !record.request.delegates.contains(&args.agent)
-                        || args.input.trim().is_empty()
-                        || args.input.len() > 256 * 1024
-                    {
-                        return Err(RuntimeError::Tool(
-                            "delegation target or input is not allowed",
-                        ));
-                    }
-                } else if !tools.targets.contains_key(&call.function.name)
-                    && !communication_names.contains(&call.function.name)
+            let mut model_call = self
+                .store
+                .start_call(CallRecord::new(record, None, json!({})))?;
+            let response = (|| {
+                let message = self.model.complete(agent, &messages, &tools.schemas)?;
+                check_canceled(cancellation)?;
+                let calls = validate_message(&message)?;
+                if calls.is_empty()
+                    && message["content"]
+                        .as_str()
+                        .is_none_or(|s| s.trim().is_empty())
                 {
-                    return Err(RuntimeError::Tool("unknown or unavailable tool"));
+                    return Err(RuntimeError::Model("empty final response"));
                 }
+                // Validate the entire batch before allowing any side effect.
+                for call in &calls {
+                    if !seen_calls.insert(call.id.clone()) {
+                        return Err(RuntimeError::Model("duplicate tool call ID"));
+                    }
+                    if call.function.name == "delegate" && !record.request.delegates.is_empty() {
+                        let args: Delegation = serde_json::from_str(&call.function.arguments)
+                            .map_err(|_| RuntimeError::Tool("invalid delegation arguments"))?;
+                        if !record.request.delegates.contains(&args.agent)
+                            || args.input.trim().is_empty()
+                            || args.input.len() > 256 * 1024
+                        {
+                            return Err(RuntimeError::Tool(
+                                "delegation target or input is not allowed",
+                            ));
+                        }
+                    } else if !tools.targets.contains_key(&call.function.name)
+                        && !communication_names.contains(&call.function.name)
+                    {
+                        return Err(RuntimeError::Tool("unknown or unavailable tool"));
+                    }
+                }
+                Ok((message, calls))
+            })();
+            match &response {
+                Ok(_) => model_call.finish(CallState::Succeeded, None),
+                Err(error) => model_call.finish(
+                    if matches!(error, RuntimeError::Canceled) {
+                        CallState::Canceled
+                    } else {
+                        CallState::Failed
+                    },
+                    Some(runtime_error(error)),
+                ),
+            }
+            self.store.finish_call(&model_call)?;
+            let (message, calls) = response?;
+            if calls.is_empty() {
+                return Ok(message["content"]
+                    .as_str()
+                    .expect("validated final text")
+                    .to_owned());
             }
             messages.push(message);
             for call in calls {
@@ -212,28 +239,72 @@ impl<'a> Runtime<'a> {
                 if *remaining == 0 {
                     return Err(RuntimeError::Budget);
                 }
-                let output = if call.function.name == "delegate" {
-                    let args: Delegation = serde_json::from_str(&call.function.arguments)?;
-                    self.delegate(record, args, &call.id, agents, remaining, cancellation)?
-                } else if communication_names.contains(&call.function.name) {
-                    let result = communication.as_ref().expect("communication service").call(
-                        call.function
-                            .name
-                            .strip_prefix("framework_")
-                            .expect("tool prefix"),
-                        serde_json::from_str(&call.function.arguments)?,
-                    );
-                    match result {
-                        Ok(value)=>serde_json::to_string(&value)?,
-                        Err(_)=>json!({"error":"communication operation rejected; verify arguments, membership and permissions"}).to_string(),
+                let arguments: Value = serde_json::from_str(&call.function.arguments)?;
+                let schema = communication.as_ref().and_then(|service| {
+                    service.schemas().into_iter().find(|s| {
+                        format!("framework_{}", s["name"].as_str().expect("tool name"))
+                            == call.function.name
+                    })
+                });
+                let fields = schema
+                    .as_ref()
+                    .and_then(|s| s["inputSchema"]["properties"].as_object())
+                    .map(|p| p.keys().map(String::as_str).collect::<Vec<_>>())
+                    .unwrap_or_default();
+                let mut invocation = self.store.start_call(CallRecord::new(
+                    record,
+                    Some(&call.function.name),
+                    argument_summary(&arguments, &fields),
+                ))?;
+                let result: Result<(String, Option<Value>)> = (|| {
+                    if call.function.name == "delegate" {
+                        let args: Delegation = serde_json::from_str(&call.function.arguments)?;
+                        Ok((
+                            self.delegate(record, args, &call.id, agents, remaining, cancellation)?,
+                            None,
+                        ))
+                    } else if communication_names.contains(&call.function.name) {
+                        let result = communication.as_ref().expect("communication service").call(
+                            call.function
+                                .name
+                                .strip_prefix("framework_")
+                                .expect("tool prefix"),
+                            arguments,
+                        );
+                        match result {
+                            Ok(value) => Ok((serde_json::to_string(&value)?, None)),
+                            Err(error) => Ok((
+                                error.as_value().to_string(),
+                                Some(serde_json::to_value(&error)?),
+                            )),
+                        }
+                    } else {
+                        let output = tools.call(&call.function.name, arguments, cancellation)?;
+                        let error = (serde_json::from_str::<Value>(&output)?["is_error"] == true)
+                        .then(|| json!({"code":"mcp_tool_error","message":"External MCP tool reported an error; inspect its result before retrying."}));
+                        Ok((output, error))
                     }
-                } else {
-                    tools.call(
-                        &call.function.name,
-                        serde_json::from_str(&call.function.arguments)?,
-                        cancellation,
-                    )?
-                };
+                })();
+                match &result {
+                    Ok((_, None)) => invocation.finish(CallState::Succeeded, None),
+                    Ok((_, Some(error))) => {
+                        invocation.finish(CallState::Failed, Some(error.clone()))
+                    }
+                    Err(error) => invocation.finish(
+                        if matches!(error, RuntimeError::Canceled) {
+                            CallState::Canceled
+                        } else {
+                            CallState::Failed
+                        },
+                        Some(runtime_error(error)),
+                    ),
+                }
+                self.store.finish_call(&invocation)?;
+                if invocation.state != CallState::Succeeded {
+                    record.tool_failures += 1;
+                    self.store.save(record)?;
+                }
+                let (output, _) = result?;
                 messages.push(json!({"role":"tool", "tool_call_id":call.id, "content":output}));
             }
         }

@@ -179,6 +179,18 @@ fn cli_runs_real_http_delegation_and_replays_with_server_offline() {
     let listed = success(run(home.path(), &["run", "list", "--limit", "1"]));
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(listed[0]["id"], children[0]["id"]);
+    let calls = success(run(home.path(), &["run", "calls", id]));
+    assert_eq!(calls.as_array().unwrap().len(), 3);
+    assert_eq!(calls[1]["tool_name"], "delegate");
+    assert_eq!(calls[1]["state"], "succeeded");
+    let after = calls[0]["id"].to_string();
+    assert_eq!(
+        success(run(
+            home.path(),
+            &["run", "calls", id, "--after", &after, "--limit", "1"]
+        ))[0]["id"],
+        calls[1]["id"]
+    );
 }
 
 #[test]
@@ -203,6 +215,13 @@ fn http_failure_is_redacted_persisted_and_not_retried_implicitly() {
     let result: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["state"], "failed");
     assert_eq!(result["error"], "model HTTP status 401");
+    let calls = success(run(
+        home.path(),
+        &["run", "calls", result["id"].as_str().unwrap()],
+    ));
+    assert_eq!(calls[0]["state"], "failed");
+    assert_eq!(calls[0]["error"]["code"], "model_http_error");
+    assert!(!calls.to_string().contains("mock-secret"));
     assert!(!String::from_utf8_lossy(&output.stderr).contains("mock-secret"));
     server.join().unwrap();
     let replay = run(home.path(), &args);
@@ -211,6 +230,30 @@ fn http_failure_is_redacted_persisted_and_not_retried_implicitly() {
         serde_json::from_slice::<Value>(&replay.stdout).unwrap()["id"],
         result["id"]
     );
+}
+
+#[test]
+fn cli_tool_errors_are_structured_and_do_not_echo_arguments() {
+    let home = tempfile::tempdir().unwrap();
+    success(run(home.path(), &["init", home.path().to_str().unwrap()]));
+    success(run(home.path(), &["im", "principal", "create", "user"]));
+    let output = run(
+        home.path(),
+        &[
+            "tool",
+            "call",
+            "--principal",
+            "user",
+            "message_ack",
+            "--args",
+            r#"{"id":"secret-value"}"#,
+        ],
+    );
+    assert!(!output.status.success());
+    let error: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(error["error"]["code"], "invalid_arguments");
+    assert_eq!(error["error"]["field"], "id");
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("secret-value"));
 }
 
 #[test]

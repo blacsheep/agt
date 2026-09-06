@@ -26,6 +26,9 @@ pub struct RunRecord {
     pub error: Option<String>,
     /// Includes child model calls for parent runs.
     pub model_steps: u32,
+    /// Local failed tool invocations, even when the model subsequently finishes.
+    #[serde(default)]
+    pub tool_failures: u32,
 }
 
 pub struct RunStore {
@@ -51,12 +54,23 @@ impl RunStore {
                  CREATE INDEX runs_parent ON runs(parent_run_id);
                  PRAGMA user_version = 1;",
             )?,
-            1 => {}
+            1 | 2 => {}
             _ => {
                 return Err(RuntimeError::Configuration(
                     "unsupported runtime database version",
                 ));
             }
+        }
+        if version < 2 {
+            tx.execute_batch(
+                "CREATE TABLE run_calls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL REFERENCES runs(id),
+                record_json TEXT NOT NULL
+            );
+            CREATE INDEX run_calls_run ON run_calls(run_id, id);
+            PRAGMA user_version = 2;",
+            )?;
         }
         tx.commit()?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
@@ -132,6 +146,7 @@ impl RunStore {
             output: None,
             error: None,
             model_steps: 0,
+            tool_failures: 0,
         };
         tx.execute(
             "INSERT INTO runs (id, request_key, request_hash, parent_run_id, record_json)
@@ -151,6 +166,46 @@ impl RunStore {
     pub(crate) fn save(&self, record: &RunRecord) -> Result<()> {
         self.connection.execute(
             "UPDATE runs SET record_json = ?2 WHERE id = ?1",
+            params![record.id, serde_json::to_string(record)?],
+        )?;
+        Ok(())
+    }
+
+    /// Host-only metadata; deliberately separate from the shared IM transcript.
+    pub fn calls(&self, run: &str, after: i64, limit: u32) -> Result<Vec<crate::CallRecord>> {
+        if after < 0 || !(1..=200).contains(&limit) {
+            return Err(RuntimeError::Invalid(
+                "call cursor must be nonnegative and limit in 1..=200".into(),
+            ));
+        }
+        self.get(run)?;
+        let mut statement = self.connection.prepare(
+            "SELECT id, record_json FROM run_calls WHERE run_id=?1 AND id>?2 ORDER BY id LIMIT ?3",
+        )?;
+        let rows = statement.query_map(params![run, after, limit], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+        })?;
+        rows.map(|row| {
+            let (id, json) = row?;
+            let mut record: crate::CallRecord = serde_json::from_str(&json)?;
+            record.id = id;
+            Ok(record)
+        })
+        .collect()
+    }
+
+    pub(crate) fn start_call(&self, mut record: crate::CallRecord) -> Result<crate::CallRecord> {
+        self.connection.execute(
+            "INSERT INTO run_calls(run_id, record_json) VALUES(?1,?2)",
+            params![record.run_id, serde_json::to_string(&record)?],
+        )?;
+        record.id = self.connection.last_insert_rowid();
+        Ok(record)
+    }
+
+    pub(crate) fn finish_call(&self, record: &crate::CallRecord) -> Result<()> {
+        self.connection.execute(
+            "UPDATE run_calls SET record_json=?2 WHERE id=?1",
             params![record.id, serde_json::to_string(record)?],
         )?;
         Ok(())
