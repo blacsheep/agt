@@ -89,6 +89,46 @@ MCP 服务本身不启动 worker，需另行运行。
 
 ## 响应策略与安全边界
 
+### 工具参数与诊断
+
+`message_send.reply_to` 和 `message_history.before` 支持省略或 null，兼容
+空串/纯空白值（按未提供处理）。非空回复 ID 必须存在于目标会话；非空游标
+必须来自相同会话。`resource_delete.confirm` 的省略/null 只获取计划，空数组
+不代表同意删除非空计划。普通布尔、数值、数组参数不把 null 当默认值。
+
+CLI、MCP、托管 Agent 使用相同的结构化业务错误，例如：
+
+```json
+{"error":{"code":"invalid_arguments","message":"Reply target must exist in this conversation; omit/null for a new message.","field":"reply_to"}}
+```
+
+错误不会回显原始参数、存储错误或密钥。协议错误仍按 MCP JSON-RPC 返回；
+业务错误仍为 `isError: true`。复杂资源配置无法安全分类时返回
+`operation_rejected`，不是把所有底层错误文本直接交给模型。
+
+Run 的 `completed` 只表示模型正常结束，不表示业务目标达成。检查
+`tool_failures`（本 Run 的失败工具调用次数，纠正后也不清零，子 Run 单独统计），
+并通过主机 CLI 查询调用记录：
+
+```bash
+agt run info RUN_ID
+agt run calls RUN_ID --limit 50
+# 下一页：把上一页最后一条 id 用作 --after
+agt run calls RUN_ID --after LAST_CALL_ID --limit 50
+```
+
+记录包含模型步骤、工具名称、开始/结束时间、状态、安全错误，以及允许字段的
+参数类型/长度/是否空白。不会默认保存参数原文、返回正文、模型推理、任意字段名
+或外部 MCP 内容；外部工具只记录参数容器的形状。它不是完整会话录制。
+现有 Run input/output 与 IM 消息仍按原机制存储，不能因此把整个数据库视为脱敏文件。
+
+调用前持久化 `started`，返回后写入 `succeeded/failed/canceled`；中断留下的
+`started` 表示结果不确定，不允许据此自动重试。记录供主机查看，不开放给参与者
+工具。连接外部 MCP 的准备阶段失败仍记录为 Run 错误，不生成工具调用条目。
+迁移到 runtime 数据库 v2 不补造旧调用日志；旧版本程序不能打开 v2，升级前应备份。
+
+### 自动响应
+
 | policy | 私聊 | 群聊 |
 | --- | --- | --- |
 | mentioned（默认） | 回复 | 仅结构化 mentions 包含自己时回复 |
