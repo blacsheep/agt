@@ -20,6 +20,7 @@ agt-mcp.workspace = true
 agt-provider.workspace = true
 agt-prompt.workspace = true
 agt-runtime.workspace = true
+agt-service.workspace = true
 agt-skill.workspace = true
 agt-storage.workspace = true
 anyhow.workspace = true

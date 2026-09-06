@@ -580,3 +580,553 @@ fn completed_child_remains_inspectable_when_reply_publication_fails() {
         record.id
     );
 }
+
+fn hosted(home: &Path, policy: agt_service::ResponsePolicy) -> agt_service::ToolService {
+    use agt_im::{PrincipalInput, PrincipalKind};
+    use agt_service::{Actor, Binding, BindingStore, Role, ToolService};
+    let im = ImStore::open(home.join("im/im.db")).unwrap();
+    for name in ["user", "a", "b"] {
+        im.create_principal(PrincipalInput {
+            id: PrincipalId::new(name),
+            kind: if name == "user" {
+                PrincipalKind::User
+            } else {
+                PrincipalKind::Agent
+            },
+            display_name: name.into(),
+            metadata: json!({}),
+        })
+        .unwrap();
+        if name != "user" {
+            BindingStore::open(home)
+                .unwrap()
+                .bind(Binding {
+                    principal: PrincipalId::new(name),
+                    agent: name.into(),
+                    working_directory: home.to_owned(),
+                    policy,
+                    max_steps: 6,
+                    max_depth: 1,
+                    allow_mcp: false,
+                })
+                .unwrap();
+        }
+    }
+    ToolService::open(
+        home,
+        Actor {
+            principal: PrincipalId::new("user"),
+            role: Role::Manager,
+            automated_depth: None,
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn dispatcher_broadcasts_to_every_bound_member_and_stops_reply_storms() {
+    let home = home();
+    let user = hosted(home.path(), agt_service::ResponsePolicy::All);
+    let group = user
+        .call(
+            "group_create",
+            json!({"title":"review","members":["a","b"]}),
+        )
+        .unwrap();
+    user.call(
+        "message_send",
+        json!({"conversation":group["id"],"body":"discuss","request_key":"group-1"}),
+    )
+    .unwrap();
+    let mut model = Script::new(vec![
+        ("default/a", text("A opinion")),
+        ("default/b", text("B opinion")),
+    ]);
+    let dispatcher = agt_runtime::Dispatcher::new(home.path());
+    let result = dispatcher
+        .drain(
+            &mut model,
+            &DefaultMcpClientFactory,
+            50,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+    assert_eq!(result.iter().filter(|r| r.state == "completed").count(), 2);
+    dispatcher
+        .drain(
+            &mut model,
+            &DefaultMcpClientFactory,
+            50,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+    assert_eq!(model.seen.len(), 2);
+    let history = user
+        .call("message_history", json!({"conversation":group["id"]}))
+        .unwrap();
+    assert_eq!(history["messages"].as_array().unwrap().len(), 3);
+    assert!(
+        model.seen[0]
+            .2
+            .iter()
+            .any(|t| t["function"]["name"] == "framework_group_create")
+    );
+    assert!(
+        !model.seen[0]
+            .2
+            .iter()
+            .any(|t| t["function"]["name"] == "framework_resource_write")
+    );
+}
+
+#[test]
+fn dispatcher_mentions_direct_chats_and_silent_responses() {
+    let home = home();
+    let user = hosted(home.path(), agt_service::ResponsePolicy::Mentioned);
+    let group = user
+        .call(
+            "group_create",
+            json!({"title":"review","members":["a","b"]}),
+        )
+        .unwrap();
+    user.call(
+        "message_send",
+        json!({"conversation":group["id"],"body":"review","request_key":"1","mentions":["b"]}),
+    )
+    .unwrap();
+    let direct = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    user.call(
+        "message_send",
+        json!({"conversation":direct["id"],"body":"hello","request_key":"2"}),
+    )
+    .unwrap();
+    let mut model = Script::new(vec![
+        ("default/a", text("private reply")),
+        ("default/b", text("[[silent]]")),
+    ]);
+    agt_runtime::Dispatcher::new(home.path())
+        .drain(
+            &mut model,
+            &DefaultMcpClientFactory,
+            50,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+    assert_eq!(
+        user.call("message_history", json!({"conversation":group["id"]}))
+            .unwrap()["messages"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        user.call("message_history", json!({"conversation":direct["id"]}))
+            .unwrap()["messages"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn dispatcher_republishes_completed_output_after_permission_failure_without_inference() {
+    struct Archive {
+        home: std::path::PathBuf,
+        conversation: agt_im::ConversationId,
+        calls: usize,
+    }
+    impl ModelClient for Archive {
+        fn complete(&mut self, _: &ResolvedAgent, _: &[Value], _: &[Value]) -> Result<Value> {
+            self.calls += 1;
+            assert_eq!(self.calls, 1);
+            ImStore::open(self.home.join("im/im.db"))
+                .unwrap()
+                .archive_conversation(&self.conversation, &PrincipalId::new("user"))
+                .unwrap();
+            Ok(text("saved result"))
+        }
+    }
+    let home = home();
+    let user = hosted(home.path(), agt_service::ResponsePolicy::All);
+    let direct = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    user.call(
+        "message_send",
+        json!({"conversation":direct["id"],"body":"hello","request_key":"1"}),
+    )
+    .unwrap();
+    let cid = agt_im::ConversationId::new(direct["id"].as_str().unwrap());
+    let mut model = Archive {
+        home: home.path().to_owned(),
+        conversation: cid.clone(),
+        calls: 0,
+    };
+    let dispatcher = agt_runtime::Dispatcher::new(home.path());
+    assert_eq!(
+        dispatcher
+            .drain(
+                &mut model,
+                &DefaultMcpClientFactory,
+                50,
+                &CancellationToken::new()
+            )
+            .unwrap()[0]
+            .state,
+        "error"
+    );
+    ImStore::open(home.path().join("im/im.db"))
+        .unwrap()
+        .reactivate_conversation(&cid, &PrincipalId::new("user"))
+        .unwrap();
+    assert_eq!(
+        dispatcher
+            .drain(
+                &mut model,
+                &DefaultMcpClientFactory,
+                50,
+                &CancellationToken::new()
+            )
+            .unwrap()[0]
+            .state,
+        "completed"
+    );
+    assert!(
+        dispatcher
+            .drain(
+                &mut model,
+                &DefaultMcpClientFactory,
+                50,
+                &CancellationToken::new()
+            )
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(model.calls, 1);
+    assert_eq!(
+        user.call("message_history", json!({"conversation":direct["id"]}))
+            .unwrap()["messages"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn failed_group_member_does_not_block_other_members() {
+    let home = home();
+    let user = hosted(home.path(), agt_service::ResponsePolicy::All);
+    let group = user
+        .call(
+            "group_create",
+            json!({"title":"review","members":["a","b"]}),
+        )
+        .unwrap();
+    user.call(
+        "message_send",
+        json!({"conversation":group["id"],"body":"review","request_key":"1"}),
+    )
+    .unwrap();
+    let mut model = Script::new(vec![
+        ("default/a", text("")),
+        ("default/b", text("B succeeds")),
+    ]);
+    let results = agt_runtime::Dispatcher::new(home.path())
+        .drain(
+            &mut model,
+            &DefaultMcpClientFactory,
+            50,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+    assert!(results.iter().any(|r| r.state == "failed"));
+    assert!(results.iter().any(|r| r.state == "completed"));
+}
+
+#[test]
+fn hosted_agent_can_send_peer_message_with_fixed_identity_and_inherited_depth() {
+    let home = home();
+    let user = hosted(home.path(), agt_service::ResponsePolicy::All);
+    let group = user
+        .call("group_create", json!({"title":"group","members":["a"]}))
+        .unwrap();
+    user.call(
+        "message_send",
+        json!({"conversation":group["id"],"body":"send a message","request_key":"1"}),
+    )
+    .unwrap();
+    let mut model = Script::new(vec![
+        (
+            "default/a",
+            calls(vec![call(
+                "send-1",
+                "framework_message_send",
+                json!({"conversation":group["id"],"body":"tool reply","request_key":"tool-1"}),
+            )]),
+        ),
+        ("default/a", text("[[silent]]")),
+    ]);
+    agt_runtime::Dispatcher::new(home.path())
+        .drain(
+            &mut model,
+            &DefaultMcpClientFactory,
+            50,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+    let history = user
+        .call("message_history", json!({"conversation":group["id"]}))
+        .unwrap();
+    assert_eq!(history["messages"].as_array().unwrap().len(), 2);
+    assert_eq!(history["messages"][1]["sender_id"], "a");
+    assert_eq!(history["messages"][1]["metadata"]["automated_depth"], 1);
+}
+
+#[test]
+fn deleting_prepared_trigger_skips_delivery_and_archiving_pauses_it() {
+    let home = home();
+    let user = hosted(home.path(), agt_service::ResponsePolicy::All);
+    let direct = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    let cid = agt_im::ConversationId::new(direct["id"].as_str().unwrap());
+    let sent = user
+        .call(
+            "message_send",
+            json!({"conversation":direct["id"],"body":"hello","request_key":"1"}),
+        )
+        .unwrap();
+    let im = ImStore::open(home.path().join("im/im.db")).unwrap();
+    let delivery = im
+        .deliveries(&PrincipalId::new("a"), true, 1)
+        .unwrap()
+        .remove(0);
+    im.prepare_delivery(
+        delivery.id,
+        &json!({"placeholder":"must never be executed"}),
+    )
+    .unwrap();
+    im.archive_conversation(&cid, &PrincipalId::new("user"))
+        .unwrap();
+    let mut model = Script::default();
+    let dispatcher = agt_runtime::Dispatcher::new(home.path());
+    assert_eq!(
+        dispatcher
+            .drain(
+                &mut model,
+                &DefaultMcpClientFactory,
+                50,
+                &CancellationToken::new()
+            )
+            .unwrap()[0]
+            .state,
+        "conversation_inactive"
+    );
+    im.reactivate_conversation(&cid, &PrincipalId::new("user"))
+        .unwrap();
+    im.delete_message(
+        &agt_im::MessageId::new(sent["message"]["id"].as_str().unwrap()),
+        &PrincipalId::new("user"),
+    )
+    .unwrap();
+    assert_eq!(
+        dispatcher
+            .drain(
+                &mut model,
+                &DefaultMcpClientFactory,
+                50,
+                &CancellationToken::new()
+            )
+            .unwrap()[0]
+            .state,
+        "skipped"
+    );
+    assert!(
+        dispatcher
+            .drain(
+                &mut model,
+                &DefaultMcpClientFactory,
+                50,
+                &CancellationToken::new()
+            )
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn concurrent_dispatchers_share_one_inference_and_one_reply() {
+    use std::sync::mpsc;
+    use std::time::Duration;
+    struct Blocking {
+        started: mpsc::Sender<()>,
+        release: mpsc::Receiver<()>,
+    }
+    impl ModelClient for Blocking {
+        fn complete(&mut self, _: &ResolvedAgent, _: &[Value], _: &[Value]) -> Result<Value> {
+            self.started.send(()).unwrap();
+            self.release.recv_timeout(Duration::from_secs(10)).unwrap();
+            Ok(text("one reply"))
+        }
+    }
+    let home = home();
+    let user = hosted(home.path(), agt_service::ResponsePolicy::All);
+    let direct = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    let sent = user
+        .call(
+            "message_send",
+            json!({"conversation":direct["id"],"body":"hello","request_key":"1"}),
+        )
+        .unwrap();
+    let (start_tx, start_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let path = home.path().to_owned();
+    let thread = std::thread::spawn(move || {
+        let mut model = Blocking {
+            started: start_tx,
+            release: release_rx,
+        };
+        agt_runtime::Dispatcher::new(&path)
+            .drain(
+                &mut model,
+                &DefaultMcpClientFactory,
+                50,
+                &CancellationToken::new(),
+            )
+            .unwrap()
+    });
+    start_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let mut model = Script::default();
+    let dispatcher = agt_runtime::Dispatcher::new(home.path());
+    assert_eq!(
+        dispatcher
+            .drain(
+                &mut model,
+                &DefaultMcpClientFactory,
+                50,
+                &CancellationToken::new()
+            )
+            .unwrap()[0]
+            .state,
+        "running_or_interrupted"
+    );
+    release_tx.send(()).unwrap();
+    thread.join().unwrap();
+    assert!(
+        dispatcher
+            .drain(
+                &mut model,
+                &DefaultMcpClientFactory,
+                50,
+                &CancellationToken::new()
+            )
+            .unwrap()
+            .is_empty()
+    );
+    let status = user
+        .call(
+            "message_status",
+            json!({"message_id":sent["message"]["id"]}),
+        )
+        .unwrap();
+    assert_eq!(status[0]["state"], "completed");
+    assert!(status[0].get("request").is_none());
+    assert_eq!(
+        user.call("message_history", json!({"conversation":direct["id"]}))
+            .unwrap()["messages"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn hosted_agent_creates_group_and_contacts_peer_without_parent_child_delegation() {
+    struct Organize {
+        step: usize,
+    }
+    impl ModelClient for Organize {
+        fn complete(
+            &mut self,
+            agent: &ResolvedAgent,
+            messages: &[Value],
+            _: &[Value],
+        ) -> Result<Value> {
+            self.step += 1;
+            Ok(match self.step {
+                1 => {
+                    assert_eq!(agent.name, "default/a");
+                    calls(vec![call(
+                        "group",
+                        "framework_group_create",
+                        json!({"title":"agent-created","members":["b"]}),
+                    )])
+                }
+                2 => {
+                    let group: Value =
+                        serde_json::from_str(messages.last().unwrap()["content"].as_str().unwrap())
+                            .unwrap();
+                    calls(vec![call(
+                        "send",
+                        "framework_message_send",
+                        json!({"conversation":group["id"],"body":"Please review","request_key":"peer-task","mentions":["b"]}),
+                    )])
+                }
+                3 => text("[[silent]]"),
+                4 => {
+                    assert_eq!(agent.name, "default/b");
+                    text("peer review")
+                }
+                _ => panic!("unexpected extra response"),
+            })
+        }
+    }
+    let home = home();
+    let user = hosted(home.path(), agt_service::ResponsePolicy::All);
+    let store = agt_service::BindingStore::open(home.path()).unwrap();
+    let mut b = store.get(&PrincipalId::new("b")).unwrap().unwrap();
+    b.max_depth = 2;
+    store.bind(b).unwrap();
+    let direct = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    user.call(
+        "message_send",
+        json!({"conversation":direct["id"],"body":"organize review","request_key":"1"}),
+    )
+    .unwrap();
+    let mut model = Organize { step: 0 };
+    let dispatcher = agt_runtime::Dispatcher::new(home.path());
+    dispatcher
+        .drain(
+            &mut model,
+            &DefaultMcpClientFactory,
+            50,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+    dispatcher
+        .drain(
+            &mut model,
+            &DefaultMcpClientFactory,
+            50,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+    assert_eq!(model.step, 4);
+    let records = RunStore::open(home.path()).unwrap().list(10).unwrap();
+    assert_eq!(records.len(), 2);
+    assert!(
+        records
+            .iter()
+            .all(|r| r.parent_run_id.is_none() && r.request.trigger.is_some())
+    );
+}

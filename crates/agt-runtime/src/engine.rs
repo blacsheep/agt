@@ -90,6 +90,17 @@ impl<'a> Runtime<'a> {
     ) -> Result<String> {
         check_canceled(cancellation)?;
         let agent = &agents[&record.request.agent];
+        if record
+            .request
+            .trigger
+            .as_ref()
+            .is_some_and(|t| !t.allow_mcp)
+            && !agent.mcps.is_empty()
+        {
+            return Err(RuntimeError::Configuration(
+                "mounted MCP execution requires binding and worker opt-in",
+            ));
+        }
         if (!agent.mcps.is_empty() || !record.request.delegates.is_empty())
             && !agent.model.capabilities.tool_call
         {
@@ -108,6 +119,35 @@ impl<'a> Runtime<'a> {
         record.config_fingerprint = Some(fingerprint(&serde_json::to_vec(&snapshot)?));
         self.store.save(record)?;
         let mut tools = ToolSession::connect(agent, &record.request, self.factory, cancellation)?;
+        let communication = record
+            .request
+            .trigger
+            .as_ref()
+            .map(|trigger| {
+                agt_service::ToolService::open(
+                    &self.home,
+                    agt_service::Actor {
+                        principal: trigger.principal.clone(),
+                        role: agt_service::Role::Participant,
+                        automated_depth: Some(trigger.depth),
+                    },
+                )
+                .map_err(|_| RuntimeError::Tool("cannot initialize communication tools"))
+            })
+            .transpose()?;
+        let mut communication_names = BTreeSet::new();
+        if agent.model.capabilities.tool_call
+            && let Some(service) = &communication
+        {
+            for schema in service.schemas() {
+                let name = format!("framework_{}", schema["name"].as_str().expect("tool name"));
+                communication_names.insert(name.clone());
+                tools.schemas.push(json!({"type":"function","function":{"name":name,"description":schema["description"],"parameters":schema["inputSchema"]}}));
+            }
+        }
+        if tools.schemas.len() > 128 {
+            return Err(RuntimeError::Tool("more than 128 tools attached"));
+        }
         // The discovered schemas are also part of the execution snapshot.
         record.config_fingerprint = Some(fingerprint(&serde_json::to_vec(&(
             &record.config_fingerprint,
@@ -159,7 +199,9 @@ impl<'a> Runtime<'a> {
                             "delegation target or input is not allowed",
                         ));
                     }
-                } else if !tools.targets.contains_key(&call.function.name) {
+                } else if !tools.targets.contains_key(&call.function.name)
+                    && !communication_names.contains(&call.function.name)
+                {
                     return Err(RuntimeError::Tool("unknown or unavailable tool"));
                 }
             }
@@ -173,6 +215,18 @@ impl<'a> Runtime<'a> {
                 let output = if call.function.name == "delegate" {
                     let args: Delegation = serde_json::from_str(&call.function.arguments)?;
                     self.delegate(record, args, &call.id, agents, remaining, cancellation)?
+                } else if communication_names.contains(&call.function.name) {
+                    let result = communication.as_ref().expect("communication service").call(
+                        call.function
+                            .name
+                            .strip_prefix("framework_")
+                            .expect("tool prefix"),
+                        serde_json::from_str(&call.function.arguments)?,
+                    );
+                    match result {
+                        Ok(value)=>serde_json::to_string(&value)?,
+                        Err(_)=>json!({"error":"communication operation rejected; verify arguments, membership and permissions"}).to_string(),
+                    }
                 } else {
                     tools.call(
                         &call.function.name,
@@ -205,6 +259,7 @@ impl<'a> Runtime<'a> {
             delegates: Vec::new(),
             max_steps: parent.request.max_steps,
             working_directory: parent.request.working_directory.clone(),
+            trigger: None,
         };
         let im = ImStore::open(database_path(&self.home, "im", "im.db")?)
             .map_err(|_| RuntimeError::Im("cannot open message store"))?;

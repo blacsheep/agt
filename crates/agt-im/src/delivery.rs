@@ -38,6 +38,14 @@ pub struct Delivery {
 }
 
 impl ImStore {
+    pub fn delivery_status(&self, message: &MessageId) -> Result<Vec<Delivery>> {
+        let connection = self.lock()?;
+        let mut statement=connection.prepare("SELECT id,message_id,principal_id,state,request_json,run_id,error FROM message_deliveries WHERE message_id=?1 ORDER BY principal_id")?;
+        statement
+            .query_map([message.as_str()], row)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
     pub fn ack_delivery(&self, id: i64, principal: &PrincipalId) -> Result<()> {
         let connection = self.lock()?;
         let changed=connection.execute("UPDATE message_deliveries SET state='completed' WHERE id=?1 AND principal_id=?2 AND state='pending'

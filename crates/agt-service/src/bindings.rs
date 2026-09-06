@@ -1,0 +1,143 @@
+use agt_agent::AgentStore;
+use agt_im::{ConversationId, ImStore, PrincipalId, PrincipalKind};
+use anyhow::{Result, bail};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponsePolicy {
+    #[default]
+    Mentioned,
+    All,
+    Manual,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Binding {
+    pub principal: PrincipalId,
+    pub agent: String,
+    pub working_directory: PathBuf,
+    #[serde(default)]
+    pub policy: ResponsePolicy,
+    pub max_steps: u32,
+    pub max_depth: u32,
+    #[serde(default)]
+    pub allow_mcp: bool,
+}
+
+pub struct BindingStore {
+    connection: Connection,
+    home: PathBuf,
+}
+
+impl BindingStore {
+    pub fn open(home: &Path) -> Result<Self> {
+        let mut connection =
+            Connection::open(crate::database_path(home, "runtime", "bindings.db")?)?;
+        connection.busy_timeout(Duration::from_secs(5))?;
+        let tx = connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let version: u32 = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        match version {
+            0 => tx.execute_batch("CREATE TABLE bindings(principal TEXT PRIMARY KEY, agent TEXT NOT NULL, definition TEXT NOT NULL);
+                CREATE TABLE response_policies(conversation TEXT NOT NULL,principal TEXT NOT NULL,policy TEXT NOT NULL,PRIMARY KEY(conversation,principal)); PRAGMA user_version=1;")?,
+            1 => {},
+            _ => bail!("unsupported bindings database version"),
+        }
+        tx.commit()?;
+        Ok(Self {
+            connection,
+            home: home.to_owned(),
+        })
+    }
+
+    pub fn bind(&self, mut binding: Binding) -> Result<Binding> {
+        let (category, name) = crate::named_ref(&binding.agent)?;
+        AgentStore::new(&self.home).read_in(&category, &name)?;
+        binding.agent = format!("{category}/{name}");
+        let im = ImStore::open(crate::database_path(&self.home, "im", "im.db")?)?;
+        if im.get_principal(&binding.principal)?.kind != PrincipalKind::Agent {
+            bail!("only Agent principals can be hosted");
+        }
+        binding.working_directory = std::fs::canonicalize(&binding.working_directory)?;
+        if !binding.working_directory.is_dir()
+            || !(1..=100).contains(&binding.max_steps)
+            || !(1..=8).contains(&binding.max_depth)
+        {
+            bail!("invalid binding limits or working directory");
+        }
+        self.connection.execute("INSERT INTO bindings(principal,agent,definition) VALUES(?1,?2,?3)
+            ON CONFLICT(principal) DO UPDATE SET agent=excluded.agent,definition=excluded.definition",
+            params![binding.principal.as_str(),binding.agent,serde_json::to_string(&binding)?])?;
+        Ok(binding)
+    }
+
+    pub fn get(&self, principal: &PrincipalId) -> Result<Option<Binding>> {
+        let definition: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT definition FROM bindings WHERE principal=?1",
+                [principal.as_str()],
+                |r| r.get(0),
+            )
+            .optional()?;
+        definition
+            .map(|s| serde_json::from_str(&s).map_err(Into::into))
+            .transpose()
+    }
+    pub fn list(&self) -> Result<Vec<Binding>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT definition FROM bindings ORDER BY principal")?;
+        statement
+            .query_map([], |r| r.get::<_, String>(0))?
+            .map(|r| Ok(serde_json::from_str(&r?)?))
+            .collect()
+    }
+    pub fn unbind(&self, principal: &PrincipalId) -> Result<()> {
+        self.connection.execute(
+            "DELETE FROM bindings WHERE principal=?1",
+            [principal.as_str()],
+        )?;
+        Ok(())
+    }
+    pub fn set_policy(
+        &self,
+        conversation: &ConversationId,
+        principal: &PrincipalId,
+        policy: ResponsePolicy,
+    ) -> Result<()> {
+        let im = ImStore::open(crate::database_path(&self.home, "im", "im.db")?)?;
+        if im
+            .get_member(conversation, principal)?
+            .left_message_seq
+            .is_some()
+        {
+            bail!("not an active member");
+        }
+        self.connection.execute("INSERT INTO response_policies VALUES(?1,?2,?3) ON CONFLICT(conversation,principal) DO UPDATE SET policy=excluded.policy",
+            params![conversation.as_str(),principal.as_str(),serde_json::to_string(&policy)?])?;
+        Ok(())
+    }
+    pub fn policy(
+        &self,
+        conversation: &ConversationId,
+        binding: &Binding,
+    ) -> Result<ResponsePolicy> {
+        let policy: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT policy FROM response_policies WHERE conversation=?1 AND principal=?2",
+                params![conversation.as_str(), binding.principal.as_str()],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(match policy {
+            Some(value) => serde_json::from_str(&value)?,
+            None => binding.policy,
+        })
+    }
+}

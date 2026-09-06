@@ -289,3 +289,117 @@ fn unsupported_api_format_fails_before_model_execution() {
             .contains("chat-completions only")
     );
 }
+
+#[test]
+fn mcp_manager_provisions_agents_and_group_then_worker_broadcasts_replies() {
+    use agt_mcp::{DefaultMcpClientFactory, McpClientFactory, McpDocument, McpLimits};
+    let (url, server) = server(vec![answer("A group reply"), answer("B group reply")]);
+    let home = tempfile::tempdir().unwrap();
+    success(run(home.path(), &["init", home.path().to_str().unwrap()]));
+    success(run(
+        home.path(),
+        &["im", "principal", "create", "owner", "--name", "Owner"],
+    ));
+    let document = McpDocument::stdio(
+        "framework",
+        env!("CARGO_BIN_EXE_agt"),
+        vec![
+            "--home".into(),
+            home.path().to_string_lossy().into_owned(),
+            "serve".into(),
+            "--principal".into(),
+            "owner".into(),
+            "--manager".into(),
+        ],
+        vec![("AGT_ACCEPTANCE_SECRET".into(), "mock-secret".into())],
+    )
+    .unwrap();
+    let mut client = DefaultMcpClientFactory
+        .connect(&document, home.path(), McpLimits::default())
+        .unwrap();
+    let schemas = client.list_tools().unwrap();
+    assert!(schemas.iter().any(|t| t.name == "resource_write"));
+    let mut call = |name: &str, args: Value| -> Value {
+        let result = client.call_tool(name, args).unwrap();
+        assert!(!result.is_error, "{name}: {:?}", result.content);
+        serde_json::from_str(result.content[0].text.as_deref().unwrap()).unwrap()
+    };
+    let provider = call(
+        "resource_write",
+        json!({"kind":"provider","reference":"mock","create":true,"data":{"base_url":url,"api_key_env":"AGT_ACCEPTANCE_SECRET"}}),
+    );
+    assert!(!provider.to_string().contains("mock-secret"));
+    call(
+        "resource_write",
+        json!({"kind":"model","reference":"test","create":true,"data":{"provider":"mock","model":"test-model"}}),
+    );
+    call(
+        "resource_write",
+        json!({"kind":"prompt","reference":"group","create":true,"data":{"text":"Contribute briefly to the group discussion."}}),
+    );
+    for name in ["a", "b"] {
+        call(
+            "resource_write",
+            json!({"kind":"agent","reference":name,"create":true,"data":{"model":"test","prompt":"group"}}),
+        );
+        call(
+            "principal_create",
+            json!({"id":name,"name":name,"kind":"agent"}),
+        );
+        call(
+            "agent_bind",
+            json!({"principal":name,"agent":name,"working_directory":home.path(),"policy":"all","max_steps":6,"max_depth":1}),
+        );
+    }
+    let group = call(
+        "group_create",
+        json!({"title":"acceptance","members":["a","b"]}),
+    );
+    let sent = call(
+        "message_send",
+        json!({"conversation":group["id"],"body":"Discuss the plan","request_key":"acceptance"}),
+    );
+    assert_eq!(sent["message"]["sender_id"], "owner");
+    let outcomes = success(run(home.path(), &["worker"]));
+    assert_eq!(
+        outcomes
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|o| o["state"] == "completed")
+            .count(),
+        2
+    );
+    server.join().unwrap();
+    success(run(home.path(), &["worker"])); // no model server remains; must not infer again
+    let history = call("message_history", json!({"conversation":group["id"]}));
+    assert_eq!(history["messages"].as_array().unwrap().len(), 3);
+    assert_eq!(history["messages"][1]["sender_id"], "a");
+    assert_eq!(history["messages"][2]["sender_id"], "b");
+    client.close().unwrap();
+    let participant = McpDocument::stdio(
+        "participant",
+        env!("CARGO_BIN_EXE_agt"),
+        vec![
+            "--home".into(),
+            home.path().to_string_lossy().into_owned(),
+            "serve".into(),
+            "--principal".into(),
+            "a".into(),
+        ],
+        Vec::<(String, String)>::new(),
+    )
+    .unwrap();
+    let mut client = DefaultMcpClientFactory
+        .connect(&participant, home.path(), McpLimits::default())
+        .unwrap();
+    assert!(
+        !client
+            .list_tools()
+            .unwrap()
+            .iter()
+            .any(|t| t.name == "resource_write")
+    );
+    assert!(client.call_tool("resource_write", json!({})).is_err());
+    client.close().unwrap();
+}

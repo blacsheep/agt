@@ -1,8 +1,10 @@
 //! Explicit, bounded agent execution. IM remains a runtime-independent store.
+mod dispatch;
 mod engine;
 mod model;
 mod resolve;
 mod store;
+pub use dispatch::{DispatchOutcome, Dispatcher};
 
 pub use engine::Runtime;
 pub use model::{ChatCompletions, ModelClient};
@@ -52,6 +54,17 @@ pub struct RunRequest {
     pub delegates: Vec<String>,
     pub max_steps: u32,
     pub working_directory: std::path::PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<MessageTrigger>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
+pub struct MessageTrigger {
+    pub message_id: agt_im::MessageId,
+    pub conversation_id: agt_im::ConversationId,
+    pub principal: agt_im::PrincipalId,
+    pub depth: u32,
+    pub allow_mcp: bool,
 }
 
 impl RunRequest {
@@ -63,6 +76,7 @@ impl RunRequest {
             delegates: Vec::new(),
             max_steps: 12,
             working_directory: std::path::PathBuf::from("."),
+            trigger: None,
         }
     }
 
@@ -87,10 +101,15 @@ impl RunRequest {
                 "self delegation is not allowed".into(),
             ));
         }
-        if self.input.trim().is_empty() || self.input.len() > 256 * 1024 {
-            return Err(RuntimeError::Invalid(
-                "input must contain 1..262144 bytes".into(),
-            ));
+        let input_limit = if self.trigger.is_some() {
+            1024 * 1024
+        } else {
+            256 * 1024
+        };
+        if self.input.trim().is_empty() || self.input.len() > input_limit {
+            return Err(RuntimeError::Invalid(format!(
+                "input must contain 1..{input_limit} bytes"
+            )));
         }
         if self.request_key.trim().is_empty() || self.request_key.len() > 256 {
             return Err(RuntimeError::Invalid(

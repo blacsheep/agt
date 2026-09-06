@@ -10,6 +10,7 @@ members = [
     "crates/agt-provider",
     "crates/agt-prompt",
     "crates/agt-runtime",
+    "crates/agt-service",
     "crates/agt-skill",
     "crates/agt-storage",
 ]
@@ -32,6 +33,7 @@ agt-mcp = { path = "crates/agt-mcp" }
 agt-provider = { path = "crates/agt-provider" }
 agt-prompt = { path = "crates/agt-prompt" }
 agt-runtime = { path = "crates/agt-runtime" }
+agt-service = { path = "crates/agt-service" }
 agt-skill = { path = "crates/agt-skill" }
 agt-storage = { path = "crates/agt-storage" }
 anyhow = "1"

@@ -38,6 +38,7 @@ dependencies = [
  "agt-prompt",
  "agt-provider",
  "agt-runtime",
+ "agt-service",
  "agt-skill",
  "agt-storage",
  "anyhow",
@@ -152,8 +153,10 @@ dependencies = [
  "agt-model",
  "agt-prompt",
  "agt-provider",
+ "agt-service",
  "agt-skill",
  "agt-storage",
+ "anyhow",
  "reqwest",
  "rusqlite",
  "serde",
@@ -161,6 +164,28 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "agt-service"
+version = "0.1.0"
+dependencies = [
+ "agt-agent",
+ "agt-config",
+ "agt-core",
+ "agt-im",
+ "agt-mcp",
+ "agt-model",
+ "agt-prompt",
+ "agt-provider",
+ "agt-skill",
+ "agt-storage",
+ "anyhow",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
  "uuid",
 ]
 
