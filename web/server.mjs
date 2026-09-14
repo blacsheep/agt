@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const readTools = new Set(['conversation_list', 'member_list', 'message_history', 'message_status', 'message_inbox']);
 const writeTools = new Set(['direct_create', 'group_create', 'message_send', 'member_add', 'member_remove', 'resource_write', 'principal_create', 'agent_bind', 'agent_unbind', 'agent_set_enabled']);
-const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent'];
+const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent', 'environment'];
 const assets = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
 
 export class ApiError extends Error {
@@ -141,6 +141,10 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         } else result = await tool(name, args);
         if (name === 'message_send' && data.auto_reply === true) await run(['schedule', 'start', str(args.conversation), '--message', str(result.message.id)]);
         send(200, result);
+      } else if (req.method === 'POST' && url.pathname === '/api/environment-test') {
+        const data = await body(req);
+        if ('viewer' in data || 'principal' in data) throw new ApiError(403, 'identity_fixed', '连接测试仅供控制台管理员使用。');
+        send(200, await run(['environment', 'test', str(data.reference)]));
       } else if (req.method === 'POST' && url.pathname === '/api/provider-models') {
         const data = await body(req);
         const provider = str(data.provider);

@@ -1557,3 +1557,12 @@ body { font-size: 14px; -webkit-font-smoothing: antialiased; }
   .cards { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+
+/* Execution settings use existing workspace tokens, with disclosure for advanced options. */
+.execution-settings { border: 1px solid var(--line); border-radius: 8px; padding: 16px; background: var(--bg); }
+.execution-settings .form-grid { align-items: start; }
+.environment-intro { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+.environment-intro p { margin: 0; color: var(--muted); line-height: 1.6; }
+.environment-options { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 8px; }
+.environment-options summary { cursor: pointer; margin-bottom: 12px; }
+.resource-actions { flex-wrap: wrap; }
