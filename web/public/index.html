@@ -7,31 +7,21 @@
     <link rel="stylesheet" href="/style.css" />
     <script src="/app.js" defer></script>
   </head>
-  <body>
-    <aside class="rail">
+  <body class="workspace-page">
+    <aside class="rail" id="workspace-nav">
       <a class="brand" href="/" aria-label="AGT Studio 首页"
         ><span class="brand-mark">a<span>↗</span></span
-        ><span>agt<span class="brand-light">studio</span></span></a
+        ><span class="brand-name">agt<span class="brand-light">studio</span></span></a
       >
       <div class="workspace-label">
-        LOCAL WORKSPACE <span class="live-dot"></span>
+        工作空间 <span class="live-dot"></span>
       </div>
       <nav aria-label="主导航">
-        <button class="nav active" data-page="chat">
-          <span>◫</span>会话空间</button
-        ><button class="nav" data-page="agents">
-          <span>◎</span>Agent 团队<span id="agent-count" class="count"
-            >0</span
-          ></button
-        ><button class="nav" data-page="resources"><span>▦</span>资源库</button>
+        <button class="nav active" data-page="chat" aria-current="page" aria-label="会话空间" title="会话空间"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="3"/><path d="m8 18-3 3v-4M7 9h10M7 13h6"/></svg></span><span class="nav-label">会话空间</span></button>
+        <button class="nav" data-page="agents" aria-label="Agent 团队" title="Agent 团队"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2"/></svg></span><span class="nav-label">Agent 团队</span><span id="agent-count" class="count">0</span></button>
+        <button class="nav" data-page="observer" aria-label="Agent 会话" title="Agent 会话"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="14" rx="3"/><path d="M12 3v3M8 11h.01M16 11h.01M8 16h8"/></svg></span><span class="nav-label">Agent 会话</span></button>
+        <button class="nav" data-page="resources" aria-label="资源库" title="资源库"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="nav-label">资源库</span></button>
       </nav>
-      <div class="rail-note">
-        <span class="tiny-label">YOUR EXPERIMENT, YOUR PACE</span>
-        <p>连接不同角色，<br />让想法开始对话。</p>
-        <span class="muted"
-          >发送消息不会自动调用模型。<br />准备好后，再执行一批任务。</span
-        >
-      </div>
       <div class="rail-bottom">
         <div class="avatar user">你</div>
         <div>
@@ -43,52 +33,74 @@
     </aside>
     <main>
       <header class="topbar">
+        <div class="topbar-location">
+          <button id="toggle-nav" class="icon-button" type="button" aria-controls="workspace-nav" aria-expanded="true" aria-label="收起导航" title="收起导航">☰</button>
         <div class="breadcrumb">
           工作台 <span>/</span> <strong id="page-label">会话空间</strong>
         </div>
+        </div>
         <div class="top-actions">
+          <label class="debug-toggle"><input id="debug-mode" type="checkbox" />调试模式</label>
           <span id="connection" class="status-pill">连接中</span
-          ><button id="refresh" class="quiet">↻ 刷新</button
-          ><button id="execute" class="primary">▷ 执行一批</button>
+          ><button id="refresh" class="quiet">↻ 刷新</button>
+
         </div>
       </header>
       <div id="notice" role="status" class="notice hidden"></div>
+      <div id="deleted-notice" role="status" class="notice hidden"></div>
       <section id="page-chat" class="page chat-page">
         <div class="section-heading">
           <div>
-            <div class="eyebrow">CONVERSATIONS</div>
-            <h1>让协作发生<span class="accent">。</span></h1>
-            <p>从一条消息开始，观察每个 Agent 的回复与行动结果。</p>
+            <div class="eyebrow">WORKSPACE / CONVERSATIONS</div>
+            <h1>会话空间</h1>
+            <p>沟通任务，查看团队的回应、判断与行动。</p>
           </div>
-          <button id="new-chat" class="secondary">＋ 新建会话</button>
-        </div>
-        <div class="chat-layout">
-          <section class="conversation-pane panel">
-            <div class="pane-title">
-              <strong>会话</strong
-              ><span id="conversation-count" class="muted">0</span>
+          <div class="workspace-tools" id="workspace-tools">
+            <div class="panel-switches" aria-label="工作区布局">
+              <button id="toggle-conversations" type="button" aria-controls="conversation-pane" aria-expanded="true" title="收起会话列表">会话列表</button>
+              <button id="toggle-activity" type="button" aria-controls="activity-pane" aria-expanded="true" title="收起成员状态">成员状态</button>
             </div>
-            <label class="viewer-label" for="viewer"
-              >查看身份
-              <span title="主机只读观察，不代表可以代替该身份发言"
-                >ⓘ</span
-              ></label
-            ><select id="viewer" aria-label="查看身份"></select
-            ><input
+            <button id="new-chat" class="primary">＋ 新建会话</button>
+          </div>
+        </div>
+        <div id="chat-workspace"><div class="chat-layout">
+          <section class="conversation-pane panel" id="conversation-pane" aria-label="会话列表">
+            <div id="identity-sessions">
+
+            <div id="selected-identity" class="selected-identity"></div>
+            <div class="pane-title">
+              <select id="conversation-scope" aria-label="会话列表范围"><option value="recent">最近会话</option><option value="groups">我的群聊</option><option value="all">全部历史</option><option value="hidden">已移除</option></select>
+              <span id="conversation-count" class="muted">0</span>
+            </div>
+            <div class="conversation-search"><input
               id="search"
               class="search"
-              placeholder="搜索会话…"
-              aria-label="搜索会话"
-            />
+              placeholder="搜索联系人、Agent 或会话"
+              aria-label="搜索联系人、Agent 或会话"
+            /><button id="clear-search" class="hidden" type="button" aria-label="清空搜索">×</button></div>
+            <div id="entry-organizer" class="entry-organizer hidden"><button id="organize-entries" class="quiet" type="button">整理会话</button><div id="entry-selection" class="hidden"><label><input id="select-entries" type="checkbox">全选当前结果</label><small id="entry-selected-count"></small><div><button id="hide-entries" class="secondary" type="button">移除所选</button><button id="restore-entries" class="secondary" type="button">恢复所选</button></div></div></div>
+            <div id="history-window" class="history-window hidden"><small id="history-window-text"></small><button id="show-all-history" class="quiet" type="button">查看全部历史 ↗</button></div>
             <div id="conversations" class="conversation-list"></div>
+            </div>
           </section>
           <section class="message-pane panel">
-            <div id="chat-head" class="chat-head">
-              <strong>选择一个会话</strong
-              ><span class="muted">PRIVATE / GROUP</span>
+            <div class="chat-head"><button id="back-to-conversations" class="quiet" type="button">‹ 会话</button>
+              <div id="chat-head"><strong>选择一个会话</strong></div>
+              <div class="chat-actions">
+                <button id="execute" class="quiet" disabled>继续回复</button>
+                <button id="end-reply" class="stop-button" disabled>停止本群 Agent</button>
+                <button id="group-info" class="quiet" disabled>群信息</button>
+              </div>
             </div>
             <div id="observe-banner" class="observe-banner hidden">
               只读观察模式 · 当前展示此身份可见的会话，不能代替它发言。
+            </div>
+            <div id="reply-status" class="reply-status hidden" role="status">
+              <span id="reply-detail"></span>
+              <div class="reply-controls">
+              <button id="pause-reply" class="quiet hidden" type="button">暂停回复</button>
+
+              </div>
             </div>
             <div id="messages" class="messages" aria-live="polite">
               <div class="empty">
@@ -102,42 +114,48 @@
                 </button>
               </div>
             </div>
+            <button id="latest-message" class="latest-message hidden" type="button">↓ 回到最新消息</button>
+            <section id="live-replies" class="live-replies hidden" aria-label="Agent 实时生成预览"></section>
             <button id="older" class="older hidden">加载更早消息</button>
             <form id="composer" class="composer">
-              <div class="compose-top">
-                <span>邀请回应</span>
-                <div id="mentions" class="mention-options"></div>
-              </div>
+              <div id="mention-menu" class="mention-menu hidden" role="listbox" aria-label="选择提及成员"></div>
+              <div id="mention-summary" class="mention-hint" aria-live="polite">输入 @ 选择成员 · @all 提及所有人</div>
               <textarea
                 id="message-body"
-                rows="3"
-                placeholder="写下任务、问题，或推进下一阶段…"
+                rows="2"
+                placeholder="写下消息，@ 邀请成员 · /new 开启新上下文"
                 aria-label="消息内容"
+                aria-autocomplete="list"
+                aria-controls="mention-menu"
+                aria-expanded="false"
                 required
               ></textarea>
               <div class="compose-bottom">
-                <small id="compose-hint"
-                  >勾选 Agent 会生成 mentions · Ctrl / ⌘ + Enter 发送</small
+                <div class="compose-preferences">
+                  <label class="auto-reply-label"><input id="auto-reply" type="checkbox" checked />发送后自动回复</label>
+                  <small id="compose-hint">会调用模型 · Ctrl / ⌘ + Enter 发送</small>
+                </div
                 ><button id="send" class="primary" type="submit">
                   发送消息 ↑
                 </button>
               </div>
             </form>
           </section>
-          <aside class="activity-pane">
+          <aside class="activity-pane" id="activity-pane" aria-label="成员状态">
             <div class="activity-heading">
-              <span class="tiny-label">EXECUTION</span>
-              <h2>运行观察</h2>
+              <span class="tiny-label">PARTICIPATION</span>
+              <h2 id="activity-title">成员状态</h2>
             </div>
             <div class="execution-card">
               <div class="execution-top">
                 <span class="live-dot"></span
-                ><strong id="worker-state">等待执行</strong>
+                ><strong id="scheduler-state">准备就绪</strong>
               </div>
-              <p id="worker-detail">
-                消息先进入收件箱。由你决定何时调用模型，保持实验可控。
+              <div id="agent-presence"></div>
+              <p id="scheduler-detail">
+                开启自动回复后，发送消息即可开始对话。
               </p>
-              <div class="metric-row">
+              <div class="metric-row debug-only">
                 <div>
                   <strong id="run-count">0</strong><span>最近运行</span>
                 </div>
@@ -146,33 +164,45 @@
                 </div>
               </div>
             </div>
-            <div class="pane-title">
-              <strong>最近动态</strong><small>点击查看调用</small>
-            </div>
+            <details class="recent-activity">
+              <summary>最近动态 <small id="activity-hint">点击查看回复状态</small></summary>
             <div id="runs" class="run-list"></div>
-            <div class="subtle-note">
+            <div class="subtle-note debug-only">
               completed 表示模型已结束，<br />不代表任务或所有工具均成功。
             </div>
+            </details>
           </aside>
-        </div>
+        </div></div>
+      </section>
+      <section id="page-observer" class="page hidden">
+        <div class="section-heading"><div><div class="eyebrow">AGENT CONVERSATIONS</div><h1>Agent 会话</h1><p id="observer-caption">选择 Agent，只读查看它有权访问的对话。</p></div><button id="change-identity" class="secondary hidden">切换 Agent</button><div id="observer-tools"></div></div>
+        <div id="identity-directory"><input id="agent-search" class="search" aria-label="搜索 Agent" placeholder="搜索 Agent 名称或身份…"><div id="identities" class="observer-agents"></div></div>
+        <div id="observer-workspace" class="hidden"></div>
       </section>
       <section id="page-agents" class="page hidden">
         <div class="section-heading">
           <div>
             <div class="eyebrow">YOUR TEAM</div>
-            <h1>各有所长，一起协作<span class="accent">。</span></h1>
-            <p>定义角色，挂载资源，再将身份交给运行时托管。</p>
+            <h1>Agent 团队</h1>
+            <p>管理角色、模型与能力，随时开始协作。</p>
           </div>
           <button id="new-agent" class="primary">＋ 创建 Agent</button>
         </div>
+        <div class="agent-batch-bar" aria-label="批量管理 Agent">
+          <label><input id="select-all-agents" type="checkbox"> 全选</label>
+          <span id="agent-selection-count" role="status">已选 0 位</span>
+          <button id="enable-agents" class="secondary" disabled>启用所选</button>
+          <button id="disable-agents" class="quiet" disabled>停用所选</button>
+        </div>
+        <p class="form-note">启用后按响应策略处理消息；停用影响该 Agent 的所有会话，保留身份、历史与运行设置。</p>
         <div id="agents" class="cards"></div>
       </section>
       <section id="page-resources" class="page hidden">
         <div class="section-heading">
           <div>
             <div class="eyebrow">BUILDING BLOCKS</div>
-            <h1>能力，从资源开始<span class="accent">。</span></h1>
-            <p>复用现有配置。新建资源不会覆盖你的原有定义。</p>
+            <h1>资源库</h1>
+            <p>集中管理模型连接、角色指令与工具。</p>
           </div>
           <button id="new-resource" class="primary">＋ 新建资源</button>
         </div>
@@ -183,9 +213,10 @@
         <span
           >AGT STUDIO <span class="footer-dot">·</span> 本地优先的多 Agent
           实验空间</span
-        ><span id="home-path" title="资源目录"></span>
+        ><span id="home-path" class="debug-only" title="资源目录"></span>
       </footer>
     </main>
+    <dialog id="group-drawer" class="group-drawer" aria-labelledby="group-title"><div class="modal-head"><h2 id="group-title">群信息</h2><button id="close-group" class="icon-button" aria-label="关闭群信息">×</button></div><div id="group-content"></div></dialog>
     <dialog id="modal">
       <div class="modal-head">
         <div>
@@ -199,5 +230,6 @@
       <div id="modal-body"></div>
       <div id="modal-error" class="form-error hidden" role="alert"></div>
     </dialog>
+    <div id="conversation-menu" class="context-menu hidden" role="menu" aria-label="会话操作"></div>
   </body>
 </html>
