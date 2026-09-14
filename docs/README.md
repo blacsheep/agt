@@ -11,6 +11,8 @@
 - [上下文管理](context-management.md)：模块边界、自动压缩、持久化摘要与重置语义。
 - [Web 架构](web-console-plan.md)：Node 与 Rust 分工、身份和 UI 状态。
 
+- [外部 Harness 接入](harness-integration.md)：执行引擎、运行环境、Codex 会话与取消边界。
+
 ## 历史设计与实测
 
 以下文档保留对应阶段的范围、提交号和验收事实；其中的“下一步”、测试数量及

@@ -331,3 +331,22 @@ cargo run -q -p agt-cli -- --help
 
 CLI 集成测试覆盖六类资源 CRUD、Provider secret 脱敏、Provider → Model →
 Agent 的递归删除，以及 IM 私聊、幂等消息和群成员生命周期。
+
+## 外部 Harness 执行
+
+运行环境是可复用资源，Agent 选择 `--model` 或 `--environment`（二选一）。
+当前实现本机 Codex app-server，其他引擎尚未注册。
+
+```bash
+# local.json 示例：
+# {"engine":"codex","executable":"/usr/local/bin/codex",
+#  "working_directory":"/absolute/project","sandbox":"read_only"}
+agt environment create local --file local.json
+agt environment test local
+agt agent create reviewer --environment local --prompt review
+agt agent run reviewer --input '审查当前变更'
+# environment 同样支持 list/info/update/delete/category，env 是命令别名。
+```
+
+Web 可在资源库管理运行环境，并在 Agent 编辑页选择外部执行方式。
+接入边界、会话恢复与取消语义见 [Harness 设计](docs/harness-integration.md)。
