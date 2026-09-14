@@ -2,13 +2,34 @@
 
 这是从原始 agt runtime 中提取出的本地资源管理器，并提供一个通用的本地
 IM 后端。资源管理器和 IM 都可独立使用；`agt-runtime` 支持显式执行、有限委派，
-以及由 worker 驱动的私聊/群聊 Agent 协作。IM 不会自动启动推理。
+以及由持久化调度器驱动的私聊/群聊 Agent 协作。IM 本身不会自动启动推理；
+Web 默认在发送消息后授权回复，CLI 通过 `schedule` 显式授权和调度。
 
 新增框架入口与完整验收步骤见 [框架验收指南](docs/framework-acceptance.md)，
-当前规划见 [资源与消息框架计划](docs/messaging-tools-plan.md)。
+当前架构见 [调度设计](docs/scheduler-plan.md)，全部文档见 [文档导航](docs/README.md)。
 
 想通过界面手动验收？见 [AGT Studio 本地控制台](web/README.md)：构建 CLI 后运行
-`node web/server.mjs`，即可配置角色、私聊/群聊、显式执行并查看调用记录。
+`node web/server.mjs`，即可配置角色、私聊/群聊、自动回复、暂停/结束讨论及查看状态。
+
+## 前端 + 后端启动
+
+需要 Rust 1.96.1+；Web 需要 Node.js 22+，无需安装前端依赖。
+
+```bash
+cargo build -p agt-cli
+node web/server.mjs
+```
+
+Windows PowerShell 请显式指定可执行文件：
+
+```powershell
+cargo build -p agt-cli
+node web/server.mjs --binary .\target\debug\agt.exe
+```
+
+打开终端打印的完整带令牌链接。Node 提供页面与本机 HTTP 接口，并启动 Rust
+调度进程。升级代码后重新构建 CLI、重启 Web 并刷新页面。
+远程部署的本机访问方式与安全限制见 [Web 指南](web/README.md)。
 
 ## 保留的模块
 
@@ -58,6 +79,11 @@ cargo run -q -p agt-cli -- init /tmp/agt-home
   agents/default/
   im/                         # 首次使用 agt im 时自动创建
     im.db
+  runtime/                    # 按首次使用相应功能创建
+    bindings.db               # 托管身份与会话响应策略
+    runs.db                   # Run 与模型/工具调用诊断
+    scheduler.db              # 讨论、任务、提醒、租约和预算
+    contexts.db               # 各身份的会话摘要（重置起点在 scheduler.db）
 ```
 
 资源 home 及其内部的 domain、category、resource 目录/配置文件不接受
@@ -124,8 +150,8 @@ agt agent info coder
 
 ## 通用 IM
 
-IM 第一版只负责消息和会话本身，不绑定 Agent 或 Provider。参与者可以是用户、
-Agent、Bot 或其他服务；后续运行时只需把自己的身份映射为一个 participant 即可。
+IM 只负责消息和会话本身，不依赖 Agent 或 Provider。参与者可以是用户、
+Agent、Bot 或其他服务；托管身份与 Agent 定义的映射由 `agt-service` 管理。
 
 ~~~bash
 # 创建参与者
@@ -152,8 +178,13 @@ agt im conversation reactivate <conversation-id> --actor alice
 默认最新消息页通过 `next_cursor` 向旧消息方向翻页（把游标作为 `--before`）；使用
 `--after` 时则向新消息方向翻页（把游标继续作为 `--after`）。删除消息或会话采用
 软删除/状态标记，归档和删除后的会话可以由仍在会话中的参与者显式 `reactivate`
-恢复。IM CLI 不执行 Agent 推理；`agt worker` 显式消费托管 Agent 的投递，
+恢复。IM CLI 不执行 Agent 推理；`agt schedule run` 消费已授权讨论的投递，
 `agt serve` 则通过 stdio MCP 开放资源和通信工具。
+Web 自动回复使用持久化并行调度器：不同 Agent 可同时回应，接话时可判断参与、
+沉默或等待。消息合并至会话安静满 5 秒；参与判断并行，自主回复依次开始。
+每位 Agent 最多开始 100 次回复，新用户消息获准自动回复后计数归零，整轮模型调用次数不设上限。CLI 可用 `agt schedule start <conversation-id>`
+授权讨论、`agt schedule run --watch` 持续处理，以及 `pause/resume/end/status`
+控制和观察。每个 home 仅一个活跃调度器；具体行为见 [调度设计](docs/scheduler-plan.md)。
 新成员加入后可以读取会话已有历史；但未读数从加入时的消息序号开始计算。
 
 事件名称和操作者语义是稳定底座契约：`conversation.created`、`member.joined`、
@@ -196,7 +227,7 @@ Skill 或 MCP 会级联引用它们的 Agent。Agent 使用的其他共享资源
 被删除而反向删除。`--dry-run` 只输出计划，不修改文件。
 
 删除前会扫描全部六类资源并检查悬空引用、损坏配置和受保护对象；任一检查失败
-都会 fail-closed。`prompt/default/default` 与系统 Gateway Agent 永远不能删除。
+都会 fail-closed。`prompt/default/default` 是不可删除的保留资源。
 实际删除先把目录移动到 `<home>/.trash/<timestamp-pid-attempt>`，批量失败时尝试回滚。
 非 TTY 环境必须显式提供 `--yes`；TTY 默认会再次确认。
 
@@ -209,6 +240,27 @@ Skill 或 MCP 会级联引用它们的 Agent。Agent 使用的其他共享资源
 
 当前没有 `rename/move` 命令；因此不会伪装成“递归修改”去批量重写引用。若未来
 需要修改 identity，将单独实现带冲突检查、引用重写和事务回滚的 rename 操作。
+
+## Agent 内置资源工具
+
+Web 创建或编辑 Agent 时，勾选“框架内置工具 → 资源管理”，即可让模型操作
+当前 home 的资源，无需额外启动 MCP 服务。CLI 同样支持：
+
+```bash
+agt agent create steward --model fast --builtin-tool resource_management
+agt agent update coder --add-builtin-tool resource_management
+agt agent update coder --remove-builtin-tool resource_management
+```
+
+默认无资源权限；显式挂载开放六类资源 CRUD、Provider 模型列表、分类管理和
+Provider/MCP 静态配置校验。不会同时授予身份和托管管理权限。
+删除仍需精确计划确认，模型可自行完成两次调用；挂载意味着授权资源写入和删除。
+配置按每次运行快照加载，取消挂载从下一次运行生效，委派不继承父 Agent 权限。
+
+外部客户端仍可通过 `agt serve --principal ID --manager` 使用相同工具；
+CLI 的 `agt tool list/call --principal ID --manager` 使用同一套契约。
+Provider 写入接受直接 `api_key`，也兼容 `api_key_env`，两者互斥且读取始终脱敏。
+详见 [内置资源工具契约](docs/builtin-resource-tools-proposal.md)。
 
 ## 显式 Agent 执行（实验性）
 
@@ -244,20 +296,26 @@ agt run children <run-id>
 开始执行时会加载根 Agent 和全部允许委派对象的配置，并保存指纹；正在运行的
 执行不受后续文件修改影响。指纹用于辨认配置，不是可重建完整配置的归档。
 
-第一版的边界：
+显式 `agent run` 的当前边界（自动讨论另见调度设计）：
 
-- 模型协议只支持文本 Chat Completions，包括函数工具调用；不接受图片输入。
-  模型标记为具备 vision 能力仍可执行文本任务。Responses、Gateway、持久记忆、非持久化 Skill 来源、Skill `allowed-tools`、
-  `thinking_budget_tokens` 和 `show_reasoning` 暂不支持，相应不受支持的执行配置会报错。
-- 指定 `reasoning_effort` 时发送该参数并省略 temperature；输出上限使用
-  `max_completion_tokens`。具体模型须支持这些参数，运行时不会自动切换协议。
+- 模型协议支持文本 Chat Completions 和 Responses，包括函数工具调用；不接受图片输入。
+  Agent 使用明确的 Model 引用，只挂载已入库的 Skill。Skill `allowed-tools` 的执行约束尚未实现，挂载后运行会报错。
+- 指定 `reasoning_effort` 时省略 temperature；Chat Completions 使用
+  `reasoning_effort` / `max_completion_tokens`，Responses 使用
+  `reasoning.effort` / `max_output_tokens`。Responses 以 `store: false` 执行，
+  在单次 Run 的内存上下文中回传完整输出（含推理项）与工具结果。具体模型须支持这些参数，运行时不会自动切换协议。
 - MCP 结果支持文本与 structuredContent；客户端 `_meta` 不发给模型。
-  模型响应上限 4 MiB，累计请求上下文上限 1 MiB；暂不做 token 计数或自动压缩。
+  模型响应上限 4 MiB，请求上下文字节保护随模型窗口扩展（至少 1 MiB）；按 Model 的 context_window
+  估算 token 预算，自动裁剪工具输出并压缩历史。窗口配置不限制输出长度。
 - Rust API 接受 `CancellationToken`，可在步骤边界取消，MCP 调用支持中途取消。
   HTTP 请求按模型 timeout 超时，期间的取消在请求返回后观察到。CLI 被终止时，
   未完成记录会保留为 `running`；可用 `agt run list` 找回，不会自动重放工具。
 - 这是同步、显式执行，不消费 IM 事件。Run 与 IM 分别提交；子执行成功后若回复
   发布失败，父 Run 会失败，子结果仍可查询，当前没有自动补发或恢复执行入口。
+
+会话信息中可重置模型上下文而保留聊天记录；CLI 使用
+`agt schedule reset <conversation> --actor <human-principal>`。
+自动压缩、跨运行摘要、权限及模块边界见 [上下文管理](docs/context-management.md)。
 
 架构、后续里程碑与验收说明见 [runtime plan](docs/runtime-plan.md)。
 

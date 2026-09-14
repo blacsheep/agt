@@ -1,12 +1,16 @@
 # 资源与多 Agent 通信框架验收
 
+现行指南 · 2026-09-08。界面操作见 [Web 指南](../web/README.md)，
+并发和恢复设计见 [调度设计](scheduler-plan.md)。
+
 ## 当前架构
 
 资源定义仍由 Provider / Model / Prompt / Skill / MCP / Agent 各库管理。
 Agent 挂载 Model、Prompt、Skill、MCP，Model 引用 Provider。
 `agt-service` 提供统一工具服务、托管绑定及权限；CLI 和 stdio MCP 复用它。
-`agt-im` 只负责会话、消息及事务性收件人投递；`agt-runtime` 的 worker
-消费投递、执行模型并发布结果。Agent 可以自己创建群聊、联系其他 Agent，
+`agt-im` 只负责会话、消息及事务性收件人投递；`agt-runtime` 的持久化调度器
+消费已授权讨论的投递、执行模型并发布结果。自动消息执行统一使用 scheduler。
+Agent 可以自己创建群聊、联系其他 Agent，
 不要求父子 Run 关系。原有 `agent run --delegate` 仍可使用。
 
 广播与回复是两回事：每条消息为发送时的其他当前成员创建投递记录；
@@ -17,14 +21,20 @@ Agent 挂载 Model、Prompt、Skill、MCP，Model 引用 Provider。
 
 ```bash
 cargo test --workspace --offline
-cargo test -p agt-cli --test runtime_cli mcp_manager_provisions_agents_and_group_then_worker_broadcasts_replies --offline
+cargo test -p agt-cli --test runtime_cli mcp_manager_provisions_agents_and_group_then_scheduler_broadcasts_replies --offline
 cargo test -p agt-runtime hosted_agent_creates_group_and_contacts_peer_without_parent_child_delegation --offline
+cargo test -p agt-runtime scheduler --offline
+cargo test -p agt-runtime schedule_store --offline
+cargo build -p agt-cli --offline
+node --test web/test/*.test.mjs
 ```
 
 第一条覆盖所有回归。第二条通过真实 stdio MCP 客户端配置资源、创建并绑定
-两个 Agent、建群发消息，再由 CLI worker 调用本地 HTTP 模型桩回复。
+两个 Agent、建群发消息，授权讨论并经过 5 秒安静期后，由 CLI scheduler 调用本地 HTTP 模型桩回复。
 第三条验证托管 Agent 自己使用通信工具建群、联系同伴，没有父子委派关系。
-另外覆盖重复发送、并发 worker 单次推理、发布重试、失败隔离、权限和深度限制。
+另外覆盖重复发送、调度器互斥、发布拦截、权限与从 0 到 10 的连续接话。
+调度测试验证并行判断、自主回复互斥、5 秒消息合并、同 principal 串行、等待恢复、100 次回复计数重置与结束拦截。
+Web 测试需要 Node.js 22+。离线构建要求依赖已缓存。
 
 ## 手动连接模型
 
@@ -40,7 +50,7 @@ target/debug/agt --home /tmp/agt-framework-demo model create default-model --pro
 target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --manager resource_write --args '{"kind":"prompt","reference":"review","create":true,"data":{"text":"你是审查者；无需发言时输出 [[silent]]。"}}'
 target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --manager resource_write --args '{"kind":"agent","reference":"reviewer","create":true,"data":{"model":"default-model","prompt":"review","skills":[],"mcps":[]}}'
 target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --manager principal_create --args '{"id":"reviewer","name":"Reviewer","kind":"agent"}'
-target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --manager agent_bind --args '{"principal":"reviewer","agent":"reviewer","working_directory":"/tmp/agt-framework-demo","policy":"all","max_steps":8,"max_depth":2,"allow_mcp":false}'
+target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --manager agent_bind --args '{"principal":"reviewer","agent":"reviewer","working_directory":"/tmp/agt-framework-demo","policy":"all","max_steps":8,"allow_mcp":false}'
 ```
 
 按同样方法创建 `planner` Agent、principal 和 binding（可复用模型和 Prompt）。
@@ -55,18 +65,35 @@ target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner grou
 
 ```bash
 target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner message_send --args '{"conversation":"CONVERSATION_ID","body":"请讨论这个项目的改进方案。","request_key":"demo-1","mentions":["reviewer","planner"]}'
-target/debug/agt --home /tmp/agt-framework-demo worker --watch
+target/debug/agt --home /tmp/agt-framework-demo schedule start CONVERSATION_ID --message MESSAGE_ID
+target/debug/agt --home /tmp/agt-framework-demo schedule run --watch --concurrency 3
 ```
 
-另一个终端查询历史；用发送结果的消息 ID 查询每个收件人的处理状态：
+将发送结果的消息 ID 填入上面的 `MESSAGE_ID`。授权本身不调用模型；运行 watch
+才开始执行并可能产生费用。另一个终端查询历史与状态：
 
 ```bash
+target/debug/agt --home /tmp/agt-framework-demo --output json schedule status
 target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner message_history --args '{"conversation":"CONVERSATION_ID","limit":50}'
 target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner message_status --args '{"message_id":"MESSAGE_ID"}'
 ```
 
-`worker` 不加 `--watch` 只跑一批；一次不保证清空新产生的后续消息。
 重复使用相同 `request_key` 必须保持内容完全一致，否则拒绝。
+不带 `--message` 的 `schedule start` 会授权会话待处理用户消息并继续未结束讨论。
+`schedule run` 不带 `--watch` 只处理当前可运行任务，不负责长期提醒。
+
+控制讨论（以下 `agt` 代表已构建的 CLI，使用同一 home）：
+
+```bash
+agt --home /tmp/agt-framework-demo schedule pause CONVERSATION_ID
+agt --home /tmp/agt-framework-demo schedule resume CONVERSATION_ID
+agt --home /tmp/agt-framework-demo schedule end CONVERSATION_ID
+agt --home /tmp/agt-framework-demo schedule delete CONVERSATION_ID --actor owner
+agt --home /tmp/agt-framework-demo im conversation reactivate CONVERSATION_ID --actor owner
+```
+
+暂停让当前回复完成；结束取消后续回复和提醒。已结束轮次不能 resume，请发新消息。
+删除保留历史并检查权限；恢复会话不会复活已结束讨论。
 
 ## 提供给大模型的 MCP 工具
 
@@ -85,7 +112,7 @@ Category 管理仍使用原 CLI。使用 `tool list --principal owner --manager`
 去掉 `--manager` 即普通参与者：可建私聊/群聊、管理有权限的群成员、发送和
 读取消息，但不能修改资源/绑定。身份由启动者固定，模型无法通过参数伪造发送者。
 托管 Agent 获得同样的参与者工具（`framework_` 前缀），不会自动获得管理权限。
-MCP 服务本身不启动 worker，需另行运行。
+MCP 服务本身不启动调度器，也不授权消息；需通过 schedule 或 Web 开启讨论。
 
 ## 响应策略与安全边界
 
@@ -125,9 +152,11 @@ agt run calls RUN_ID --after LAST_CALL_ID --limit 50
 调用前持久化 `started`，返回后写入 `succeeded/failed/canceled`；中断留下的
 `started` 表示结果不确定，不允许据此自动重试。记录供主机查看，不开放给参与者
 工具。连接外部 MCP 的准备阶段失败仍记录为 Run 错误，不生成工具调用条目。
-迁移到 runtime 数据库 v2 不补造旧调用日志；旧版本程序不能打开 v2，升级前应备份。
+Runtime 数据库直接创建 v2 结构，旧版本结构会被拒绝，不在运行时迁移。
 
 ### 自动响应
+
+下表描述用户消息的响应策略：
 
 | policy | 私聊 | 群聊 |
 | --- | --- | --- |
@@ -137,24 +166,45 @@ agt run calls RUN_ID --after LAST_CALL_ID --limit 50
 
 正文中的 `@名字` 不等同于 `mentions`。Agent 可用 `response_policy` 设置
 自己在某个会话中的策略。精确输出 `[[silent]]` 不发布公开回复。
-`max_depth` 默认 1，只回应外部发起消息；需要 Agent 之间接续沟通时设为
-2 或更大（上限 8）。同时每个 Run 受 `max_steps` 限制。
-挂载外部 MCP 的执行需要 binding 的 `allow_mcp` 与 worker 的 `--allow-mcp`
-同时开启。外部工具可能执行命令或访问网络，务必只挂载可信配置。
+调度器不限制自动消息深度。绑定不提供 `max_depth`；
+消息深度仅用于历史追踪，不参与响应判定。
+所有新旧绑定的模型调用轮数均不限，旧 `max_steps` 字段仅兼容读取，不再约束执行。
+未被点名的 Agent 消息在非 manual 策略下进入参与判断；显式 mentions 点名的
+同伴消息绕过判断，成员资格与回复上限仍然生效。所有待开始的任务都先等待会话安静满 5 秒，每条新消息重新计时。
+外部 MCP 需要 binding 的 `allow_mcp` 和讨论授权同时开启
+（`schedule start/resume ... --allow-mcp`，或 Web 继续回复授权框）。
+务必只挂载可信配置。
 
 这是可信本地主机框架，不是公网多租户服务。启动者能选择身份和 manager 权限；
 底层 IM CLI 同样属于可信主机接口。资源摘要和工具错误不返回密钥，Provider
 密钥仍按现有资源存储机制保存，不是专门的密钥保险库。
 
-## 已知限制与下一阶段
+## 调度状态与排错
 
-- worker 在单进程内同步执行；多个 worker 不保证同一会话不同消息严格串行。
+- `schedule status` 返回 online、discussions、tasks；没有 Run 的任务也可能在
+  判断、等待回复名额、等待唤醒或因授权受阻，不要仅凭 Run 列表判断是否收到消息。
+- `evaluating / ready_to_reply / responding / waiting` 表示参与判断、等待回复名额、正式回复、等待唤醒。
+  同会话判断并行，自主回复依次开始；等待名额不占线程，但保留身份。每个 principal 最多开始 100 次回复，新的用户消息获准自动回复后计数归零。
+  模型调用次数仅供诊断，不再限制整轮调用或判断次数。单次 Run 的 max_steps 仍然生效。
+- 任务 `limited` 表示 100 次回复达限，发送新用户消息可重置；讨论超时可 resume 续期，但不重置回复计数。`blocked` 检查 MCP 双重授权；`failed / interrupted`
+  先检查 Run 与实际外部结果，不会自动重跑。Web debug_mode 展示更多诊断信息。
+- 不接话时检查绑定、manual/mentions、讨论是否授权/暂停/结束。
+  模型协议必须与 Provider 实际接口一致；支持文本 Chat Completions 和 Responses，
+  不会自动探测切换。调度判断在 scheduler.db 中记录，正式 Run 使用 `run calls`。
+
+## 已知限制
+
+- 调度默认 3 个任务并行（1–16）；互斥单位是 principal，不是 Agent 定义。
+  多个身份绑定同一定义可同时执行。
 - 中断于模型/工具执行中的 Run 保持可见的 processing/running，不自动重放
   不确定副作用；目前没有强制恢复 API。应检查 `run` 与消息状态，人工判断后
-  再发新请求。已完成 Run 的发布可重试而不重新推理，前提是本地资源和目录仍可用。
-- 归档会话暂停投递，重新激活后继续；已删除触发消息跳过。修改绑定不会取消
-  已经运行中的调用。
-- 自动回复深度与单 Run 步数不是全群 token 预算；大量成员和 all 策略仍可能
-  产生较多调用。公平调度、全局预算、显式中断恢复是后续重点。
-- 资源文件、IM、Run、binding 是不同存储边界，没有跨库分布式事务。
-- 本轮以模型桩验收，未调用付费真实模型；真实模型的工具选择质量需用户验收。
+  再发新请求。
+  调度等待会持久化，租约过期后纯判断可重试，正式回复任务标记 interrupted。
+- 归档/删除、触发消息删除、成员移除和解绑会阻止调度任务后续执行或发布。
+  恢复会话/绑定不保证恢复已取消任务，应检查状态后发送新消息。
+- 同一未结束讨论中的用户输入合并待处理消息，并重置各身份回复计数；重复授权或 resume 不重置。
+  跨会话联系继承原轮次的回复计数与控制，Agent 消息不能重置。结束后的新用户消息开启新讨论。
+  消息批次正文上限 128 KiB，超过时明确失败；最近历史另保留最多 20 条/128 KiB。
+- 已发出的外部 MCP 请求不保证撤回。资源文件、IM、Run、binding、scheduler
+  是不同存储边界，不承诺跨库事务或外部副作用 exactly-once。
+- 自动化使用模型桩；历史真实模型报告只验证当时版本，不代表新调度器已做真实验收。
