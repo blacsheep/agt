@@ -69,36 +69,123 @@ pub(crate) fn tool(command: ToolCommand, home: &Path, output: OutputMode) -> Res
         }
     }
 }
-#[derive(Debug, Args)]
-pub(crate) struct WorkerArgs {
-    /// Keep polling; omit to process one finite batch
-    #[arg(long)]
-    watch: bool,
-    /// Maximum deliveries per bound participant in each batch
-    #[arg(long,default_value_t=50,value_parser=clap::value_parser!(u32).range(1..=200))]
-    limit: u32,
-    /// Permit MCP execution only for bindings that also explicitly allow it
-    #[arg(long)]
-    allow_mcp: bool,
+#[derive(Debug, Subcommand)]
+pub(crate) enum ScheduleCommand {
+    /// Run the coordinator; without --watch, drain currently ready work only
+    Run {
+        #[arg(long)]
+        watch: bool,
+        #[arg(long, default_value_t = 3)]
+        concurrency: usize,
+    },
+    /// Authorize a human message, or continue pending discussion work
+    Start {
+        conversation: String,
+        #[arg(long)]
+        message: Option<String>,
+        #[arg(long)]
+        allow_mcp: bool,
+    },
+    /// Stop claiming work; current replies may finish
+    Pause {
+        conversation: String,
+    },
+    /// Cancel discussion replies and reminders
+    End {
+        conversation: String,
+    },
+    /// Permanently dissolve a group, retaining read-only history
+    Dissolve {
+        conversation: String,
+        #[arg(long)]
+        actor: String,
+    },
+    /// Soft-delete with IM permissions and cancel discussion work
+    Delete {
+        conversation: String,
+        #[arg(long)]
+        actor: String,
+    },
+    /// Explicitly renew the finite discussion allowance
+    Resume {
+        conversation: String,
+        #[arg(long)]
+        allow_mcp: bool,
+    },
+    /// Stop related work and reset model context; preserve IM history
+    Reset {
+        conversation: String,
+        #[arg(long)]
+        actor: String,
+    },
+    Status,
 }
-pub(crate) fn worker(args: WorkerArgs, home: &Path, output: OutputMode) -> Result<()> {
-    let mut dispatcher = agt_runtime::Dispatcher::new(home);
-    dispatcher.allow_mcp = args.allow_mcp;
-    let mut model = agt_runtime::ChatCompletions;
-    loop {
-        let outcomes = dispatcher.drain(
-            &mut model,
-            &agt_mcp::DefaultMcpClientFactory,
-            args.limit,
-            &agt_core::CancellationToken::new(),
-        )?;
-        if !outcomes.is_empty() || !args.watch {
-            emit(&outcomes, output)?;
+
+pub(crate) fn schedule(command: ScheduleCommand, home: &Path, output: OutputMode) -> Result<()> {
+    let now = || {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64
+    };
+    match command {
+        ScheduleCommand::Run { watch, concurrency } => {
+            let mut scheduler = loop {
+                match agt_runtime::Scheduler::open(home, concurrency) {
+                    Ok(scheduler) => break scheduler,
+                    Err(error) if watch && error.to_string().contains("owns this home") => {
+                        std::thread::sleep(std::time::Duration::from_secs(1))
+                    }
+                    Err(error) => return Err(error),
+                }
+            };
+            scheduler.run(watch, &agt_core::CancellationToken::new())?;
         }
-        if !args.watch {
-            break;
+        ScheduleCommand::Start {
+            conversation,
+            message,
+            allow_mcp,
+        } => agt_runtime::start_discussion(home, &conversation, message.as_deref(), allow_mcp)?,
+        ScheduleCommand::Pause { conversation } => {
+            agt_runtime::ScheduleStore::open(home)?.control(&conversation, "pause", false, now())?
         }
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        ScheduleCommand::End { conversation } => {
+            agt_runtime::ScheduleStore::open(home)?.control(&conversation, "end", false, now())?
+        }
+        ScheduleCommand::Dissolve {
+            conversation,
+            actor,
+        } => {
+            agt_runtime::dissolve_scheduled_group(home, &conversation, &actor)?;
+        }
+        ScheduleCommand::Delete {
+            conversation,
+            actor,
+        } => {
+            return emit(
+                &agt_runtime::delete_scheduled_conversation(home, &conversation, &actor)?,
+                output,
+            );
+        }
+        ScheduleCommand::Resume {
+            conversation,
+            allow_mcp,
+        } => agt_runtime::ScheduleStore::open(home)?.control(
+            &conversation,
+            "resume",
+            allow_mcp,
+            now(),
+        )?,
+        ScheduleCommand::Reset {
+            conversation,
+            actor,
+        } => {
+            return emit(
+                &agt_runtime::reset_conversation_context(home, &conversation, &actor)?,
+                output,
+            );
+        }
+        ScheduleCommand::Status => {}
     }
-    Ok(())
+    emit(&agt_runtime::ScheduleStore::open(home)?.snapshot()?, output)
 }

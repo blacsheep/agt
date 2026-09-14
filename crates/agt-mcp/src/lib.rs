@@ -12,10 +12,7 @@ pub mod safe;
 mod stdio;
 pub mod store;
 
-pub use client::{
-    DefaultMcpClientFactory, McpClient, McpClientFactory, McpConnectionContext,
-    StdioMcpClientFactory,
-};
+pub use client::{DefaultMcpClientFactory, McpClient, McpClientFactory, StdioMcpClientFactory};
 pub use config::{
     MCP_FILE, McpDocument, McpHttpServerConfig, McpServerSummary, McpStdioServerConfig,
     McpTestResult, ResolvedMcpStdioServerConfig,

@@ -87,6 +87,29 @@ pub(crate) fn argument_summary(value: &Value, known_fields: &[&str]) -> Value {
 
 pub(crate) fn runtime_error(error: &crate::RuntimeError) -> Value {
     use crate::RuntimeError::*;
+    if let ModelRetriesExhausted { attempts, last } = error {
+        let mut detail = runtime_error(last);
+        detail["attempts"] = json!(attempts);
+        detail["message"] = json!(format!(
+            "{} Failed after {} attempts.",
+            detail["message"]
+                .as_str()
+                .unwrap_or("Model request failed."),
+            attempts
+        ));
+        return detail;
+    }
+    if let ContextOverflow {
+        stage,
+        tokens,
+        budget,
+    } = error
+    {
+        return json!({"code":"context_overflow","stage":stage,"estimated_tokens":tokens,"available_tokens":budget,"message":error.to_string()});
+    }
+    if let HttpStatus(status) = error {
+        return json!({"code":"model_http_error","http_status":status,"message":format!("Model endpoint returned HTTP {status}.")});
+    }
     let (code, message) = match error {
         Canceled => (
             "canceled",
@@ -95,10 +118,6 @@ pub(crate) fn runtime_error(error: &crate::RuntimeError) -> Value {
         Budget => ("budget_exhausted", "Model step budget exhausted."),
         Model(message) => ("model_error", *message),
         Tool(message) => ("tool_error", *message),
-        HttpStatus(_) => (
-            "model_http_error",
-            "Model endpoint returned an unsuccessful HTTP status.",
-        ),
         _ => (
             "execution_error",
             "Execution failed; inspect the host Run and current state before retrying.",

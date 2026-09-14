@@ -14,12 +14,18 @@ fn home() -> tempfile::TempDir {
     for name in ["owner", "a", "b", "outsider"] {
         im.create_principal(PrincipalInput {
             id: PrincipalId::new(name),
-            kind: PrincipalKind::Agent,
+            kind: if name == "owner" {
+                PrincipalKind::User
+            } else {
+                PrincipalKind::Agent
+            },
             display_name: name.into(),
             metadata: json!({}),
         })
         .unwrap();
     }
+    im.ensure_workspace_owner(&PrincipalId::new("owner"))
+        .unwrap();
     home
 }
 fn service(home: &std::path::Path, principal: &str, manager: bool) -> ToolService {
@@ -243,37 +249,23 @@ fn tools_create_update_mount_and_delete_resources_with_safe_summaries() {
 }
 
 #[test]
-fn schema_migrates_v1_without_replaying_history_and_refuses_future_versions() {
-    let home = home();
-    let path = home.path().join("im/im.db");
-    let db = rusqlite::Connection::open(&path).unwrap();
-    db.execute_batch("DROP TABLE message_deliveries; PRAGMA user_version=1;")
-        .unwrap();
-    drop(db);
-    let im = ImStore::open(&path).unwrap();
-    assert!(
-        im.deliveries(&PrincipalId::new("a"), true, 50)
-            .unwrap()
-            .is_empty()
-    );
-    drop(im);
-    let db = rusqlite::Connection::open(&path).unwrap();
-    assert_eq!(
-        db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
-            .unwrap(),
-        2
-    );
-    db.pragma_update(None, "user_version", 99).unwrap();
-    assert!(ImStore::open(&path).is_err());
-    assert_eq!(
-        db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
-            .unwrap(),
-        99
-    );
+fn im_rejects_unsupported_schema_without_changing_it() {
+    for version in [1, 99] {
+        let home = home();
+        let path = home.path().join("im/im.db");
+        let db = rusqlite::Connection::open(&path).unwrap();
+        db.pragma_update(None, "user_version", version).unwrap();
+        assert!(ImStore::open(&path).is_err());
+        assert_eq!(
+            db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
+                .unwrap(),
+            version
+        );
+    }
 }
 
 #[test]
-fn preparation_and_terminal_state_survive_stale_workers() {
+fn terminal_delivery_state_survives_stale_updates() {
     let home = home();
     let owner = service(home.path(), "owner", true);
     let direct = owner
@@ -287,13 +279,8 @@ fn preparation_and_terminal_state_survive_stale_workers() {
         .unwrap();
     let im = ImStore::open(home.path().join("im/im.db")).unwrap();
     let id = im.deliveries(&PrincipalId::new("a"), true, 1).unwrap()[0].id;
-    im.prepare_delivery(id, &json!({"first":true})).unwrap();
-    assert_eq!(
-        im.prepare_delivery(id, &json!({"second":true}))
-            .unwrap()
-            .request,
-        Some(json!({"first":true}))
-    );
+    im.update_delivery(id, DeliveryState::Processing, None, None)
+        .unwrap();
     im.update_delivery(id, DeliveryState::Pending, None, Some("stale"))
         .unwrap();
     assert_eq!(
@@ -360,7 +347,65 @@ fn deleting_hosted_agent_requires_explicit_unbinding() {
             json!({"kind":"agent","reference":"a","create":true,"data":{"model":"m"}}),
         )
         .unwrap();
-    manager.call("agent_bind",json!({"principal":"a","agent":"a","working_directory":home.path(),"max_steps":3,"max_depth":1})).unwrap();
+    manager
+        .call(
+            "agent_bind",
+            json!({"principal":"a","agent":"a","working_directory":home.path(),"max_steps":3}),
+        )
+        .unwrap();
+    // Existing v1 bindings migrate as enabled; disabling survives reopen and keeps settings.
+    let db = rusqlite::Connection::open(home.path().join("runtime/bindings.db")).unwrap();
+    db.execute_batch("ALTER TABLE bindings DROP COLUMN enabled; PRAGMA user_version=1;")
+        .unwrap();
+    drop(db);
+    let principal = PrincipalId::new("a");
+    let store = agt_service::BindingStore::open(home.path()).unwrap();
+    assert!(store.get(&principal).unwrap().is_some());
+    assert_eq!(
+        service(home.path(), "a", false)
+            .call(
+                "agent_set_enabled",
+                json!({"principal":"a","enabled":false})
+            )
+            .unwrap_err()
+            .code,
+        "tool_unavailable"
+    );
+    manager
+        .call(
+            "agent_set_enabled",
+            json!({"principal":"a","enabled":false}),
+        )
+        .unwrap();
+    let reopened = agt_service::BindingStore::open(home.path()).unwrap();
+    assert!(reopened.get(&principal).unwrap().is_none());
+    assert!(reopened.list().unwrap().is_empty());
+    let reconfigured = manager
+        .call(
+            "agent_bind",
+            json!({"principal":"a","agent":"a","working_directory":home.path(),"max_steps":3}),
+        )
+        .unwrap();
+    assert_eq!(reconfigured["enabled"], false);
+    assert!(
+        reconfigured["next_step"]
+            .as_str()
+            .unwrap()
+            .contains("agent_set_enabled")
+    );
+    let saved = manager.call("binding_list", json!({})).unwrap();
+    assert_eq!(saved[0]["enabled"], false);
+    assert_eq!(saved[0]["max_steps"], 3);
+    manager
+        .call("agent_set_enabled", json!({"principal":"a","enabled":true}))
+        .unwrap();
+    assert_eq!(store.get(&principal).unwrap().unwrap().max_steps, 3);
+    manager
+        .call(
+            "agent_set_enabled",
+            json!({"principal":"a","enabled":false}),
+        )
+        .unwrap();
     assert!(
         manager
             .call(
@@ -551,5 +596,258 @@ fn mcp_returns_the_same_safe_structured_error_as_the_service() {
         serde_json::from_str::<Value>(response["result"]["content"][0]["text"].as_str().unwrap())
             .unwrap(),
         expected
+    );
+}
+
+#[test]
+fn deep_messages_follow_policy_without_a_depth_limit() {
+    let home = home();
+    let owner = service(home.path(), "owner", true);
+    let group = owner
+        .call("group_create", json!({"title":"deep","members":["a"]}))
+        .unwrap();
+    let sender = agt_service::Messaging::open(
+        home.path(),
+        Actor {
+            principal: PrincipalId::new("owner"),
+            role: Role::Participant,
+            automated_depth: Some(u32::MAX),
+        },
+    )
+    .unwrap();
+    let sent = sender
+        .send(agt_service::MessageInput {
+            conversation: agt_im::ConversationId::new(group["id"].as_str().unwrap()),
+            body: "keep going".into(),
+            request_key: "deep".into(),
+            mentions: vec![],
+            reply_to: None,
+        })
+        .unwrap();
+    let receiver = agt_service::Messaging::open(
+        home.path(),
+        Actor {
+            principal: PrincipalId::new("a"),
+            role: Role::Participant,
+            automated_depth: None,
+        },
+    )
+    .unwrap();
+    assert!(
+        receiver
+            .may_respond(&sent.message, agt_service::ResponsePolicy::All)
+            .unwrap()
+    );
+    assert!(
+        !receiver
+            .may_respond(&sent.message, agt_service::ResponsePolicy::Manual)
+            .unwrap()
+    );
+    assert!(
+        !receiver
+            .may_respond(&sent.message, agt_service::ResponsePolicy::Mentioned)
+            .unwrap()
+    );
+}
+
+#[test]
+fn resource_capability_is_separate_from_identity_administration() {
+    let home = home();
+    let plain = service(home.path(), "a", false);
+    let resources = service(home.path(), "a", false).with_resource_management(true);
+    let manager = service(home.path(), "owner", true);
+    assert!(
+        resources
+            .call(
+                "principal_create",
+                json!({"id":"fake-user","name":"Fake","kind":"user"})
+            )
+            .is_err()
+    );
+    assert!(
+        ImStore::open(home.path().join("im/im.db"))
+            .unwrap()
+            .get_principal(&PrincipalId::new("fake-user"))
+            .is_err()
+    );
+    resources
+        .call(
+            "principal_create",
+            json!({"id":"new-agent","name":"New","kind":"agent"}),
+        )
+        .unwrap();
+    assert_eq!(
+        manager
+            .call("principal_list", json!({}))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|p| p["id"] == "new-agent")
+            .count(),
+        1
+    );
+    for schema in resources.schemas() {
+        let name = schema["name"].as_str().unwrap();
+        if name.starts_with("resource_") || name == "provider_models" {
+            assert_eq!(
+                plain.call(name, json!({})).unwrap_err().code,
+                "tool_unavailable"
+            );
+            assert!(manager.schemas().iter().any(|s| s == &schema));
+        }
+    }
+    for name in [
+        "principal_create",
+        "agent_bind",
+        "agent_unbind",
+        "agent_set_enabled",
+        "binding_list",
+    ] {
+        assert_eq!(
+            plain.call(name, json!({})).unwrap_err().code,
+            "tool_unavailable"
+        );
+    }
+    for kind in ["provider", "model", "prompt", "skill", "mcp", "agent"] {
+        resources
+            .call(
+                "resource_category_create",
+                json!({"kind":kind,"category":"team"}),
+            )
+            .unwrap();
+        assert!(
+            resources
+                .call("resource_category_list", json!({"kind":kind}))
+                .unwrap()
+                .to_string()
+                .contains("team")
+        );
+        resources
+            .call(
+                "resource_category_delete",
+                json!({"kind":kind,"category":"team"}),
+            )
+            .unwrap();
+        assert!(
+            resources
+                .call(
+                    "resource_category_delete",
+                    json!({"kind":kind,"category":"default"})
+                )
+                .is_err()
+        );
+    }
+    let create = |data| {
+        resources.call(
+            "resource_write",
+            json!({"kind":"provider","reference":"p","create":true,"data":data}),
+        )
+    };
+    for data in [
+        json!({"base_url":"http://localhost/v1"}),
+        json!({"base_url":"http://localhost/v1","api_key":" "}),
+        json!({"base_url":"http://localhost/v1","api_key":"private-key","api_key_env":"ENV"}),
+    ] {
+        assert!(
+            !create(data)
+                .unwrap_err()
+                .as_value()
+                .to_string()
+                .contains("private-key")
+        );
+    }
+    assert_eq!(
+        create(json!({"base_url":"http://localhost/v1","api_key":"private-key"})).unwrap()["api_key_configured"],
+        true
+    );
+    resources.call("resource_write", json!({"kind":"provider","reference":"p","create":false,"data":{"api_key":"replacement-key"}})).unwrap();
+    resources.call("resource_write", json!({"kind":"provider","reference":"p","create":false,"data":{"base_url":"http://localhost/v2"}})).unwrap();
+    assert_eq!(
+        agt_provider::ProviderStore::new(home.path())
+            .read("p")
+            .unwrap()
+            .config
+            .api_key,
+        "replacement-key"
+    );
+    let tested = resources
+        .call("resource_test", json!({"kind":"provider","reference":"p"}))
+        .unwrap();
+    assert!(!tested.to_string().contains("replacement-key"));
+    resources.call("resource_write", json!({"kind":"mcp","reference":"safe","create":true,"data":{"mcpServers":{"safe":{"command":"this-command-must-not-run","env":{"TOKEN":"private-key"}}}}})).unwrap();
+    let tested = resources
+        .call("resource_test", json!({"kind":"mcp","reference":"safe"}))
+        .unwrap();
+    assert_eq!(tested["connected"], false);
+    assert!(!tested.to_string().contains("private-key"));
+    resources.call("resource_write", json!({"kind":"model","reference":"m","create":true,"data":{"provider":"p","model":"test"}})).unwrap();
+    let agent = resources.call("resource_write", json!({"kind":"agent","reference":"configured","create":true,"data":{"model":"m","builtin_tools":["resource_management"]}})).unwrap();
+    assert_eq!(agent["builtin_tools"], json!(["resource_management"]));
+    let agent = resources.call("resource_write", json!({"kind":"agent","reference":"configured","create":false,"data":{"description":"updated"}})).unwrap();
+    assert_eq!(agent["builtin_tools"], json!(["resource_management"]));
+    let agent = resources.call("resource_write", json!({"kind":"agent","reference":"configured","create":false,"data":{"builtin_tools":[]}})).unwrap();
+    assert_eq!(agent["builtin_tools"], json!([]));
+    for tools in [
+        json!(["unknown"]),
+        json!(["resource_management", "resource_management"]),
+    ] {
+        assert!(resources.call("resource_write", json!({"kind":"agent","reference":"configured","create":false,"data":{"builtin_tools":tools}})).is_err());
+    }
+    assert!(
+        resources
+            .call(
+                "resource_delete",
+                json!({"kind":"prompt","reference":"default"})
+            )
+            .is_err()
+    );
+    assert!(
+        resources
+            .call(
+                "resource_delete",
+                json!({"kind":"provider","reference":"p"})
+            )
+            .is_err()
+    );
+    let plan = resources
+        .call(
+            "resource_delete",
+            json!({"kind":"agent","reference":"configured"}),
+        )
+        .unwrap();
+    resources
+        .call(
+            "resource_delete",
+            json!({"kind":"agent","reference":"configured","confirm":plan["items"]}),
+        )
+        .unwrap();
+}
+
+#[test]
+fn mcp_protocol_accepts_direct_provider_keys_and_exposes_resource_extensions() {
+    let home = home();
+    let service = service(home.path(), "owner", true);
+    let input = [
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"test","version":"1"}}}),
+        json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
+        json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"resource_write","arguments":{"kind":"provider","reference":"p","create":true,"data":{"base_url":"http://localhost/v1","api_key":"protocol-private-key"}}}}),
+    ].iter().map(Value::to_string).collect::<Vec<_>>().join("\n") + "\n";
+    let mut output = Vec::new();
+    agt_service::mcp_server::serve(&service, input.as_bytes(), &mut output).unwrap();
+    let output = String::from_utf8(output).unwrap();
+    assert!(!output.contains("protocol-private-key"));
+    for name in [
+        "provider_models",
+        "resource_test",
+        "resource_category_create",
+    ] {
+        assert!(output.contains(name));
+    }
+    assert!(
+        agt_provider::ProviderStore::new(home.path())
+            .read("p")
+            .is_ok()
     );
 }

@@ -195,6 +195,33 @@ impl ImStore {
         for principal_id in &unique_members {
             ensure_principal_tx(&transaction, principal_id)?;
         }
+        let creator = owner_id;
+        let kind: String = transaction.query_row(
+            "SELECT kind FROM principals WHERE id=?1",
+            [creator.as_str()],
+            |r| r.get(0),
+        )?;
+        let responsible = if kind == "agent" {
+            Some(PrincipalId::new(
+                transaction
+                    .query_row(
+                        "SELECT principal FROM workspace_owner WHERE singleton=1",
+                        [],
+                        |r| r.get::<_, String>(0),
+                    )
+                    .optional()?
+                    .ok_or_else(|| {
+                        ImError::InvalidInput(
+                            "configure the workspace owner first: agt im owner ensure <user>"
+                                .into(),
+                        )
+                    })?,
+            ))
+        } else {
+            None
+        };
+        let owner_id = responsible.as_ref().unwrap_or(creator);
+        unique_members.insert(owner_id.clone());
         let conversation_id = ConversationId::generate();
         let now = now_millis();
         transaction.execute(
@@ -222,6 +249,8 @@ impl ImStore {
         for principal_id in unique_members {
             let role = if &principal_id == owner_id {
                 MemberRole::Owner
+            } else if &principal_id == creator {
+                MemberRole::Admin
             } else {
                 MemberRole::Member
             };
@@ -235,6 +264,12 @@ impl ImStore {
                     principal_id.as_str(),
                     member_role_to_str(&role),
                 ],
+            )?;
+        }
+        if responsible.is_some() {
+            transaction.execute(
+                "INSERT INTO managed_groups VALUES(?1,?2)",
+                params![conversation_id.as_str(), creator.as_str()],
             )?;
         }
         transaction.commit()?;
@@ -251,6 +286,15 @@ impl ImStore {
         &self,
         principal_id: &PrincipalId,
     ) -> Result<Vec<ConversationSummary>> {
+        self.list_conversation_entries(principal_id, false, false)
+    }
+
+    pub fn list_conversation_entries(
+        &self,
+        principal_id: &PrincipalId,
+        include_hidden: bool,
+        groups_only: bool,
+    ) -> Result<Vec<ConversationSummary>> {
         ensure_id(principal_id, "principal id")?;
         let connection = self.lock()?;
         let mut statement = connection.prepare(
@@ -264,20 +308,29 @@ impl ImStore {
                        AND msg.seq > cm.last_read_seq
                        AND msg.seq >= cm.joined_message_seq
                        AND msg.deleted_at IS NULL
-                       AND msg.sender_id != cm.principal_id)
+                       AND msg.sender_id != cm.principal_id
+                       AND cm.left_message_seq IS NULL), cm.left_message_seq,cm.hidden,c.dissolved,cm.last_viewed_at
              FROM conversations c
              JOIN conversation_members cm ON cm.conversation_id = c.id
-             WHERE cm.principal_id = ?1 AND cm.left_message_seq IS NULL
-               AND c.state != 'deleted'
+             WHERE cm.principal_id = ?1 AND (?2 OR cm.hidden=0)
+               AND (c.state != 'deleted' OR c.dissolved=1)
+               AND (NOT ?3 OR (c.kind='group' AND cm.left_message_seq IS NULL AND c.dissolved=0))
              ORDER BY c.updated_at DESC, c.id ASC",
         )?;
-        let rows = statement.query_map(params![principal_id.as_str()], |row| {
-            Ok(ConversationSummary {
-                conversation: conversation_from_row(row)?,
-                member_count: row.get(8)?,
-                unread_count: row.get(9)?,
-            })
-        })?;
+        let rows = statement.query_map(
+            params![principal_id.as_str(), include_hidden, groups_only],
+            |row| {
+                Ok(ConversationSummary {
+                    conversation: conversation_from_row(row)?,
+                    member_count: row.get(8)?,
+                    unread_count: row.get(9)?,
+                    left_message_seq: row.get(10)?,
+                    hidden: row.get(11)?,
+                    dissolved: row.get(12)?,
+                    last_viewed_at: row.get(13)?,
+                })
+            },
+        )?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(ImError::from)
     }
@@ -558,6 +611,8 @@ impl ImStore {
                     |row| row.get(0),
                 )
                 .optional()?;
+            let reply = get_message_tx(&transaction, reply_to_id)?;
+            crate::sessions::ensure_message_visible(&transaction, &reply, &request.sender_id)?;
             match reply_conversation {
                 Some(value) if value == conversation_id.as_str() => {}
                 Some(_) => {
@@ -651,27 +706,6 @@ impl ImStore {
         })
     }
 
-    /// Bounded history at an exact message boundary, independent of newer arrivals.
-    pub fn history_through(
-        &self,
-        message: &Message,
-        viewer: &PrincipalId,
-        limit: usize,
-    ) -> Result<MessagePage> {
-        self.list_messages(
-            &message.conversation_id,
-            viewer,
-            MessageListOptions {
-                limit,
-                before: Some(encode_message_cursor(
-                    &message.conversation_id,
-                    message.seq.saturating_add(1),
-                )),
-                after: None,
-            },
-        )
-    }
-
     pub fn list_messages(
         &self,
         conversation_id: &ConversationId,
@@ -685,7 +719,17 @@ impl ImStore {
         }
         let limit = checked_limit(options.limit)?;
         let connection = self.lock()?;
-        ensure_active_member_connection(&connection, conversation_id, viewer_id)?;
+        connection
+            .query_row(
+                "SELECT 1 FROM conversation_members WHERE conversation_id=?1 AND principal_id=?2",
+                params![conversation_id.as_str(), viewer_id.as_str()],
+                |_| Ok(()),
+            )
+            .optional()?
+            .ok_or_else(|| ImError::NotMember {
+                principal: viewer_id.clone(),
+                conversation: conversation_id.clone(),
+            })?;
 
         let before_seq = options
             .before
@@ -727,22 +771,21 @@ impl ImStore {
             )
         };
 
-        let mut statement = connection.prepare(sql)?;
-        let mut messages = if let Some(seq) = cursor {
-            statement
-                .query_map(
-                    params![conversation_id.as_str(), seq, (limit + 1) as i64],
-                    message_from_row,
-                )?
-                .collect::<std::result::Result<Vec<_>, _>>()?
+        let visibility = "EXISTS(SELECT 1 FROM membership_history h WHERE h.conversation=messages.conversation_id AND h.principal=?4 AND messages.seq>=h.message_start AND (h.message_end IS NULL OR messages.seq<=h.message_end))";
+        let sql = sql.replace("ORDER BY", &format!("AND {visibility} ORDER BY"));
+        let mut statement = connection.prepare(&sql)?;
+        statement.raw_bind_parameter(4, viewer_id.as_str())?;
+        statement.raw_bind_parameter(1, conversation_id.as_str())?;
+        if let Some(seq) = cursor {
+            statement.raw_bind_parameter(2, seq)?;
+            statement.raw_bind_parameter(3, (limit + 1) as i64)?;
         } else {
-            statement
-                .query_map(
-                    params![conversation_id.as_str(), (limit + 1) as i64],
-                    message_from_row,
-                )?
-                .collect::<std::result::Result<Vec<_>, _>>()?
-        };
+            statement.raw_bind_parameter(2, (limit + 1) as i64)?;
+        }
+        let mut messages = statement
+            .raw_query()
+            .mapped(message_from_row)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         let has_more = messages.len() > limit;
         if has_more {
             messages.truncate(limit);
@@ -775,7 +818,17 @@ impl ImStore {
     ) -> Result<EventPage> {
         let limit = checked_limit(limit)?;
         let connection = self.lock()?;
-        ensure_active_member_connection(&connection, conversation_id, viewer_id)?;
+        connection
+            .query_row(
+                "SELECT 1 FROM conversation_members WHERE conversation_id=?1 AND principal_id=?2",
+                params![conversation_id.as_str(), viewer_id.as_str()],
+                |_| Ok(()),
+            )
+            .optional()?
+            .ok_or_else(|| ImError::NotMember {
+                principal: viewer_id.clone(),
+                conversation: conversation_id.clone(),
+            })?;
         let after_seq = after_seq.unwrap_or(0);
         if after_seq < 0 {
             return Err(ImError::InvalidInput(
@@ -787,11 +840,17 @@ impl ImStore {
                     payload_json, created_at
              FROM im_events
              WHERE conversation_id = ?1 AND seq > ?2
+             AND EXISTS(SELECT 1 FROM membership_history h WHERE h.conversation=im_events.conversation_id AND h.principal=?4 AND im_events.seq>=h.event_start AND (h.event_end IS NULL OR im_events.seq<=h.event_end))
              ORDER BY seq ASC LIMIT ?3",
         )?;
         let mut events = statement
             .query_map(
-                params![conversation_id.as_str(), after_seq, (limit + 1) as i64],
+                params![
+                    conversation_id.as_str(),
+                    after_seq,
+                    (limit + 1) as i64,
+                    viewer_id.as_str()
+                ],
                 event_from_row,
             )?
             .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -885,6 +944,7 @@ impl ImStore {
         let (_, state, _) = conversation_state_tx(&transaction, &message.conversation_id)?;
         ensure_active_state(&state)?;
         ensure_active_member_tx(&transaction, &message.conversation_id, actor_id)?;
+        crate::sessions::ensure_message_visible(&transaction, &message, actor_id)?;
         let can_delete = if &message.sender_id == actor_id {
             true
         } else {
@@ -934,6 +994,16 @@ impl ImStore {
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let (kind, state, _) = conversation_state_tx(&transaction, conversation_id)?;
         ensure_active_member_tx(&transaction, conversation_id, actor_id)?;
+        let dissolved: bool = transaction.query_row(
+            "SELECT dissolved FROM conversations WHERE id=?1",
+            [conversation_id.as_str()],
+            |r| r.get(0),
+        )?;
+        if dissolved {
+            return Err(ImError::Conflict(
+                "a dissolved group cannot be restored".into(),
+            ));
+        }
         let transition_allowed = matches!(
             (&state, &new_state),
             (ConversationState::Active, ConversationState::Archived)
@@ -948,6 +1018,14 @@ impl ImStore {
                 conversation_state_to_str(&state),
                 conversation_state_to_str(&new_state),
             )));
+        }
+        if kind == ConversationKind::Group
+            && new_state == ConversationState::Deleted
+            && member_role_tx(&transaction, conversation_id, actor_id)? != MemberRole::Owner
+        {
+            return Err(ImError::PermissionDenied(
+                "only the group owner can delete the group".into(),
+            ));
         }
         if kind == ConversationKind::Group
             && !matches!(
@@ -1000,14 +1078,25 @@ fn configure_connection(connection: &Connection, enable_wal: bool) -> Result<()>
 fn initialize_schema(connection: &Connection) -> Result<()> {
     let transaction = Transaction::new_unchecked(connection, TransactionBehavior::Immediate)?;
     let version: u32 = transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 2 {
+    if version == 4 {
+        return Ok(());
+    }
+    if version == 2 || version == 3 {
+        if version == 2 {
+            crate::sessions::migrate(&transaction)?;
+        }
+        crate::sessions::migrate_viewed(&transaction)?;
+        transaction.commit()?;
+        return Ok(());
+    }
+    if version != 0 {
         return Err(ImError::InvalidStoredData(
             "unsupported IM schema version".into(),
         ));
     }
     transaction.execute_batch(
         "
-         CREATE TABLE IF NOT EXISTS principals (
+         CREATE TABLE principals (
              id TEXT PRIMARY KEY NOT NULL,
              kind TEXT NOT NULL,
              display_name TEXT NOT NULL,
@@ -1016,7 +1105,7 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
              updated_at INTEGER NOT NULL,
              deleted_at INTEGER
          );
-         CREATE TABLE IF NOT EXISTS conversations (
+         CREATE TABLE conversations (
              id TEXT PRIMARY KEY NOT NULL,
              kind TEXT NOT NULL CHECK (kind IN ('direct', 'group')),
              state TEXT NOT NULL CHECK (state IN ('active', 'archived', 'deleted')),
@@ -1027,14 +1116,14 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
              created_at INTEGER NOT NULL,
              updated_at INTEGER NOT NULL
          );
-         CREATE TABLE IF NOT EXISTS direct_pairs (
+         CREATE TABLE direct_pairs (
              conversation_id TEXT PRIMARY KEY NOT NULL REFERENCES conversations(id),
              principal_a TEXT NOT NULL REFERENCES principals(id),
              principal_b TEXT NOT NULL REFERENCES principals(id),
              CHECK (principal_a < principal_b),
              UNIQUE (principal_a, principal_b)
          );
-         CREATE TABLE IF NOT EXISTS conversation_members (
+         CREATE TABLE conversation_members (
              conversation_id TEXT NOT NULL REFERENCES conversations(id),
              principal_id TEXT NOT NULL REFERENCES principals(id),
              role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
@@ -1043,7 +1132,7 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
              last_read_seq INTEGER NOT NULL DEFAULT 0,
              PRIMARY KEY (conversation_id, principal_id)
          );
-         CREATE TABLE IF NOT EXISTS messages (
+         CREATE TABLE messages (
              id TEXT PRIMARY KEY NOT NULL,
              conversation_id TEXT NOT NULL REFERENCES conversations(id),
              seq INTEGER NOT NULL,
@@ -1057,7 +1146,7 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
              UNIQUE (conversation_id, seq),
              UNIQUE (conversation_id, sender_id, client_message_id)
          );
-         CREATE TABLE IF NOT EXISTS im_events (
+         CREATE TABLE im_events (
              id TEXT PRIMARY KEY NOT NULL,
              conversation_id TEXT NOT NULL REFERENCES conversations(id),
              seq INTEGER NOT NULL,
@@ -1067,7 +1156,7 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
              created_at INTEGER NOT NULL,
              UNIQUE (conversation_id, seq)
          );
-         CREATE TABLE IF NOT EXISTS idempotency_records (
+         CREATE TABLE idempotency_records (
              actor_id TEXT NOT NULL REFERENCES principals(id),
              scope TEXT NOT NULL,
              request_key TEXT NOT NULL,
@@ -1076,29 +1165,30 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
              created_at INTEGER NOT NULL,
              PRIMARY KEY (actor_id, scope, request_key)
          );
-         CREATE INDEX IF NOT EXISTS messages_page
+         CREATE INDEX messages_page
              ON messages (conversation_id, seq DESC);
-         CREATE INDEX IF NOT EXISTS events_page
+         CREATE INDEX events_page
              ON im_events (conversation_id, seq ASC);
-         CREATE INDEX IF NOT EXISTS member_conversations
+         CREATE INDEX member_conversations
              ON conversation_members (principal_id, conversation_id);
-         CREATE INDEX IF NOT EXISTS direct_pair_lookup
+         CREATE INDEX direct_pair_lookup
              ON direct_pairs (principal_a, principal_b);",
     )?;
     transaction.execute_batch(
-        "CREATE TABLE IF NOT EXISTS message_deliveries (
+        "CREATE TABLE message_deliveries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             message_id TEXT NOT NULL REFERENCES messages(id),
             principal_id TEXT NOT NULL REFERENCES principals(id),
             state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','processing','completed','skipped','failed')),
-            request_json TEXT,
             run_id TEXT,
             error TEXT,
             UNIQUE(message_id, principal_id)
          );
-         CREATE INDEX IF NOT EXISTS delivery_inbox ON message_deliveries(principal_id,state,id);
+         CREATE INDEX delivery_inbox ON message_deliveries(principal_id,state,id);
          PRAGMA user_version = 2;"
     )?;
+    crate::sessions::migrate(&transaction)?;
+    crate::sessions::migrate_viewed(&transaction)?;
     transaction.commit()?;
     Ok(())
 }
@@ -1405,29 +1495,6 @@ fn ensure_active_member_tx(
     Ok(())
 }
 
-fn ensure_active_member_connection(
-    connection: &Connection,
-    conversation_id: &ConversationId,
-    principal_id: &PrincipalId,
-) -> Result<()> {
-    let active: Option<i64> = connection
-        .query_row(
-            "SELECT 1 FROM conversation_members
-             WHERE conversation_id = ?1 AND principal_id = ?2
-               AND left_message_seq IS NULL",
-            params![conversation_id.as_str(), principal_id.as_str()],
-            |row| row.get(0),
-        )
-        .optional()?;
-    if active.is_none() {
-        return Err(ImError::NotMember {
-            principal: principal_id.clone(),
-            conversation: conversation_id.clone(),
-        });
-    }
-    Ok(())
-}
-
 fn member_role_tx(
     transaction: &Transaction<'_>,
     conversation_id: &ConversationId,
@@ -1530,7 +1597,7 @@ fn get_message_tx(transaction: &Transaction<'_>, id: &MessageId) -> Result<Messa
         .ok_or_else(|| ImError::MessageNotFound(id.clone()))
 }
 
-fn append_event_tx(
+pub(crate) fn append_event_tx(
     transaction: &Transaction<'_>,
     conversation_id: &ConversationId,
     actor_id: Option<&PrincipalId>,
@@ -1954,10 +2021,14 @@ mod tests {
             .leave_conversation(&conversation.id, &member)
             .expect("leave");
         assert!(left.left_message_seq.is_some());
-        assert!(matches!(
-            store.list_messages(&conversation.id, &member, MessageListOptions::default()),
-            Err(ImError::NotMember { .. })
-        ));
+        assert!(
+            store
+                .list_messages(&conversation.id, &member, MessageListOptions::default())
+                .unwrap()
+                .messages
+                .is_empty()
+        );
+        assert_eq!(store.list_conversations(&member).unwrap().len(), 1);
     }
 
     #[test]

@@ -15,16 +15,12 @@ pub struct ModelParamsSummary {
     pub max_tokens: Option<u32>,
     pub timeout: u32,
     pub reasoning_effort: Option<String>,
-    pub thinking_budget_tokens: Option<u32>,
-    pub show_reasoning: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ModelCapabilitiesSummary {
-    pub tool_call: bool,
-    pub vision: bool,
     pub context_window: u32,
-    pub native_compaction: bool,
+    pub tool_call: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -61,14 +57,10 @@ impl From<&StoredModel> for ModelSummary {
                     .reasoning_effort
                     .as_ref()
                     .map(|effort| effort.as_str().to_string()),
-                thinking_budget_tokens: model.config.params.thinking_budget_tokens,
-                show_reasoning: model.config.params.show_reasoning,
             },
             capabilities: ModelCapabilitiesSummary {
                 tool_call: model.config.capabilities.tool_call,
-                vision: model.config.capabilities.vision,
                 context_window: model.config.capabilities.context_window,
-                native_compaction: model.config.capabilities.native_compaction,
             },
             path: Some(model.path.display().to_string()),
         }
@@ -196,11 +188,7 @@ mod tests {
                 ModelConfigUpdate {
                     api_format: Some(ModelApiFormat::Responses),
                     reasoning_effort: Some(ReasoningEffort::XHigh),
-                    thinking_budget_tokens: Some(4096),
-                    show_reasoning: Some(true),
                     tool_call: Some(true),
-                    vision: Some(true),
-                    context_window: Some(1_000_000),
                     ..Default::default()
                 },
             )
@@ -212,11 +200,7 @@ mod tests {
         assert_eq!(summary.provider.name, "provider");
         assert_eq!(summary.api_format, "responses");
         assert_eq!(summary.params.reasoning_effort.as_deref(), Some("xhigh"));
-        assert_eq!(summary.params.thinking_budget_tokens, Some(4096));
-        assert!(summary.params.show_reasoning);
         assert!(summary.capabilities.tool_call);
-        assert!(summary.capabilities.vision);
-        assert_eq!(summary.capabilities.context_window, 1_000_000);
         let _ = fs::remove_dir_all(home);
     }
 

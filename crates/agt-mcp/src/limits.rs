@@ -1,7 +1,6 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct McpLimits {
     pub max_frame_bytes: usize,
-    pub max_legacy_header_bytes: usize,
     pub max_http_header_bytes: usize,
     pub max_http_body_bytes: usize,
     pub max_sse_event_bytes: usize,
@@ -22,7 +21,6 @@ impl Default for McpLimits {
     fn default() -> Self {
         Self {
             max_frame_bytes: 8 * 1024 * 1024,
-            max_legacy_header_bytes: 8 * 1024,
             max_http_header_bytes: 64 * 1024,
             max_http_body_bytes: 8 * 1024 * 1024,
             max_sse_event_bytes: 8 * 1024 * 1024,
@@ -51,7 +49,6 @@ mod tests {
             McpLimits::default(),
             McpLimits {
                 max_frame_bytes: 8 * 1024 * 1024,
-                max_legacy_header_bytes: 8 * 1024,
                 max_http_header_bytes: 64 * 1024,
                 max_http_body_bytes: 8 * 1024 * 1024,
                 max_sse_event_bytes: 8 * 1024 * 1024,

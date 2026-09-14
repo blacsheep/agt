@@ -3,10 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use agt_config::{AgtPaths, CATEGORY_README_FILE, DefinitionCategories};
-use agt_core::{
-    CategoryName, McpId, ModelId, PackageRef, PromptId, QualifiedRef, ResourceRef,
-    ResourceSourceSelector,
-};
+use agt_core::{CategoryName, McpId, ModelId, PackageRef, PromptId, QualifiedRef, ResourceRef};
 use agt_mcp::McpStore;
 use agt_model::ModelStore;
 use agt_prompt::PromptStore;
@@ -85,48 +82,6 @@ impl AgentStore {
     }
 
     pub fn create_in(&self, category: &CategoryName, config: &AgentConfig) -> Result<StoredAgent> {
-        if config.is_gateway() {
-            return Err(protected_gateway(config, "create"));
-        }
-        self.create_validated_in(category, config)
-    }
-
-    pub fn ensure_gateway_in(
-        &self,
-        category: &CategoryName,
-        config: &AgentConfig,
-    ) -> Result<StoredAgent> {
-        if !config.is_gateway() {
-            return Err(AgentError::InvalidConfig {
-                message: "system gateway ensure 仅接受 gateway agent 配置".to_string(),
-            });
-        }
-
-        let file = self.agent_file_in(category, config.name.as_str())?;
-        check_no_symlinks_under(self.paths.home(), &file).map_err(|error| match error {
-            agt_core::AgtError::Io { path, source } => AgentError::io(path, source),
-            other => AgentError::InvalidConfig {
-                message: other.to_string(),
-            },
-        })?;
-        if file.exists() {
-            let stored = self.read_in(category, config.name.as_str())?;
-            if stored.config == *config {
-                return Ok(stored);
-            }
-            return Err(AgentError::GatewayDefinitionMismatch {
-                agent: qualified_agent_name(category, config.name.as_str()),
-            });
-        }
-
-        self.create_validated_in(category, config)
-    }
-
-    fn create_validated_in(
-        &self,
-        category: &CategoryName,
-        config: &AgentConfig,
-    ) -> Result<StoredAgent> {
         self.require_write_category(category)?;
         config.validate()?;
         self.ensure_all_references_exist(config)?;
@@ -393,10 +348,7 @@ impl AgentStore {
                 name: name.to_string(),
             });
         }
-        let stored = self.read_in(category, name)?;
-        if stored.config.is_gateway() {
-            return Err(protected_gateway(&stored.config, "delete"));
-        }
+        self.read_in(category, name)?;
         Ok(dir)
     }
 
@@ -414,10 +366,9 @@ impl AgentStore {
         agent: &str,
         model: QualifiedRef<ModelId>,
     ) -> Result<StoredAgent> {
-        self.ensure_mutable_in(agent_category, agent)?;
         self.ensure_model_exists(&model)?;
         self.update_in(agent_category, agent, |config| {
-            config.model = Some(model);
+            config.model = model;
             Ok(())
         })
     }
@@ -432,7 +383,6 @@ impl AgentStore {
         agent: &str,
         prompt: QualifiedRef<PromptId>,
     ) -> Result<StoredAgent> {
-        self.ensure_mutable_in(agent_category, agent)?;
         self.ensure_prompt_exists(&prompt)?;
         self.update_in(agent_category, agent, |config| {
             config.prompt = prompt;
@@ -455,7 +405,6 @@ impl AgentStore {
         agent: &str,
         reference: ResourceRef,
     ) -> Result<StoredAgent> {
-        self.ensure_mutable_in(agent_category, agent)?;
         self.ensure_skill_reference_available(&reference)?;
         self.update_in(agent_category, agent, |config| {
             push_unique_exact(&mut config.skills, reference);
@@ -503,7 +452,6 @@ impl AgentStore {
         agent: &str,
         mcp: QualifiedRef<McpId>,
     ) -> Result<StoredAgent> {
-        self.ensure_mutable_in(agent_category, agent)?;
         self.ensure_mcp_exists(&mcp)?;
         self.update_in(agent_category, agent, |config| {
             push_unique_exact(&mut config.mcps, mcp);
@@ -536,11 +484,10 @@ impl AgentStore {
         })
     }
 
-    /// Apply a validated patch to a normal agent definition.
+    /// Apply a validated patch to an agent definition.
     ///
     /// The closure is intentionally kept at the store boundary so callers do
-    /// not need to know the YAML representation.  Gateway agents remain
-    /// protected by the existing mutability check.
+    /// not need to know the YAML representation.
     pub fn update_in(
         &self,
         agent_category: &CategoryName,
@@ -548,7 +495,6 @@ impl AgentStore {
         mutate: impl FnOnce(&mut AgentConfig) -> Result<()>,
     ) -> Result<StoredAgent> {
         let mut stored = self.read_in(agent_category, agent)?;
-        ensure_mutable(&stored.config)?;
         mutate(&mut stored.config)?;
         stored.config.validate()?;
         self.ensure_all_references_exist(&stored.config)?;
@@ -556,15 +502,8 @@ impl AgentStore {
         Ok(stored)
     }
 
-    fn ensure_mutable_in(&self, category: &CategoryName, agent: &str) -> Result<()> {
-        let stored = self.read_in(category, agent)?;
-        ensure_mutable(&stored.config)
-    }
-
     fn ensure_all_references_exist(&self, config: &AgentConfig) -> Result<()> {
-        if let Some(model) = config.exact_model() {
-            self.ensure_model_exists(model)?;
-        }
+        self.ensure_model_exists(&config.model)?;
         self.ensure_prompt_exists(&config.prompt)?;
         for skill in &config.skills {
             self.ensure_skill_reference_available(skill)?;
@@ -596,9 +535,6 @@ impl AgentStore {
     }
 
     fn ensure_skill_reference_available(&self, reference: &ResourceRef) -> Result<()> {
-        if reference.source() != &ResourceSourceSelector::Persisted {
-            return Ok(());
-        }
         self.skill_store
             .read_in(reference.category(), reference.package())
             .map(|_| ())
@@ -696,29 +632,6 @@ fn parse_skill_ref(value: &str) -> Result<PackageRef> {
         })
 }
 
-fn protected_gateway(config: &AgentConfig, operation: &'static str) -> AgentError {
-    AgentError::ProtectedGateway {
-        agent: config.name.to_string(),
-        operation,
-    }
-}
-
-fn ensure_mutable(config: &AgentConfig) -> Result<()> {
-    if config.is_gateway() {
-        Err(protected_gateway(config, "update"))
-    } else {
-        Ok(())
-    }
-}
-
-fn qualified_agent_name(category: &CategoryName, name: &str) -> String {
-    if category.is_default() {
-        name.to_string()
-    } else {
-        format!("{category}/{name}")
-    }
-}
-
 fn ensure_child_path(parent: &Path, child: &Path) -> Result<()> {
     let parent = parent
         .canonicalize()
@@ -750,7 +663,6 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use agt_core::GatewayDomain;
     use agt_mcp::McpStore;
     use agt_model::{ModelConfig, ModelReference};
     use agt_prompt::PromptStore;
@@ -824,10 +736,7 @@ mod tests {
 
         let loaded = store.read("coder").expect("read agent");
         assert_eq!(loaded.config.name.as_str(), "coder");
-        assert_eq!(
-            loaded.config.exact_model().unwrap().name().as_str(),
-            "fast-model"
-        );
+        assert_eq!(loaded.config.model.name().as_str(), "fast-model");
 
         let agents = store.list().expect("list agents");
         assert_eq!(agents.len(), 1);
@@ -836,10 +745,7 @@ mod tests {
         let updated = store
             .set_model("coder", "reasoning-model")
             .expect("set model");
-        assert_eq!(
-            updated.config.exact_model().unwrap().name().as_str(),
-            "reasoning-model"
-        );
+        assert_eq!(updated.config.model.name().as_str(), "reasoning-model");
 
         let team = CategoryName::new("team").unwrap();
         let prompt_store = PromptStore::new(&home);
@@ -886,97 +792,6 @@ mod tests {
         assert_eq!(deleted, home.join("agents/default/example-model-1.5"));
         assert!(!deleted.exists());
 
-        let _ = fs::remove_dir_all(&home);
-    }
-
-    #[test]
-    fn system_gateway_ensure_is_idempotent_and_ordinary_mutations_are_blocked() {
-        let home = test_home("gateway-protection");
-        let internal = CategoryName::new("internal").unwrap();
-        let prompt_store = PromptStore::new(&home);
-        prompt_store.create_category(&internal).unwrap();
-        prompt_store
-            .create_in(&internal, "agent-gateway", "gateway prompt")
-            .unwrap();
-
-        let store = AgentStore::new(&home);
-        store.create_category(&internal).unwrap();
-        let config = AgentConfig::gateway(
-            "agent-gateway",
-            GatewayDomain::Agent,
-            QualifiedRef::new(internal.clone(), PromptId::new("agent-gateway")),
-        )
-        .unwrap();
-
-        let created = store.ensure_gateway_in(&internal, &config).unwrap();
-        let repeated = store.ensure_gateway_in(&internal, &config).unwrap();
-        assert_eq!(created.config, repeated.config);
-        assert!(matches!(
-            store.create_in(&internal, &config),
-            Err(AgentError::ProtectedGateway { .. })
-        ));
-        assert!(matches!(
-            store.set_prompt_in(
-                &internal,
-                "agent-gateway",
-                QualifiedRef::new(internal.clone(), PromptId::new("missing-prompt")),
-            ),
-            Err(AgentError::ProtectedGateway { .. })
-        ));
-        assert!(matches!(
-            store.set_model_in(
-                &internal,
-                "agent-gateway",
-                QualifiedRef::in_default(ModelId::new("missing-model")),
-            ),
-            Err(AgentError::ProtectedGateway { .. })
-        ));
-        let missing_skill = ResourceRef::persisted("missing-skill".parse::<PackageRef>().unwrap());
-        assert!(matches!(
-            store.add_skill_ref_in(&internal, "agent-gateway", missing_skill.clone()),
-            Err(AgentError::ProtectedGateway { .. })
-        ));
-        assert!(matches!(
-            store.remove_skill_ref_in(&internal, "agent-gateway", &missing_skill),
-            Err(AgentError::ProtectedGateway { .. })
-        ));
-        let missing_mcp = QualifiedRef::in_default(McpId::new("missing-mcp"));
-        assert!(matches!(
-            store.add_mcp_in(&internal, "agent-gateway", missing_mcp.clone()),
-            Err(AgentError::ProtectedGateway { .. })
-        ));
-        assert!(matches!(
-            store.remove_mcp_in(&internal, "agent-gateway", &missing_mcp),
-            Err(AgentError::ProtectedGateway { .. })
-        ));
-        assert!(matches!(
-            store.preflight_delete_in(&internal, "agent-gateway"),
-            Err(AgentError::ProtectedGateway { .. })
-        ));
-        assert!(matches!(
-            store.delete_in(&internal, "agent-gateway"),
-            Err(AgentError::ProtectedGateway { .. })
-        ));
-
-        let mut mismatched = config.clone();
-        mismatched.description = "tampered".to_string();
-        assert!(matches!(
-            store.ensure_gateway_in(&internal, &mismatched),
-            Err(AgentError::GatewayDefinitionMismatch { .. })
-        ));
-        let mut mismatched_domain = config.clone();
-        mismatched_domain.gateway_domain = Some(GatewayDomain::Env);
-        assert!(matches!(
-            store.ensure_gateway_in(&internal, &mismatched_domain),
-            Err(AgentError::GatewayDefinitionMismatch { .. })
-        ));
-        let mut mismatched_prompt = config.clone();
-        mismatched_prompt.prompt =
-            QualifiedRef::new(internal.clone(), PromptId::new("other-gateway"));
-        assert!(matches!(
-            store.ensure_gateway_in(&internal, &mismatched_prompt),
-            Err(AgentError::GatewayDefinitionMismatch { .. })
-        ));
         let _ = fs::remove_dir_all(&home);
     }
 
@@ -1051,32 +866,6 @@ mod tests {
             store.add_mcp("coder", "missing-mcp"),
             Err(AgentError::McpUnavailable { .. })
         ));
-        let _ = fs::remove_dir_all(&home);
-    }
-
-    #[test]
-    fn source_qualified_skill_attachment_does_not_require_persisted_store_entry() {
-        let home = test_home("project-attachment");
-        create_model(&home, "fast-model");
-        let store = AgentStore::new(&home);
-        store.create(&agent_config()).expect("create agent");
-        let reference = ResourceRef::new(
-            "@acme/debug-db".parse().unwrap(),
-            ResourceSourceSelector::Project,
-        );
-
-        let attached = store
-            .add_skill_ref("coder", reference.clone())
-            .expect("attach project skill ref");
-        assert_eq!(attached.config.skills, vec![reference.clone()]);
-        let yaml = fs::read_to_string(attached.path).unwrap();
-        assert!(yaml.contains("ref: '@acme/debug-db'") || yaml.contains("ref: @acme/debug-db"));
-        assert!(yaml.contains("source: project"));
-
-        let removed = store
-            .remove_skill_ref("coder", &reference)
-            .expect("remove project skill ref");
-        assert!(removed.config.skills.is_empty());
         let _ = fs::remove_dir_all(&home);
     }
 

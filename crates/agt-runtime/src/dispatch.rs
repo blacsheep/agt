@@ -1,6 +1,6 @@
 use crate::{MessageTrigger, ModelClient, RunRequest, RunState, Runtime};
 use agt_core::CancellationToken;
-use agt_im::{Delivery, DeliveryState, PrincipalId};
+use agt_im::{ConversationId, Delivery, DeliveryState, PrincipalId};
 use agt_mcp::McpClientFactory;
 use agt_service::{Actor, Binding, BindingStore, MessageInput, Messaging, Role};
 use anyhow::{Result, bail};
@@ -20,12 +20,14 @@ pub struct DispatchOutcome {
 pub struct Dispatcher {
     home: PathBuf,
     pub allow_mcp: bool,
+    pub conversation: Option<ConversationId>,
 }
 impl Dispatcher {
     pub fn new(home: &Path) -> Self {
         Self {
             home: home.to_owned(),
             allow_mcp: false,
+            conversation: None,
         }
     }
     /// One finite batch, per recipient. Individual failures never abort other recipients.
@@ -39,6 +41,8 @@ impl Dispatcher {
         if !(1..=200).contains(&limit) {
             bail!("limit must be in 1..=200");
         }
+        let _lease = crate::scheduler::HomeLease::acquire(&self.home, false)?;
+        let scheduled = crate::ScheduleStore::open(&self.home)?;
         let bindings = BindingStore::open(&self.home)?;
         let mut outcomes = Vec::new();
         for binding in bindings.list()? {
@@ -50,7 +54,16 @@ impl Dispatcher {
                     automated_depth: None,
                 },
             )?;
-            for delivery in messaging.im.deliveries(&binding.principal, true, limit)? {
+            for delivery in messaging.im.deliveries_in(
+                &binding.principal,
+                true,
+                limit,
+                self.conversation.as_ref(),
+            )? {
+                // Durable discussion tasks belong exclusively to the scheduler.
+                if scheduled.assigned(delivery.id)? {
+                    continue;
+                }
                 if token.is_canceled() {
                     return Ok(outcomes);
                 }

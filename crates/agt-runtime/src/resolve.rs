@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use agt_agent::AgentStore;
-use agt_core::{CategoryName, ResourceSourceSelector};
+use agt_core::CategoryName;
 use agt_mcp::{McpDocument, McpStore};
-use agt_model::{ModelApiFormat, ModelConfig, ModelStore};
+use agt_model::{ModelConfig, ModelStore};
 use agt_prompt::PromptStore;
 use agt_provider::{ProviderConfig, ProviderStore};
 use agt_skill::SkillStore;
@@ -19,6 +19,7 @@ pub struct ResolvedAgent {
     pub provider: ProviderConfig,
     pub system_prompt: String,
     pub mcps: Vec<McpDocument>,
+    pub builtin_tools: Vec<agt_agent::BuiltinTool>,
     pub fingerprint: String,
 }
 
@@ -31,28 +32,11 @@ impl ResolvedAgent {
             .read_in(&category, leaf)
             .map_err(|_| RuntimeError::Configuration("cannot load agent definition"))?
             .config;
-        if agent.is_gateway() || agent.memory.enabled {
-            return Err(RuntimeError::Configuration(
-                "gateway and persistent memory are not supported yet",
-            ));
-        }
-        let reference = agent
-            .exact_model()
-            .ok_or(RuntimeError::Configuration("agent requires an exact model"))?;
+        let reference = &agent.model;
         let model = ModelStore::new(home)
             .read_in(reference.category(), reference.name().as_str())
             .map_err(|_| RuntimeError::Configuration("cannot load model definition"))?
             .config;
-        if model.api_format != ModelApiFormat::ChatCompletions {
-            return Err(RuntimeError::Configuration(
-                "runtime currently supports chat-completions only",
-            ));
-        }
-        if model.params.thinking_budget_tokens.is_some() || model.params.show_reasoning {
-            return Err(RuntimeError::Configuration(
-                "thinking_budget_tokens and show_reasoning are not supported yet",
-            ));
-        }
         let provider = ProviderStore::new(home)
             .read_in(model.provider.category(), model.provider.name().as_str())
             .map_err(|_| RuntimeError::Configuration("cannot load provider definition"))?
@@ -62,11 +46,6 @@ impl ResolvedAgent {
             .map_err(|_| RuntimeError::Configuration("cannot load prompt"))?
             .content;
         for skill in &agent.skills {
-            if skill.source() != &ResourceSourceSelector::Persisted {
-                return Err(RuntimeError::Configuration(
-                    "runtime currently supports persisted skills only",
-                ));
-            }
             let document = SkillStore::new(home)
                 .read_in(skill.category(), skill.package())
                 .map_err(|_| RuntimeError::Configuration("cannot load skill"))?
@@ -105,6 +84,7 @@ impl ResolvedAgent {
             provider,
             system_prompt,
             mcps,
+            builtin_tools: agent.builtin_tools,
             fingerprint: fingerprint(material.as_bytes()),
         })
     }

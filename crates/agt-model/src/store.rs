@@ -446,7 +446,7 @@ mod tests {
     use agt_provider::ProviderConfig;
 
     use super::*;
-    use crate::config::{DEFAULT_CONTEXT_WINDOW, ModelApiFormat, ReasoningEffort};
+    use crate::config::{ModelApiFormat, ReasoningEffort};
     use crate::reference::ModelReference;
 
     fn test_home(name: &str) -> PathBuf {
@@ -482,10 +482,6 @@ mod tests {
             stored.path,
             home.join("models/default/fast-model/model.yaml")
         );
-        assert_eq!(
-            stored.config.capabilities.context_window,
-            DEFAULT_CONTEXT_WINDOW
-        );
 
         let loaded = store.read("fast-model").expect("read model");
         assert_eq!(loaded.config.name.as_str(), "fast-model");
@@ -504,9 +500,6 @@ mod tests {
                     max_tokens: Some(4096),
                     api_format: Some(ModelApiFormat::Responses),
                     reasoning_effort: Some(ReasoningEffort::High),
-                    thinking_budget_tokens: Some(8192),
-                    show_reasoning: Some(true),
-                    context_window: Some(1_000_000),
                     ..Default::default()
                 },
             )
@@ -518,9 +511,6 @@ mod tests {
             updated.config.params.reasoning_effort,
             Some(ReasoningEffort::High)
         );
-        assert_eq!(updated.config.params.thinking_budget_tokens, Some(8192));
-        assert!(updated.config.params.show_reasoning);
-        assert_eq!(updated.config.capabilities.context_window, 1_000_000);
 
         let deleted = store.delete("fast-model").expect("delete model");
         assert_eq!(deleted, home.join("models/default/fast-model"));

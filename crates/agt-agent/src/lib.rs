@@ -5,9 +5,7 @@ pub mod name;
 pub mod safe;
 pub mod store;
 
-pub use config::{
-    AGENT_FILE, AgentConfig, AgentInteraction, AgentKind, AgentMemory, AgentModelPolicy, AgentScope,
-};
+pub use config::{AGENT_FILE, AgentConfig, BuiltinTool};
 pub use diagnostic::{AgentDiagnostic, AgentDiagnosticCategory};
 pub use error::{AgentError, Result};
 pub use name::validate_agent_name;

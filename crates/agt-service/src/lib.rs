@@ -14,7 +14,6 @@ pub use tools::ToolService;
 
 use agt_core::CategoryName;
 use anyhow::Result;
-use std::path::{Path, PathBuf};
 
 pub fn named_ref(raw: &str) -> Result<(CategoryName, String)> {
     let (category, name) = raw.split_once('/').unwrap_or(("default", raw));
@@ -22,11 +21,4 @@ pub fn named_ref(raw: &str) -> Result<(CategoryName, String)> {
     Ok((CategoryName::new(category)?, name.to_owned()))
 }
 
-pub fn database_path(home: &Path, directory: &str, name: &str) -> Result<PathBuf> {
-    let dir = home.join(directory);
-    agt_storage::ensure_dir_under(home, &dir)?;
-    for suffix in ["", "-wal", "-shm", "-journal"] {
-        agt_storage::check_no_symlinks_under(home, dir.join(format!("{name}{suffix}")))?;
-    }
-    Ok(dir.join(name))
-}
+pub use agt_storage::database_path;

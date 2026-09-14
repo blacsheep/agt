@@ -1,15 +1,28 @@
 //! Explicit, bounded agent execution. IM remains a runtime-independent store.
 mod audit;
-mod dispatch;
+mod context;
+mod context_store;
+mod conversation_context;
+pub use context::ContextCheckpoint;
 mod engine;
 mod model;
+mod model_stream;
+mod participation;
+mod progress;
 mod resolve;
+mod schedule_store;
+mod scheduler;
 mod store;
 pub use audit::{CallRecord, CallState};
-pub use dispatch::{DispatchOutcome, Dispatcher};
+pub use schedule_store::{Discussion, ScheduleStatus, ScheduleStore, ScheduledTask};
+pub use scheduler::{
+    Scheduler, delete_scheduled_conversation, dissolve_scheduled_group, reset_conversation_context,
+    start_discussion,
+};
 
 pub use engine::Runtime;
-pub use model::{ChatCompletions, ModelClient};
+pub use model::{ChatCompletions, ModelClient, ModelEvent};
+pub use progress::RunProgress;
 pub use resolve::ResolvedAgent;
 pub use store::{RunRecord, RunState, RunStore};
 
@@ -26,8 +39,21 @@ pub enum RuntimeError {
     Configuration(&'static str),
     #[error("model: {0}")]
     Model(&'static str),
+    #[error(
+        "context overflow at {stage}: {tokens} tokens exceed available budget {budget}; compaction not installed"
+    )]
+    ContextOverflow {
+        stage: &'static str,
+        tokens: usize,
+        budget: usize,
+    },
     #[error("model HTTP status {0}")]
     HttpStatus(u16),
+    #[error("model request failed after {attempts} attempts: {last}")]
+    ModelRetriesExhausted {
+        attempts: u32,
+        last: Box<RuntimeError>,
+    },
     #[error("tool: {0}")]
     Tool(&'static str),
     #[error("IM: {0}")]
@@ -54,6 +80,8 @@ pub struct RunRequest {
     pub input: String,
     pub request_key: String,
     pub delegates: Vec<String>,
+    /// Legacy compatibility field; ignored by execution.
+    #[serde(default)]
     pub max_steps: u32,
     pub working_directory: std::path::PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -76,7 +104,7 @@ impl RunRequest {
             input: input.into(),
             request_key: uuid::Uuid::new_v4().to_string(),
             delegates: Vec::new(),
-            max_steps: 12,
+            max_steps: 0,
             working_directory: std::path::PathBuf::from("."),
             trigger: None,
         }
@@ -117,9 +145,6 @@ impl RunRequest {
             return Err(RuntimeError::Invalid(
                 "request key must contain 1..256 bytes".into(),
             ));
-        }
-        if self.max_steps == 0 || self.max_steps > 100 {
-            return Err(RuntimeError::Invalid("max_steps must be in 1..=100".into()));
         }
         Ok(self)
     }

@@ -7,7 +7,11 @@ use crate::reference::ModelReference;
 
 pub const DEFAULT_TEMPERATURE: f32 = 0.7;
 pub const DEFAULT_TIMEOUT_SECONDS: u32 = 60;
-pub const DEFAULT_CONTEXT_WINDOW: u32 = 200_000;
+pub const DEFAULT_CONTEXT_WINDOW: u32 = 272_000;
+
+fn default_context_window() -> u32 {
+    DEFAULT_CONTEXT_WINDOW
+}
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -46,29 +50,31 @@ impl std::str::FromStr for ModelApiFormat {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(try_from = "String", into = "String")]
 pub enum ReasoningEffort {
     None,
     Minimal,
     Low,
     Medium,
     High,
-    #[serde(rename = "xhigh")]
     XHigh,
+    Max,
+    Custom(String),
 }
 
 impl ReasoningEffort {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::None,
         Self::Minimal,
         Self::Low,
         Self::Medium,
         Self::High,
         Self::XHigh,
+        Self::Max,
     ];
 
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::None => "none",
             Self::Minimal => "minimal",
@@ -76,6 +82,8 @@ impl ReasoningEffort {
             Self::Medium => "medium",
             Self::High => "high",
             Self::XHigh => "xhigh",
+            Self::Max => "max",
+            Self::Custom(value) => value,
         }
     }
 }
@@ -86,22 +94,36 @@ impl std::fmt::Display for ReasoningEffort {
     }
 }
 
+impl From<ReasoningEffort> for String {
+    fn from(value: ReasoningEffort) -> Self {
+        value.as_str().to_owned()
+    }
+}
+
+impl TryFrom<String> for ReasoningEffort {
+    type Error = ModelError;
+
+    fn try_from(value: String) -> Result<Self> {
+        value.parse()
+    }
+}
+
 impl std::str::FromStr for ReasoningEffort {
     type Err = ModelError;
 
     fn from_str(value: &str) -> Result<Self> {
-        match value {
+        match value.trim() {
+            "" => Err(ModelError::InvalidConfig {
+                message: "reasoning_effort 不能为空；使用模型默认值时请省略此参数".into(),
+            }),
             "none" => Ok(Self::None),
             "minimal" => Ok(Self::Minimal),
             "low" => Ok(Self::Low),
             "medium" => Ok(Self::Medium),
             "high" => Ok(Self::High),
             "xhigh" => Ok(Self::XHigh),
-            _ => Err(ModelError::InvalidConfig {
-                message: format!(
-                    "reasoning_effort 无效：{value}，可选值为 none、minimal、low、medium、high、xhigh"
-                ),
-            }),
+            "max" => Ok(Self::Max),
+            custom => Ok(Self::Custom(custom.to_owned())),
         }
     }
 }
@@ -112,8 +134,6 @@ pub struct ModelParams {
     pub max_tokens: Option<u32>,
     pub timeout: u32,
     pub reasoning_effort: Option<ReasoningEffort>,
-    pub thinking_budget_tokens: Option<u32>,
-    pub show_reasoning: bool,
 }
 
 impl Default for ModelParams {
@@ -123,8 +143,6 @@ impl Default for ModelParams {
             max_tokens: None,
             timeout: DEFAULT_TIMEOUT_SECONDS,
             reasoning_effort: None,
-            thinking_budget_tokens: None,
-            show_reasoning: false,
         }
     }
 }
@@ -141,9 +159,6 @@ impl ModelParams {
         if self.max_tokens == Some(0) {
             issues.push("max_tokens 必须大于 0，或使用 null 表示不限制".to_string());
         }
-        if self.thinking_budget_tokens == Some(0) {
-            issues.push("thinking_budget_tokens 必须大于 0，或使用 null 表示不设置".to_string());
-        }
 
         if issues.is_empty() {
             Ok(())
@@ -158,30 +173,14 @@ impl ModelParams {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ModelCapabilities {
     pub tool_call: bool,
-    pub vision: bool,
     pub context_window: u32,
-    pub native_compaction: bool,
 }
 
 impl Default for ModelCapabilities {
     fn default() -> Self {
         Self {
             tool_call: true,
-            vision: false,
             context_window: DEFAULT_CONTEXT_WINDOW,
-            native_compaction: false,
-        }
-    }
-}
-
-impl ModelCapabilities {
-    pub fn validate(&self) -> Result<()> {
-        if self.context_window == 0 {
-            Err(ModelError::InvalidConfig {
-                message: "context_window 必须大于 0".to_string(),
-            })
-        } else {
-            Ok(())
         }
     }
 }
@@ -230,12 +229,7 @@ impl ModelConfig {
         })?;
         validate_provider_side_model_name(&self.model)?;
         self.params.validate()?;
-        self.capabilities.validate()?;
-        if self.capabilities.native_compaction && self.api_format != ModelApiFormat::Responses {
-            return Err(ModelError::InvalidConfig {
-                message: "native_compaction 仅支持 api_format=responses".to_string(),
-            });
-        }
+        validate_context_window(self.capabilities.context_window)?;
         Ok(())
     }
 
@@ -260,27 +254,11 @@ impl ModelConfig {
         } else if let Some(reasoning_effort) = update.reasoning_effort {
             self.params.reasoning_effort = Some(reasoning_effort);
         }
-        if update.clear_thinking_budget_tokens {
-            self.params.thinking_budget_tokens = None;
-        } else if let Some(thinking_budget_tokens) = update.thinking_budget_tokens {
-            self.params.thinking_budget_tokens = Some(thinking_budget_tokens);
-        }
-        if let Some(show_reasoning) = update.show_reasoning {
-            self.params.show_reasoning = show_reasoning;
+        if let Some(window) = update.context_window {
+            self.capabilities.context_window = window;
         }
         if let Some(tool_call) = update.tool_call {
             self.capabilities.tool_call = tool_call;
-        }
-        if let Some(vision) = update.vision {
-            self.capabilities.vision = vision;
-        }
-        if update.reset_context_window {
-            self.capabilities.context_window = DEFAULT_CONTEXT_WINDOW;
-        } else if let Some(context_window) = update.context_window {
-            self.capabilities.context_window = context_window;
-        }
-        if let Some(native_compaction) = update.native_compaction {
-            self.capabilities.native_compaction = native_compaction;
         }
 
         self.validate()
@@ -297,14 +275,8 @@ pub struct ModelConfigUpdate {
     pub api_format: Option<ModelApiFormat>,
     pub reasoning_effort: Option<ReasoningEffort>,
     pub clear_reasoning_effort: bool,
-    pub thinking_budget_tokens: Option<u32>,
-    pub clear_thinking_budget_tokens: bool,
-    pub show_reasoning: Option<bool>,
     pub tool_call: Option<bool>,
-    pub vision: Option<bool>,
     pub context_window: Option<u32>,
-    pub reset_context_window: bool,
-    pub native_compaction: Option<bool>,
 }
 
 impl ModelConfigUpdate {
@@ -316,14 +288,8 @@ impl ModelConfigUpdate {
             && self.api_format.is_none()
             && self.reasoning_effort.is_none()
             && !self.clear_reasoning_effort
-            && self.thinking_budget_tokens.is_none()
-            && !self.clear_thinking_budget_tokens
-            && self.show_reasoning.is_none()
             && self.tool_call.is_none()
-            && self.vision.is_none()
             && self.context_window.is_none()
-            && !self.reset_context_window
-            && self.native_compaction.is_none()
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -340,19 +306,12 @@ impl ModelConfigUpdate {
                 message: "max_tokens 必须大于 0".to_string(),
             });
         }
+        if let Some(window) = self.context_window {
+            validate_context_window(window)?;
+        }
         if self.timeout == Some(0) {
             return Err(ModelError::InvalidConfig {
                 message: "timeout 必须大于 0".to_string(),
-            });
-        }
-        if !self.clear_thinking_budget_tokens && self.thinking_budget_tokens == Some(0) {
-            return Err(ModelError::InvalidConfig {
-                message: "thinking_budget_tokens 必须大于 0".to_string(),
-            });
-        }
-        if !self.reset_context_window && self.context_window == Some(0) {
-            return Err(ModelError::InvalidConfig {
-                message: "context_window 必须大于 0".to_string(),
             });
         }
         Ok(())
@@ -380,22 +339,14 @@ pub(crate) struct ModelParamsYaml {
     pub timeout: u32,
     #[serde(default)]
     pub reasoning_effort: Option<ReasoningEffort>,
-    #[serde(default)]
-    pub thinking_budget_tokens: Option<u32>,
-    #[serde(default)]
-    pub show_reasoning: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ModelCapabilitiesYaml {
-    #[serde(default)]
-    pub tool_call: bool,
-    #[serde(default)]
-    pub vision: bool,
     #[serde(default = "default_context_window")]
     pub context_window: u32,
     #[serde(default)]
-    pub native_compaction: bool,
+    pub tool_call: bool,
 }
 
 impl TryFrom<ModelConfigYaml> for ModelConfig {
@@ -412,14 +363,10 @@ impl TryFrom<ModelConfigYaml> for ModelConfig {
                 max_tokens: value.params.max_tokens,
                 timeout: value.params.timeout,
                 reasoning_effort: value.params.reasoning_effort,
-                thinking_budget_tokens: value.params.thinking_budget_tokens,
-                show_reasoning: value.params.show_reasoning,
             },
             capabilities: ModelCapabilities {
                 tool_call: value.capabilities.tool_call,
-                vision: value.capabilities.vision,
                 context_window: value.capabilities.context_window,
-                native_compaction: value.capabilities.native_compaction,
             },
         };
         config.validate()?;
@@ -438,15 +385,11 @@ impl From<&ModelConfig> for ModelConfigYaml {
                 temperature: value.params.temperature,
                 max_tokens: value.params.max_tokens,
                 timeout: value.params.timeout,
-                reasoning_effort: value.params.reasoning_effort,
-                thinking_budget_tokens: value.params.thinking_budget_tokens,
-                show_reasoning: value.params.show_reasoning,
+                reasoning_effort: value.params.reasoning_effort.clone(),
             },
             capabilities: ModelCapabilitiesYaml {
                 tool_call: value.capabilities.tool_call,
-                vision: value.capabilities.vision,
                 context_window: value.capabilities.context_window,
-                native_compaction: value.capabilities.native_compaction,
             },
         }
     }
@@ -458,10 +401,6 @@ fn default_temperature() -> f32 {
 
 fn default_timeout() -> u32 {
     DEFAULT_TIMEOUT_SECONDS
-}
-
-fn default_context_window() -> u32 {
-    DEFAULT_CONTEXT_WINDOW
 }
 
 #[cfg(test)]
@@ -478,12 +417,7 @@ mod tests {
         assert_eq!(config.params.timeout, 60);
         assert_eq!(config.api_format, ModelApiFormat::ChatCompletions);
         assert_eq!(config.params.reasoning_effort, None);
-        assert_eq!(config.params.thinking_budget_tokens, None);
-        assert!(!config.params.show_reasoning);
         assert!(config.capabilities.tool_call);
-        assert!(!config.capabilities.vision);
-        assert_eq!(config.capabilities.context_window, 200_000);
-        assert!(!config.capabilities.native_compaction);
     }
 
     #[test]
@@ -509,12 +443,20 @@ mod tests {
     }
 
     #[test]
-    fn reasoning_effort_rejects_unknown_value_with_complete_choices() {
-        let error = "extreme".parse::<ReasoningEffort>().unwrap_err();
-        let message = error.to_string();
-
-        for value in ["none", "minimal", "low", "medium", "high", "xhigh"] {
-            assert!(message.contains(value), "missing {value}: {message}");
+    fn reasoning_effort_custom_values_round_trip_and_blank_is_rejected() {
+        let effort = " future-level ".parse::<ReasoningEffort>().unwrap();
+        assert_eq!(effort.as_str(), "future-level");
+        let yaml = serde_yaml::to_string(&effort).unwrap();
+        assert_eq!(
+            serde_yaml::from_str::<ReasoningEffort>(&yaml).unwrap(),
+            effort
+        );
+        for blank in ["", "  ", "\n"] {
+            assert!(blank.parse::<ReasoningEffort>().is_err());
+            assert!(
+                serde_yaml::from_str::<ReasoningEffort>(&serde_yaml::to_string(blank).unwrap())
+                    .is_err()
+            );
         }
     }
 
@@ -532,12 +474,7 @@ mod tests {
         assert!(yaml.contains("max_tokens: null"));
         assert!(yaml.contains("timeout: 60"));
         assert!(yaml.contains("reasoning_effort: null"));
-        assert!(yaml.contains("thinking_budget_tokens: null"));
-        assert!(yaml.contains("show_reasoning: false"));
         assert!(yaml.contains("tool_call: true"));
-        assert!(yaml.contains("vision: false"));
-        assert!(yaml.contains("context_window: 200000"));
-        assert!(yaml.contains("native_compaction: false"));
     }
 
     #[test]
@@ -554,45 +491,15 @@ params:
   max_tokens: null
   timeout: 60
   reasoning_effort: null
-  thinking_budget_tokens: null
-  show_reasoning: false
 capabilities:
   tool_call: false
-  vision: false
-  context_window: 200000
 "#,
         )
         .expect("parse yaml");
         let config = ModelConfig::try_from(yaml).expect("config");
 
         assert_eq!(config.api_format, ModelApiFormat::ChatCompletions);
-    }
-
-    #[test]
-    fn reads_legacy_yaml_without_tool_call_as_false() {
-        let yaml: ModelConfigYaml = serde_yaml::from_str(
-            r#"
-name: fast-model
-provider:
-  category: default
-  name: my-provider
-model: deepseek-chat
-params:
-  temperature: 0.7
-  max_tokens: null
-  timeout: 60
-  reasoning_effort: null
-  thinking_budget_tokens: null
-  show_reasoning: false
-capabilities:
-  vision: false
-  context_window: 200000
-"#,
-        )
-        .expect("parse legacy yaml");
-        let config = ModelConfig::try_from(yaml).expect("config");
-
-        assert!(!config.capabilities.tool_call);
+        assert_eq!(config.capabilities.context_window, DEFAULT_CONTEXT_WINDOW);
     }
 
     #[test]
@@ -615,28 +522,6 @@ capabilities:
     }
 
     #[test]
-    fn native_compaction_requires_responses_api_format() {
-        let reference = ModelReference::parse("my-provider/model").expect("reference");
-        let mut config = ModelConfig::new("fast-model", reference).expect("config");
-        let error = config
-            .apply_update(ModelConfigUpdate {
-                native_compaction: Some(true),
-                ..Default::default()
-            })
-            .unwrap_err();
-        assert!(error.to_string().contains("native_compaction"));
-
-        config
-            .apply_update(ModelConfigUpdate {
-                api_format: Some(ModelApiFormat::Responses),
-                native_compaction: Some(true),
-                ..Default::default()
-            })
-            .expect("responses compaction");
-        assert!(config.capabilities.native_compaction);
-    }
-
-    #[test]
     fn applies_partial_update_and_clear_flags() {
         let reference = ModelReference::parse("my-provider/deepseek-chat").expect("reference");
         let mut config = ModelConfig::new("fast-model", reference).expect("config");
@@ -647,11 +532,7 @@ capabilities:
                 timeout: Some(120),
                 api_format: Some(ModelApiFormat::Responses),
                 reasoning_effort: Some(ReasoningEffort::High),
-                thinking_budget_tokens: Some(8192),
-                show_reasoning: Some(true),
                 tool_call: Some(true),
-                vision: Some(true),
-                context_window: Some(1_000_000),
                 ..Default::default()
             })
             .expect("update");
@@ -661,23 +542,58 @@ capabilities:
         assert_eq!(config.params.timeout, 120);
         assert_eq!(config.api_format, ModelApiFormat::Responses);
         assert_eq!(config.params.reasoning_effort, Some(ReasoningEffort::High));
-        assert_eq!(config.params.thinking_budget_tokens, Some(8192));
-        assert!(config.params.show_reasoning);
         assert!(config.capabilities.tool_call);
-        assert!(config.capabilities.vision);
-        assert_eq!(config.capabilities.context_window, 1_000_000);
 
         config
             .apply_update(ModelConfigUpdate {
                 clear_max_tokens: true,
                 clear_reasoning_effort: true,
-                clear_thinking_budget_tokens: true,
                 ..Default::default()
             })
             .expect("clear");
 
         assert_eq!(config.params.max_tokens, None);
         assert_eq!(config.params.reasoning_effort, None);
-        assert_eq!(config.params.thinking_budget_tokens, None);
+    }
+}
+
+fn validate_context_window(window: u32) -> Result<()> {
+    if !(4096..=2_000_000).contains(&window) {
+        return Err(ModelError::InvalidConfig {
+            message: "context_window 必须在 4096 到 2000000 之间".into(),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod context_tests {
+    use super::*;
+    #[test]
+    fn input_window_roundtrips_without_setting_output_limit() {
+        let mut model =
+            ModelConfig::new("test", ModelReference::parse("provider/model").unwrap()).unwrap();
+        assert_eq!(model.capabilities.context_window, 272_000);
+        for invalid in [0, 4095, 2_000_001] {
+            assert!(
+                ModelConfigUpdate {
+                    context_window: Some(invalid),
+                    ..Default::default()
+                }
+                .validate()
+                .is_err()
+            );
+        }
+        model
+            .apply_update(ModelConfigUpdate {
+                context_window: Some(128_000),
+                ..Default::default()
+            })
+            .unwrap();
+        let yaml = serde_yaml::to_string(&ModelConfigYaml::from(&model)).unwrap();
+        let restored =
+            ModelConfig::try_from(serde_yaml::from_str::<ModelConfigYaml>(&yaml).unwrap()).unwrap();
+        assert_eq!(restored.capabilities.context_window, 128_000);
+        assert_eq!(restored.params.max_tokens, None);
     }
 }

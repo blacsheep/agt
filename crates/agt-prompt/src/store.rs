@@ -1,12 +1,10 @@
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
 use agt_config::{AgtPaths, CATEGORY_README_FILE, DefinitionCategories};
 use agt_core::{CategoryName, PromptId};
-use agt_storage::{check_no_symlinks_under, ensure_dir_under};
+use agt_storage::{check_no_symlinks_under, ensure_dir_under, write_atomic_under};
 use sha2::{Digest, Sha256};
 
 use crate::diagnostic::{PromptDiagnostic, PromptDiagnosticCategory};
@@ -17,8 +15,6 @@ pub const PROMPT_FILE: &str = "PROMPT.md";
 pub const DEFAULT_PROMPT_NAME: &str = "default";
 pub const DEFAULT_PROMPT_BODY: &str = "You are a helpful assistant.";
 pub const PROMPT_DOCUMENT_MAX_BYTES: u64 = 256 * 1024;
-
-static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug)]
 pub struct PromptStore {
@@ -105,7 +101,9 @@ impl PromptStore {
 
         ensure_dir_under(self.paths.home(), &dir).map_err(map_core_error)?;
         let file = dir.join(PROMPT_FILE);
-        if let Err(error) = write_atomic(&file, content.as_bytes()) {
+        if let Err(error) = write_atomic_under(self.paths.home(), &file, content.as_bytes())
+            .map_err(|source| PromptError::io(&file, source))
+        {
             let _ = fs::remove_dir(&dir);
             return Err(error);
         }
@@ -187,7 +185,8 @@ impl PromptStore {
     ) -> Result<StoredPrompt> {
         let stored = self.read_in(category, name)?;
         validate_content_size(&stored.path, content.len())?;
-        write_atomic(&stored.path, content.as_bytes())?;
+        write_atomic_under(self.paths.home(), &stored.path, content.as_bytes())
+            .map_err(|source| PromptError::io(&stored.path, source))?;
         self.read_in(category, name)
     }
 
@@ -390,34 +389,6 @@ fn ensure_only_prompt_file(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn write_atomic(path: &Path, content: &[u8]) -> Result<()> {
-    let parent = path.parent().ok_or_else(|| PromptError::UnexpectedEntry {
-        path: path.to_path_buf(),
-    })?;
-    let suffix = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let temp = parent.join(format!(
-        ".{PROMPT_FILE}.tmp-{}-{suffix}",
-        std::process::id()
-    ));
-    let result = (|| {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(|source| PromptError::io(&temp, source))?;
-        file.write_all(content)
-            .map_err(|source| PromptError::io(&temp, source))?;
-        file.sync_all()
-            .map_err(|source| PromptError::io(&temp, source))?;
-        drop(file);
-        fs::rename(&temp, path).map_err(|source| PromptError::io(path, source))
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temp);
-    }
-    result
-}
-
 fn read_dir_sorted(path: &Path) -> Result<Vec<fs::DirEntry>> {
     let mut entries = fs::read_dir(path)
         .map_err(|source| PromptError::io(path, source))?
@@ -461,6 +432,23 @@ mod tests {
         let home = std::env::temp_dir().join(format!("agt-prompt-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&home);
         home
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn updating_prompt_preserves_private_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = test_home("permissions");
+        let store = PromptStore::new(&home);
+        let prompt = store.create("private", "initial").unwrap();
+        fs::set_permissions(&prompt.path, fs::Permissions::from_mode(0o600)).unwrap();
+        store.update("private", "updated").unwrap();
+        assert_eq!(
+            fs::metadata(&prompt.path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(store.read("private").unwrap().content, "updated");
+        let _ = fs::remove_dir_all(home);
     }
 
     #[test]

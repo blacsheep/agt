@@ -27,8 +27,11 @@ pub struct RunRecord {
     /// Includes child model calls for parent runs.
     pub model_steps: u32,
     /// Local failed tool invocations, even when the model subsequently finishes.
-    #[serde(default)]
     pub tool_failures: u32,
+    #[serde(default)]
+    pub context: crate::ContextCheckpoint,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<crate::RunProgress>,
 }
 
 pub struct RunStore {
@@ -52,25 +55,20 @@ impl RunStore {
                     record_json TEXT NOT NULL
                  );
                  CREATE INDEX runs_parent ON runs(parent_run_id);
-                 PRAGMA user_version = 1;",
+                 CREATE TABLE run_calls (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL REFERENCES runs(id),
+                    record_json TEXT NOT NULL
+                 );
+                 CREATE INDEX run_calls_run ON run_calls(run_id, id);
+                 PRAGMA user_version = 2;",
             )?,
-            1 | 2 => {}
+            2 => {}
             _ => {
                 return Err(RuntimeError::Configuration(
                     "unsupported runtime database version",
                 ));
             }
-        }
-        if version < 2 {
-            tx.execute_batch(
-                "CREATE TABLE run_calls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id TEXT NOT NULL REFERENCES runs(id),
-                record_json TEXT NOT NULL
-            );
-            CREATE INDEX run_calls_run ON run_calls(run_id, id);
-            PRAGMA user_version = 2;",
-            )?;
         }
         tx.commit()?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
@@ -147,6 +145,8 @@ impl RunStore {
             error: None,
             model_steps: 0,
             tool_failures: 0,
+            context: Default::default(),
+            progress: None,
         };
         tx.execute(
             "INSERT INTO runs (id, request_key, request_hash, parent_run_id, record_json)
@@ -217,12 +217,6 @@ pub(crate) fn database_path(
     directory: &str,
     name: &str,
 ) -> Result<std::path::PathBuf> {
-    let dir = home.join(directory);
-    agt_storage::ensure_dir_under(home, &dir)
-        .map_err(|_| RuntimeError::Configuration("unsafe or inaccessible data directory"))?;
-    for suffix in ["", "-wal", "-shm", "-journal"] {
-        agt_storage::check_no_symlinks_under(home, dir.join(format!("{name}{suffix}")))
-            .map_err(|_| RuntimeError::Configuration("unsafe database path"))?;
-    }
-    Ok(dir.join(name))
+    agt_storage::database_path(home, directory, name)
+        .map_err(|_| RuntimeError::Configuration("unsafe or inaccessible database path"))
 }

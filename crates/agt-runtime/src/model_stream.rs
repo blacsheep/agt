@@ -1,0 +1,252 @@
+//! Protocol assembly only. Partial tools never reach the execution loop.
+use crate::{ModelEvent, Result, RuntimeError};
+use serde_json::{Value, json};
+use std::io::{BufRead, BufReader, Read};
+
+pub(crate) fn read(
+    input: impl Read,
+    responses: bool,
+    progress: &mut dyn FnMut(ModelEvent<'_>) -> Result<()>,
+) -> Result<Value> {
+    const LIMIT: u64 = 4 * 1024 * 1024;
+    let mut reader = BufReader::new(input.take(LIMIT + 1));
+    let mut line = String::new();
+    let mut data = String::new();
+    let mut total = 0;
+    let mut message = json!({"role":"assistant","content":"","tool_calls":[]});
+    let mut finish = None;
+    let mut usage = Value::Null;
+    loop {
+        line.clear();
+        let n = reader
+            .read_line(&mut line)
+            .map_err(|_| RuntimeError::Model("cannot read HTTP response"))?;
+        total += n as u64;
+        if total > LIMIT {
+            return Err(RuntimeError::Model("response exceeds 4 MiB"));
+        }
+        if n == 0 {
+            return Err(RuntimeError::Model("incomplete event stream"));
+        }
+        let field = line.trim_end_matches(['\r', '\n']);
+        if !field.is_empty() {
+            if let Some(value) = field.strip_prefix("data:") {
+                if !data.is_empty() {
+                    data.push('\n');
+                }
+                data.push_str(value.strip_prefix(' ').unwrap_or(value));
+            }
+            continue;
+        }
+        if data.is_empty() {
+            continue;
+        }
+        let event = std::mem::take(&mut data);
+        if event == "[DONE]" {
+            if !responses && matches!(finish.as_deref(), Some("stop" | "tool_calls")) {
+                return Ok(super::model::attach_usage(message, &usage, false));
+            }
+            return Err(RuntimeError::Model("incomplete event stream"));
+        }
+        let value: Value = serde_json::from_str(&event)
+            .map_err(|_| RuntimeError::Model("invalid JSON response"))?;
+        if !value["error"].is_null() || value["type"] == "error" {
+            return Err(RuntimeError::Model("model returned an error"));
+        }
+        if responses {
+            match value["type"].as_str() {
+                Some("response.completed") => {
+                    return super::model::responses_message(&value["response"])
+                        .map(|m| super::model::attach_usage(m, &value["response"]["usage"], true));
+                }
+                Some("response.failed") => {
+                    return Err(RuntimeError::Model("model returned an error"));
+                }
+                Some("response.incomplete") => {
+                    return Err(RuntimeError::Model(
+                        "response was incomplete, refused or unsupported",
+                    ));
+                }
+                Some("response.output_text.delta") => {
+                    if let Some(text) = value["delta"].as_str() {
+                        progress(ModelEvent::Text(text))?;
+                    }
+                }
+                Some("response.reasoning_summary_text.delta" | "response.reasoning_text.delta") => {
+                    progress(ModelEvent::Reasoning)?
+                }
+                Some("response.output_item.added") if value["item"]["type"] == "reasoning" => {
+                    progress(ModelEvent::Reasoning)?
+                }
+                Some("response.function_call_arguments.delta") => progress(ModelEvent::Tool)?,
+                _ => {}
+            }
+        } else {
+            if !value["usage"].is_null() {
+                usage = value["usage"].clone();
+            }
+            for choice in value["choices"].as_array().into_iter().flatten() {
+                if choice["index"].as_u64().unwrap_or(0) != 0 {
+                    continue;
+                }
+                let delta = &choice["delta"];
+                if (!delta["role"].is_null() && delta["role"] != "assistant")
+                    || (!delta["content"].is_null() && !delta["content"].is_string())
+                    || (!delta["tool_calls"].is_null() && !delta["tool_calls"].is_array())
+                {
+                    return Err(RuntimeError::Model("invalid streamed assistant message"));
+                }
+                if !delta["refusal"].is_null() {
+                    return Err(RuntimeError::Model(
+                        "response was incomplete, refused or unsupported",
+                    ));
+                }
+                if let Some(text) = delta["content"].as_str() {
+                    append(&mut message["content"], text);
+                    progress(ModelEvent::Text(text))?;
+                }
+                // Never copy provider-private reasoning into progress or audit storage.
+                if delta["reasoning_content"].is_string() || delta["reasoning"].is_string() {
+                    progress(ModelEvent::Reasoning)?;
+                }
+                for call in delta["tool_calls"].as_array().into_iter().flatten() {
+                    if !call["type"].is_null() && call["type"] != "function" {
+                        return Err(RuntimeError::Model("unsupported streamed tool type"));
+                    }
+                    let index = call["index"]
+                        .as_u64()
+                        .filter(|i| *i < 32)
+                        .ok_or(RuntimeError::Model("invalid streamed tool index"))?
+                        as usize;
+                    let calls = message["tool_calls"].as_array_mut().expect("array");
+                    while calls.len() <= index {
+                        calls.push(json!({"type":"function","id":"","function":{"name":"","arguments":""}}));
+                    }
+                    if let Some(text) = call["id"].as_str() {
+                        append(&mut calls[index]["id"], text);
+                    }
+                    for field in ["name", "arguments"] {
+                        if let Some(text) = call["function"][field].as_str() {
+                            append(&mut calls[index]["function"][field], text);
+                        }
+                    }
+                    progress(ModelEvent::Tool)?;
+                }
+                if let Some(reason) = choice["finish_reason"].as_str() {
+                    if !matches!(reason, "stop" | "tool_calls") {
+                        return Err(RuntimeError::Model(
+                            "response was incomplete, refused or unsupported",
+                        ));
+                    }
+                    finish = Some(reason.to_owned());
+                }
+            }
+        }
+    }
+}
+
+fn append(value: &mut Value, text: &str) {
+    if let Value::String(value) = value {
+        value.push_str(text);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn frame(v: Value) -> String {
+        format!("data: {v}\r\n\r\n")
+    }
+    struct Bytes<'a>(&'a [u8]);
+    impl Read for Bytes<'_> {
+        fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+            if self.0.is_empty() || out.is_empty() {
+                return Ok(0);
+            }
+            out[0] = self.0[0];
+            self.0 = &self.0[1..];
+            Ok(1)
+        }
+    }
+    #[test]
+    fn split_utf8_tools_usage_and_private_reasoning() {
+        let mut input = ": heartbeat\n\ndata: {\ndata: \"choices\": []}\n\n".to_owned();
+        for delta in [
+            json!({"reasoning_content":"PRIVATE"}),
+            json!({"content":"你好"}),
+            json!({"tool_calls":[{"index":0,"id":"call","function":{"name":"search","arguments":"{\"q\":"}}]}),
+            json!({"tool_calls":[{"index":0,"function":{"arguments":"\"中文\"}"}}]}),
+        ] {
+            input += &frame(json!({"choices":[{"index":0,"delta":delta}]}));
+        }
+        input += &frame(json!({"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}));
+        input += &frame(json!({"choices":[],"usage":{"total_tokens":52}}));
+        input += "data: [DONE]\n\n";
+        let mut preview = String::new();
+        let value = read(Bytes(input.as_bytes()), false, &mut |event| {
+            if let ModelEvent::Text(text) = event {
+                preview.push_str(text);
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(preview, "你好");
+        assert_eq!(
+            value["tool_calls"][0]["function"]["arguments"],
+            "{\"q\":\"中文\"}"
+        );
+        assert_eq!(value["_agt_total_tokens"], 52);
+        assert!(!value.to_string().contains("PRIVATE"));
+    }
+    #[test]
+    fn responses_complete_items_are_authoritative_and_private_items_only_in_transcript() {
+        let output = json!([{"type":"reasoning","encrypted_content":"opaque"},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"完成"}]},{"type":"function_call","call_id":"c","name":"tool","arguments":"{}"}]);
+        let input = frame(json!({"type":"response.output_text.delta","delta":"完成"}))
+            + &frame(
+                json!({"type":"response.completed","response":{"status":"completed","output":output,"usage":{"input_tokens":5,"output_tokens":2}}}),
+            );
+        let mut preview = String::new();
+        let value = read(input.as_bytes(), true, &mut |event| {
+            if let ModelEvent::Text(text) = event {
+                preview.push_str(text);
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(preview, "完成");
+        assert_eq!(value["_agt_total_tokens"], 7);
+        assert_eq!(value["_responses_output"], output);
+        assert_eq!(value["tool_calls"][0]["id"], "c");
+    }
+    #[test]
+    fn truncated_refused_and_canceled_streams_do_not_produce_a_message() {
+        let partial = frame(json!({"choices":[{"delta":{"content":"partial"}}]}));
+        assert!(matches!(
+            read(partial.as_bytes(), false, &mut |_| Ok(())),
+            Err(RuntimeError::Model("incomplete event stream"))
+        ));
+        assert!(matches!(
+            read(partial.as_bytes(), false, &mut |_| Err(
+                RuntimeError::Canceled
+            )),
+            Err(RuntimeError::Canceled)
+        ));
+        for event in [
+            json!({"choices":[{"delta":{"refusal":"no"}}]}),
+            json!({"choices":[{"finish_reason":"length"}]}),
+            json!({"error":{"message":"private error"}}),
+        ] {
+            assert!(read(frame(event).as_bytes(), false, &mut |_| Ok(())).is_err());
+        }
+        for kind in ["response.failed", "response.incomplete"] {
+            assert!(
+                read(
+                    frame(json!({"type":kind})).as_bytes(),
+                    true,
+                    &mut |_| Ok(())
+                )
+                .is_err()
+            );
+        }
+    }
+}

@@ -22,18 +22,12 @@ impl AgentRefSummary {
 pub struct AgentSummary {
     pub category: String,
     pub name: String,
-    pub scope: String,
     pub description: String,
-    pub kind: String,
-    pub gateway_domain: Option<String>,
-    pub model_policy: String,
-    pub model: Option<AgentRefSummary>,
+    pub model: AgentRefSummary,
     pub prompt: AgentRefSummary,
     pub skills: Vec<String>,
     pub mcps: Vec<AgentRefSummary>,
-    pub memory_enabled: bool,
-    pub interaction_role: String,
-    pub speak_policy: String,
+    pub builtin_tools: Vec<crate::BuiltinTool>,
     pub path: String,
 }
 
@@ -42,12 +36,8 @@ impl From<&StoredAgent> for AgentSummary {
         Self {
             category: agent.category.to_string(),
             name: agent.config.name.to_string(),
-            scope: agent.config.scope.as_str().to_string(),
             description: agent.config.description.clone(),
-            kind: agent.config.kind.to_string(),
-            gateway_domain: agent.config.gateway_domain.map(|domain| domain.to_string()),
-            model_policy: agent.config.model_policy.to_string(),
-            model: agent.config.model.as_ref().map(AgentRefSummary::from_ref),
+            model: AgentRefSummary::from_ref(&agent.config.model),
             prompt: AgentRefSummary::from_ref(&agent.config.prompt),
             skills: agent
                 .config
@@ -61,9 +51,7 @@ impl From<&StoredAgent> for AgentSummary {
                 .iter()
                 .map(AgentRefSummary::from_ref)
                 .collect(),
-            memory_enabled: agent.config.memory.enabled,
-            interaction_role: agent.config.interaction.role.clone(),
-            speak_policy: agent.config.interaction.speak_policy.clone(),
+            builtin_tools: agent.config.builtin_tools.clone(),
             path: agent.path.display().to_string(),
         }
     }
@@ -239,9 +227,7 @@ mod tests {
 
         let summary = AgentSummary::from(&stored);
 
-        assert_eq!(summary.kind, "standard");
-        assert_eq!(summary.model_policy, "exact");
-        let model = summary.model.expect("exact model summary");
+        let model = summary.model;
         assert_eq!(model.category, "default");
         assert_eq!(model.name, "model");
         assert_eq!(summary.prompt.name, "default");

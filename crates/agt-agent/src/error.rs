@@ -21,15 +21,6 @@ pub enum AgentError {
     #[error("agent 不存在：{name}")]
     NotFound { name: String },
 
-    #[error("受保护 gateway agent 不允许执行 {operation}：{agent}")]
-    ProtectedGateway {
-        agent: String,
-        operation: &'static str,
-    },
-
-    #[error("gateway agent 定义与系统 catalog 不一致：{agent}")]
-    GatewayDefinitionMismatch { agent: String },
-
     #[error("agent {agent} 未挂载 {kind}：{name}")]
     AttachmentNotFound {
         agent: String,

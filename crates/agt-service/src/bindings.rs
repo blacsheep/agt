@@ -23,10 +23,18 @@ pub struct Binding {
     pub working_directory: PathBuf,
     #[serde(default)]
     pub policy: ResponsePolicy,
+    /// Legacy field retained for saved bindings; no longer limits execution.
+    #[serde(default)]
     pub max_steps: u32,
-    pub max_depth: u32,
     #[serde(default)]
     pub allow_mcp: bool,
+}
+
+#[derive(Serialize)]
+pub struct BindingStatus {
+    #[serde(flatten)]
+    pub binding: Binding,
+    pub enabled: bool,
 }
 
 pub struct BindingStore {
@@ -44,8 +52,11 @@ impl BindingStore {
         match version {
             0 => tx.execute_batch("CREATE TABLE bindings(principal TEXT PRIMARY KEY, agent TEXT NOT NULL, definition TEXT NOT NULL);
                 CREATE TABLE response_policies(conversation TEXT NOT NULL,principal TEXT NOT NULL,policy TEXT NOT NULL,PRIMARY KEY(conversation,principal)); PRAGMA user_version=1;")?,
-            1 => {},
+            1 | 2 => {},
             _ => bail!("unsupported bindings database version"),
+        }
+        if version < 2 {
+            tx.execute_batch("ALTER TABLE bindings ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1; PRAGMA user_version=2;")?;
         }
         tx.commit()?;
         Ok(Self {
@@ -63,11 +74,8 @@ impl BindingStore {
             bail!("only Agent principals can be hosted");
         }
         binding.working_directory = std::fs::canonicalize(&binding.working_directory)?;
-        if !binding.working_directory.is_dir()
-            || !(1..=100).contains(&binding.max_steps)
-            || !(1..=8).contains(&binding.max_depth)
-        {
-            bail!("invalid binding limits or working directory");
+        if !binding.working_directory.is_dir() {
+            bail!("invalid binding working directory");
         }
         self.connection.execute("INSERT INTO bindings(principal,agent,definition) VALUES(?1,?2,?3)
             ON CONFLICT(principal) DO UPDATE SET agent=excluded.agent,definition=excluded.definition",
@@ -79,23 +87,57 @@ impl BindingStore {
         let definition: Option<String> = self
             .connection
             .query_row(
-                "SELECT definition FROM bindings WHERE principal=?1",
+                "SELECT definition FROM bindings WHERE principal=?1 AND enabled=1",
                 [principal.as_str()],
                 |r| r.get(0),
             )
             .optional()?;
         definition
-            .map(|s| serde_json::from_str(&s).map_err(Into::into))
+            .map(|s| Ok(serde_json::from_str(&s)?))
             .transpose()
     }
     pub fn list(&self) -> Result<Vec<Binding>> {
         let mut statement = self
             .connection
-            .prepare("SELECT definition FROM bindings ORDER BY principal")?;
+            .prepare("SELECT definition FROM bindings WHERE enabled=1 ORDER BY principal")?;
         statement
             .query_map([], |r| r.get::<_, String>(0))?
             .map(|r| Ok(serde_json::from_str(&r?)?))
             .collect()
+    }
+    pub fn list_with_state(&self) -> Result<Vec<BindingStatus>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT definition,enabled FROM bindings ORDER BY principal")?;
+        statement
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?)))?
+            .map(|row| {
+                let (definition, enabled) = row?;
+                Ok(BindingStatus {
+                    binding: serde_json::from_str(&definition)?,
+                    enabled,
+                })
+            })
+            .collect()
+    }
+    pub fn set_enabled(&self, principal: &PrincipalId, enabled: bool) -> Result<()> {
+        if enabled {
+            let binding = self
+                .list_with_state()?
+                .into_iter()
+                .find(|b| &b.binding.principal == principal)
+                .ok_or_else(|| anyhow::anyhow!("Agent has no saved running settings"))?
+                .binding;
+            self.bind(binding)?;
+        }
+        if self.connection.execute(
+            "UPDATE bindings SET enabled=?2 WHERE principal=?1",
+            params![principal.as_str(), enabled],
+        )? == 0
+        {
+            bail!("Agent has no saved running settings");
+        }
+        Ok(())
     }
     pub fn unbind(&self, principal: &PrincipalId) -> Result<()> {
         self.connection.execute(

@@ -1,6 +1,7 @@
 mod delivery;
 mod error;
 mod model;
+mod sessions;
 mod store;
 
 pub use delivery::{Delivery, DeliveryState};

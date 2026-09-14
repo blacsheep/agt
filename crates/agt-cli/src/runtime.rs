@@ -24,8 +24,8 @@ pub(crate) struct AgentRunArgs {
     /// Reuse this key only for the exact same request
     #[arg(long)]
     request_key: Option<String>,
-    /// Shared model-call budget including delegated agents
-    #[arg(long, default_value_t = 12, value_parser = clap::value_parser!(u32).range(1..=100))]
+    /// Legacy compatibility option; ignored (execution has no step limit)
+    #[arg(long, hide = true, default_value_t = 0)]
     max_steps: u32,
     /// Working directory for attached MCP servers
     #[arg(long, default_value = ".")]

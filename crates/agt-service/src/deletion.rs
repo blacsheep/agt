@@ -87,7 +87,8 @@ pub fn plan_delete(home: &Path, target: &ResourceKey, recursive: bool) -> Result
         ensure_delete_allowed(home, item)?;
     }
     if home.join("runtime/bindings.db").exists() {
-        for binding in crate::BindingStore::open(home)?.list()? {
+        for status in crate::BindingStore::open(home)?.list_with_state()? {
+            let binding = status.binding;
             if selected.iter().any(|item| {
                 item.kind == ResourceKind::Agent
                     && format!("{}/{}", item.category, item.name) == binding.agent
@@ -125,21 +126,13 @@ fn delete_rank(kind: ResourceKind) -> u8 {
     }
 }
 
-fn ensure_delete_allowed(home: &Path, key: &ResourceKey) -> Result<()> {
+fn ensure_delete_allowed(_home: &Path, key: &ResourceKey) -> Result<()> {
     match key.kind {
         ResourceKind::Prompt
             if key.category == CategoryName::default().to_string()
                 && key.name == agt_prompt::DEFAULT_PROMPT_NAME =>
         {
             bail!("prompt/default/default 是保留资源，不能删除")
-        }
-        ResourceKind::Agent => {
-            let category = CategoryName::new(&key.category)?;
-            let agent = AgentStore::new(home).read_in(&category, &key.name)?;
-            if agent.config.is_gateway() {
-                bail!("{} 是受保护的 gateway agent，不能删除", key.display())
-            }
-            Ok(())
         }
         _ => Ok(()),
     }
@@ -224,17 +217,16 @@ fn load_graph(home: &Path) -> Result<ResourceGraph> {
             name: item.config.name.to_string(),
         };
         graph.nodes.insert(agent.clone());
-        if let Some(model) = item.config.model {
-            add_edge(
-                &mut graph,
-                ResourceKey {
-                    kind: ResourceKind::Model,
-                    category: model.category().to_string(),
-                    name: model.name().to_string(),
-                },
-                agent.clone(),
-            );
-        }
+        let model = item.config.model;
+        add_edge(
+            &mut graph,
+            ResourceKey {
+                kind: ResourceKind::Model,
+                category: model.category().to_string(),
+                name: model.name().to_string(),
+            },
+            agent.clone(),
+        );
         add_edge(
             &mut graph,
             ResourceKey {
@@ -245,17 +237,15 @@ fn load_graph(home: &Path) -> Result<ResourceGraph> {
             agent.clone(),
         );
         for skill in item.config.skills {
-            if skill.source() == &agt_core::ResourceSourceSelector::Persisted {
-                add_edge(
-                    &mut graph,
-                    ResourceKey {
-                        kind: ResourceKind::Skill,
-                        category: skill.category().to_string(),
-                        name: skill.package().to_string(),
-                    },
-                    agent.clone(),
-                );
-            }
+            add_edge(
+                &mut graph,
+                ResourceKey {
+                    kind: ResourceKind::Skill,
+                    category: skill.category().to_string(),
+                    name: skill.package().to_string(),
+                },
+                agent.clone(),
+            );
         }
         for mcp in item.config.mcps {
             add_edge(

@@ -147,6 +147,14 @@ pub struct ConversationSummary {
     pub conversation: Conversation,
     pub member_count: i64,
     pub unread_count: i64,
+    #[serde(default)]
+    pub left_message_seq: Option<i64>,
+    #[serde(default)]
+    pub hidden: bool,
+    #[serde(default)]
+    pub dissolved: bool,
+    #[serde(default)]
+    pub last_viewed_at: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

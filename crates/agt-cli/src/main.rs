@@ -3,7 +3,7 @@ use std::io::{self, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use agt_agent::{AgentConfig, AgentError, AgentStore, AgentSummary};
+use agt_agent::{AgentConfig, AgentError, AgentStore, AgentSummary, BuiltinTool};
 use agt_config::{initialize_default_home, initialize_home};
 use agt_core::CategoryName;
 use agt_core::{McpId, ModelId, PackageRef, PromptId, QualifiedRef, ResourceRef};
@@ -62,8 +62,9 @@ enum Command {
     Tool(framework::ToolCommand),
     /// expose framework tools over MCP stdio (host-selected identity)
     Serve(framework::ServeArgs),
-    /// process hosted agent message deliveries
-    Worker(framework::WorkerArgs),
+    /// persistent parallel discussion scheduling
+    #[command(subcommand)]
+    Schedule(framework::ScheduleCommand),
     /// initialize an explicitly selected agt home directory
     Init(InitArgs),
     /// manage provider definitions
@@ -184,17 +185,10 @@ struct ModelCreateArgs {
     #[arg(long)]
     reasoning_effort: Option<String>,
     #[arg(long)]
-    thinking_budget_tokens: Option<u32>,
-    #[arg(long)]
-    show_reasoning: Option<bool>,
-    #[arg(long)]
     tool_call: Option<bool>,
-    #[arg(long)]
-    vision: Option<bool>,
+    /// Input context window used for automatic compaction; not an output token limit
     #[arg(long)]
     context_window: Option<u32>,
-    #[arg(long)]
-    native_compaction: Option<bool>,
     #[arg(long)]
     category: Option<String>,
 }
@@ -219,21 +213,10 @@ struct ModelUpdateArgs {
     #[arg(long)]
     clear_reasoning_effort: bool,
     #[arg(long)]
-    thinking_budget_tokens: Option<u32>,
-    #[arg(long)]
-    clear_thinking_budget_tokens: bool,
-    #[arg(long)]
-    show_reasoning: Option<bool>,
-    #[arg(long)]
     tool_call: Option<bool>,
-    #[arg(long)]
-    vision: Option<bool>,
+    /// Input context window used for automatic compaction; not an output token limit
     #[arg(long)]
     context_window: Option<u32>,
-    #[arg(long)]
-    reset_context_window: bool,
-    #[arg(long)]
-    native_compaction: Option<bool>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -367,6 +350,8 @@ enum AgentCommand {
 #[derive(Debug, Args)]
 struct AgentCreateArgs {
     name: String,
+    #[arg(long = "builtin-tool")]
+    builtin_tools: Vec<BuiltinTool>,
     #[arg(long)]
     model: String,
     #[arg(long)]
@@ -384,6 +369,10 @@ struct AgentCreateArgs {
 #[derive(Debug, Args)]
 struct AgentUpdateArgs {
     name: String,
+    #[arg(long = "add-builtin-tool")]
+    add_builtin_tools: Vec<BuiltinTool>,
+    #[arg(long = "remove-builtin-tool")]
+    remove_builtin_tools: Vec<BuiltinTool>,
     #[arg(long)]
     category: Option<String>,
     #[arg(long)]
@@ -404,6 +393,9 @@ struct AgentUpdateArgs {
 
 #[derive(Debug, Subcommand)]
 enum ImCommand {
+    /// configure the persistent human owner for Agent-created groups
+    #[command(subcommand)]
+    Owner(ImOwnerCommand),
     /// manage participants (users, agents, bots or services)
     #[command(subcommand)]
     Principal(ImPrincipalCommand),
@@ -419,6 +411,13 @@ enum ImCommand {
     /// send and inspect messages
     #[command(subcommand, alias = "msg")]
     Message(ImMessageCommand),
+}
+
+#[derive(Debug, Subcommand)]
+enum ImOwnerCommand {
+    Get,
+    /// Set only if absent, then migrate existing Agent-owned groups
+    Ensure(ImIdArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -454,6 +453,7 @@ struct ImDirectCreateArgs {
 
 #[derive(Debug, Subcommand)]
 enum ImGroupCommand {
+    Dissolve(ImConversationActorArgs),
     #[command(alias = "add")]
     Create(ImGroupCreateArgs),
     #[command(subcommand)]
@@ -503,6 +503,10 @@ enum ImConversationCommand {
     List(ImConversationListArgs),
     #[command(alias = "show", alias = "get")]
     Info(ImIdArgs),
+    Hide(ImConversationActorArgs),
+    Unhide(ImConversationActorArgs),
+    /// Record an explicit visit without changing messages or membership
+    Visit(ImConversationActorArgs),
     Archive(ImConversationActorArgs),
     #[command(alias = "restore")]
     Reactivate(ImConversationActorArgs),
@@ -512,6 +516,10 @@ enum ImConversationCommand {
 
 #[derive(Debug, Args)]
 struct ImConversationListArgs {
+    #[arg(long)]
+    include_hidden: bool,
+    #[arg(long)]
+    groups_only: bool,
     #[arg(long)]
     principal: String,
 }
@@ -682,7 +690,7 @@ fn dispatch(command: Command, home: &Path, output: OutputMode, yes: bool) -> Res
     match command {
         Command::Tool(command) => framework::tool(command, home, output),
         Command::Serve(args) => framework::serve(args, home),
-        Command::Worker(args) => framework::worker(args, home, output),
+        Command::Schedule(command) => framework::schedule(command, home, output),
         Command::Provider(command) => dispatch_provider(command, home, output, yes),
         Command::Model(command) => dispatch_model(command, home, output, yes),
         Command::Prompt(command) => dispatch_prompt(command, home, output, yes),
@@ -700,6 +708,13 @@ fn dispatch_im(command: ImCommand, home: &Path, output: OutputMode) -> Result<()
     match command {
         ImCommand::Principal(command) => dispatch_im_principal(command, &store, output),
         ImCommand::Direct(command) => dispatch_im_direct(command, &store, output),
+        ImCommand::Owner(command) => match command {
+            ImOwnerCommand::Get => emit(&store.workspace_owner()?, output),
+            ImOwnerCommand::Ensure(args) => emit(
+                &store.ensure_workspace_owner(&PrincipalId::new(args.id))?,
+                output,
+            ),
+        },
         ImCommand::Group(command) => dispatch_im_group(command, &store, output),
         ImCommand::Conversation(command) => dispatch_im_conversation(command, &store, output),
         ImCommand::Message(command) => dispatch_im_message(command, &store, output),
@@ -751,6 +766,13 @@ fn dispatch_im_group(command: ImGroupCommand, store: &ImStore, output: OutputMod
                 output,
             )
         }
+        ImGroupCommand::Dissolve(args) => {
+            store.dissolve_group(
+                &ConversationId::new(args.conversation),
+                &PrincipalId::new(args.actor),
+            )?;
+            emit(&serde_json::json!({"dissolved":true}), output)
+        }
         ImGroupCommand::Members(command) => dispatch_im_members(command, store, output),
     }
 }
@@ -798,13 +820,40 @@ fn dispatch_im_conversation(
 ) -> Result<()> {
     match command {
         ImConversationCommand::List(args) => emit(
-            &store.list_conversations(&PrincipalId::new(args.principal))?,
+            &store.list_conversation_entries(
+                &PrincipalId::new(args.principal),
+                args.include_hidden,
+                args.groups_only,
+            )?,
             output,
         ),
         ImConversationCommand::Info(args) => emit(
             &store.get_conversation(&ConversationId::new(args.id))?,
             output,
         ),
+        ImConversationCommand::Hide(args) => {
+            store.set_conversation_hidden(
+                &ConversationId::new(args.conversation),
+                &PrincipalId::new(args.actor),
+                true,
+            )?;
+            emit(&serde_json::json!({"hidden":true}), output)
+        }
+        ImConversationCommand::Unhide(args) => {
+            store.set_conversation_hidden(
+                &ConversationId::new(args.conversation),
+                &PrincipalId::new(args.actor),
+                false,
+            )?;
+            emit(&serde_json::json!({"hidden":false}), output)
+        }
+        ImConversationCommand::Visit(args) => {
+            let viewed = store.mark_conversation_viewed(
+                &ConversationId::new(args.conversation),
+                &PrincipalId::new(args.actor),
+            )?;
+            emit(&serde_json::json!({"last_viewed_at":viewed}), output)
+        }
         ImConversationCommand::Archive(args) => emit(
             &store.archive_conversation(
                 &ConversationId::new(args.conversation),
@@ -977,14 +1026,8 @@ fn dispatch_model(command: ModelCommand, home: &Path, output: OutputMode, yes: b
                 args.timeout,
                 args.reasoning_effort,
                 false,
-                args.thinking_budget_tokens,
-                false,
-                args.show_reasoning,
                 args.tool_call,
-                args.vision,
                 args.context_window,
-                false,
-                args.native_compaction,
             )?;
             if !update.is_empty() {
                 config.apply_update(update)?;
@@ -1014,14 +1057,8 @@ fn dispatch_model(command: ModelCommand, home: &Path, output: OutputMode, yes: b
                 args.timeout,
                 args.reasoning_effort,
                 args.clear_reasoning_effort,
-                args.thinking_budget_tokens,
-                args.clear_thinking_budget_tokens,
-                args.show_reasoning,
                 args.tool_call,
-                args.vision,
                 args.context_window,
-                args.reset_context_window,
-                args.native_compaction,
             )?;
             let stored = store.update_in(&category, &name, update)?;
             emit(&ModelSummary::from(&stored), output)
@@ -1247,7 +1284,8 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
             PromptStore::new(home).ensure_default_prompt()?;
             let (model_category, model_name) = parse_named_ref(&args.model, None)?;
             let mut config = AgentConfig::new(&args.name, &model_name)?;
-            config.model = Some(QualifiedRef::new(model_category, ModelId::new(model_name)));
+            config.model = QualifiedRef::new(model_category, ModelId::new(model_name));
+            config.builtin_tools = args.builtin_tools;
             if let Some(prompt) = args.prompt {
                 let (prompt_category, prompt_name) = parse_named_ref(&prompt, None)?;
                 config.prompt = QualifiedRef::new(prompt_category, PromptId::new(prompt_name));
@@ -1291,6 +1329,8 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
                 && args.remove_skills.is_empty()
                 && args.add_mcps.is_empty()
                 && args.remove_mcps.is_empty()
+                && args.add_builtin_tools.is_empty()
+                && args.remove_builtin_tools.is_empty()
             {
                 bail!("至少提供一个 Agent 更新字段");
             }
@@ -1323,12 +1363,28 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
                 .map(|value| parse_named_ref(value, None))
                 .collect::<Result<Vec<_>>>()?;
             let result = store.update_in(&category, &name, |config| {
+                for tool in args.add_builtin_tools {
+                    if !config.builtin_tools.contains(&tool) {
+                        config.builtin_tools.push(tool);
+                    }
+                }
+                for tool in args.remove_builtin_tools {
+                    if let Some(index) = config.builtin_tools.iter().position(|item| item == &tool)
+                    {
+                        config.builtin_tools.remove(index);
+                    } else {
+                        return Err(AgentError::AttachmentNotFound {
+                            agent: name.clone(),
+                            kind: "builtin_tool",
+                            name: tool.to_string(),
+                        });
+                    }
+                }
                 if let Some(description) = args.description {
                     config.set_description(description);
                 }
                 if let Some((model_category, model_name)) = model {
-                    config.model =
-                        Some(QualifiedRef::new(model_category, ModelId::new(model_name)));
+                    config.model = QualifiedRef::new(model_category, ModelId::new(model_name));
                 }
                 if let Some((prompt_category, prompt_name)) = prompt {
                     config.prompt = QualifiedRef::new(prompt_category, PromptId::new(prompt_name));
@@ -1453,14 +1509,8 @@ fn model_update_from(
     timeout: Option<u32>,
     reasoning_effort: Option<String>,
     clear_reasoning_effort: bool,
-    thinking_budget_tokens: Option<u32>,
-    clear_thinking_budget_tokens: bool,
-    show_reasoning: Option<bool>,
     tool_call: Option<bool>,
-    vision: Option<bool>,
     context_window: Option<u32>,
-    reset_context_window: bool,
-    native_compaction: Option<bool>,
 ) -> Result<ModelConfigUpdate> {
     Ok(ModelConfigUpdate {
         temperature,
@@ -1474,14 +1524,8 @@ fn model_update_from(
             .map(|value| value.parse::<ReasoningEffort>())
             .transpose()?,
         clear_reasoning_effort,
-        thinking_budget_tokens,
-        clear_thinking_budget_tokens,
-        show_reasoning,
         tool_call,
-        vision,
         context_window,
-        reset_context_window,
-        native_compaction,
     })
 }
 

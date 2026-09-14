@@ -310,80 +310,20 @@ impl<'de> Deserialize<'de> for PackageRef {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum ResourceSourceSelector {
-    #[default]
-    Persisted,
-    Project,
-    Explicit,
-    Auto,
-    Registry {
-        registry: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        version: Option<String>,
-    },
-}
-
-impl ResourceSourceSelector {
-    pub fn registry(registry: impl Into<String>, version: Option<String>) -> Self {
-        Self::Registry {
-            registry: registry.into(),
-            version,
-        }
-    }
-}
-
-impl fmt::Display for ResourceSourceSelector {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Persisted => f.write_str("persisted"),
-            Self::Project => f.write_str("project"),
-            Self::Explicit => f.write_str("explicit"),
-            Self::Auto => f.write_str("auto"),
-            Self::Registry { registry, version } => {
-                write!(f, "registry:{registry}")?;
-                if let Some(version) = version {
-                    write!(f, "@{version}")?;
-                }
-                Ok(())
-            }
-        }
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct ResourceRef {
     #[serde(default)]
     category: CategoryName,
     package: PackageRef,
-    #[serde(default)]
-    source: ResourceSourceSelector,
 }
 
 impl ResourceRef {
-    pub fn new(package: PackageRef, source: ResourceSourceSelector) -> Self {
-        Self::new_in(CategoryName::default(), package, source)
-    }
-
-    pub fn new_in(
-        category: CategoryName,
-        package: PackageRef,
-        source: ResourceSourceSelector,
-    ) -> Self {
-        Self {
-            category,
-            package,
-            source,
-        }
-    }
-
     pub fn persisted(package: PackageRef) -> Self {
-        Self::new(package, ResourceSourceSelector::Persisted)
+        Self::persisted_in(CategoryName::default(), package)
     }
 
     pub fn persisted_in(category: CategoryName, package: PackageRef) -> Self {
-        Self::new_in(category, package, ResourceSourceSelector::Persisted)
+        Self { category, package }
     }
 
     pub fn category(&self) -> &CategoryName {
@@ -392,14 +332,6 @@ impl ResourceRef {
 
     pub fn package(&self) -> &PackageRef {
         &self.package
-    }
-
-    pub fn source(&self) -> &ResourceSourceSelector {
-        &self.source
-    }
-
-    pub fn into_parts(self) -> (CategoryName, PackageRef, ResourceSourceSelector) {
-        (self.category, self.package, self.source)
     }
 }
 
@@ -411,11 +343,7 @@ impl From<PackageRef> for ResourceRef {
 
 impl fmt::Display for ResourceRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}/{} (source: {})",
-            self.category, self.package, self.source
-        )
+        write!(f, "{}/{}", self.category, self.package)
     }
 }
 
@@ -722,82 +650,16 @@ mod tests {
     }
 
     #[test]
-    fn resource_ref_defaults_to_persisted_without_changing_package_identity() {
-        let package: PackageRef = "@acme/code-review".parse().unwrap();
-        let persisted = ResourceRef::from(package.clone());
-        let project = ResourceRef::new(package.clone(), ResourceSourceSelector::Project);
-
-        assert_eq!(persisted.package(), project.package());
-        assert!(persisted.category().is_default());
-        assert_ne!(persisted, project);
-        assert_eq!(persisted.source(), &ResourceSourceSelector::Persisted);
-    }
-
-    #[test]
-    fn resource_ref_serde_has_stable_object_representation() {
-        let reference = ResourceRef::new(
-            "@acme/code-review".parse().unwrap(),
-            ResourceSourceSelector::Project,
+    fn resource_ref_preserves_category_and_package() {
+        let reference = ResourceRef::persisted_in(
+            CategoryName::new("team").unwrap(),
+            "@acme/review".parse().unwrap(),
         );
-
         let json = serde_json::to_string(&reference).unwrap();
-        assert_eq!(
-            json,
-            r#"{"category":"default","package":"@acme/code-review","source":"project"}"#
-        );
         assert_eq!(
             serde_json::from_str::<ResourceRef>(&json).unwrap(),
             reference
         );
-
-        let without_source = r#"{"package":"code-review"}"#;
-        let deserialized: ResourceRef = serde_json::from_str(without_source).unwrap();
-        assert_eq!(deserialized.source(), &ResourceSourceSelector::Persisted);
-        assert!(deserialized.category().is_default());
-    }
-
-    #[test]
-    fn resource_ref_keeps_custom_category() {
-        let reference = ResourceRef::persisted_in(
-            CategoryName::new("team").unwrap(),
-            "code-review".parse().unwrap(),
-        );
-
-        assert_eq!(reference.category().as_str(), "team");
-        assert_eq!(
-            serde_json::to_string(&reference).unwrap(),
-            r#"{"category":"team","package":"code-review","source":"persisted"}"#
-        );
-    }
-
-    #[test]
-    fn source_selector_serde_uses_canonical_names() {
-        for (source, expected) in [
-            (ResourceSourceSelector::Persisted, r#""persisted""#),
-            (ResourceSourceSelector::Project, r#""project""#),
-            (ResourceSourceSelector::Explicit, r#""explicit""#),
-            (ResourceSourceSelector::Auto, r#""auto""#),
-        ] {
-            assert_eq!(serde_json::to_string(&source).unwrap(), expected);
-            assert_eq!(
-                serde_json::from_str::<ResourceSourceSelector>(expected).unwrap(),
-                source
-            );
-        }
-    }
-
-    #[test]
-    fn inactive_registry_source_round_trips_without_side_effects() {
-        let source = ResourceSourceSelector::registry("official", Some("1.2.0".to_owned()));
-        let json = serde_json::to_string(&source).unwrap();
-
-        assert_eq!(
-            json,
-            r#"{"registry":{"registry":"official","version":"1.2.0"}}"#
-        );
-        assert_eq!(
-            serde_json::from_str::<ResourceSourceSelector>(&json).unwrap(),
-            source
-        );
+        assert_eq!(reference.to_string(), "team/@acme/review");
     }
 }

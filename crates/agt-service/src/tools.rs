@@ -9,16 +9,33 @@ use std::path::{Path, PathBuf};
 pub struct ToolService {
     home: PathBuf,
     messaging: Messaging,
+    resource_management: bool,
 }
 impl ToolService {
     pub fn open(home: &Path, actor: Actor) -> Result<Self> {
         Ok(Self {
             home: home.to_owned(),
             messaging: Messaging::open(home, actor)?,
+            resource_management: false,
         })
     }
     pub fn schemas(&self) -> Vec<Value> {
-        schemas(self.messaging.actor.role)
+        schemas(self.messaging.actor.role, self.resource_management)
+    }
+    pub fn with_resource_management(mut self, enabled: bool) -> Self {
+        self.resource_management = enabled;
+        self
+    }
+    fn require_resource_management(&self) -> Result<()> {
+        if self.resource_management {
+            Ok(())
+        } else {
+            self.messaging.actor.require_manager()
+        }
+    }
+    pub fn with_discussion(mut self, discussion: Option<String>) -> Self {
+        self.messaging = self.messaging.with_discussion(discussion);
+        self
     }
     pub fn call(&self, name: &str, args: Value) -> std::result::Result<Value, ToolError> {
         let schema = self
@@ -48,18 +65,71 @@ impl ToolService {
                 resources.read(&d.kind, &d.reference)?
             }
             "resource_write" => {
-                m.actor.require_manager()?;
+                self.require_resource_management()?;
                 let d: Write = serde_json::from_value(args)?;
-                resources.write(&d.kind, &d.reference, d.create, d.data)?
+                let mut value = resources.write(&d.kind, &d.reference, d.create, d.data)?;
+                if d.kind == "agent" {
+                    let (category, name) = crate::named_ref(&d.reference)?;
+                    let reference = format!("{category}/{name}");
+                    let bindings = BindingStore::open(&self.home)?
+                        .list_with_state()?
+                        .into_iter()
+                        .filter(|b| b.binding.agent == reference)
+                        .collect::<Vec<_>>();
+                    let enabled = bindings.iter().any(|b| b.enabled);
+                    let next_steps = if bindings.is_empty() {
+                        vec![
+                            "Configuration saved only; this Agent is NOT enabled. Inspect principal_list/binding_list, create a kind=agent identity if needed, then agent_bind(principal, agent).",
+                            "Verify binding_list contains the intended Agent identity with enabled=true before reporting it ready or assigning work.",
+                        ]
+                    } else if !enabled {
+                        vec![
+                            "Running settings exist but all identities are disabled. Call agent_set_enabled(principal, enabled=true) for the intended identity, then verify binding_list.",
+                        ]
+                    } else {
+                        vec![
+                            "At least one identity is enabled. Check each intended identity in bindings before assigning work.",
+                        ]
+                    };
+                    value["activation"] = json!({"configured":!bindings.is_empty(),"enabled":enabled,"bindings":bindings,"next_steps":next_steps});
+                }
+                value
             }
             "resource_delete" => {
-                m.actor.require_manager()?;
+                self.require_resource_management()?;
                 let d: Delete = serde_json::from_value(args)?;
                 resources.delete(&d.kind, &d.reference, d.recursive, d.confirm)?
             }
+            "provider_models" => {
+                let d: ProviderReference = serde_json::from_value(args)?;
+                resources.provider_models(&d.reference)?
+            }
+            "resource_test" => {
+                let d: Reference = serde_json::from_value(args)?;
+                resources.test(&d.kind, &d.reference)?
+            }
+            "resource_category_list" => {
+                let d: Kind = serde_json::from_value(args)?;
+                serde_json::to_value(resources.categories(&d.kind)?.list()?)?
+            }
+            "resource_category_create" | "resource_category_delete" => {
+                self.require_resource_management()?;
+                let d: Category = serde_json::from_value(args)?;
+                let category = agt_core::CategoryName::new(d.category)?;
+                let categories = resources.categories(&d.kind)?;
+                let path = if name == "resource_category_create" {
+                    categories.create(&category)?
+                } else {
+                    categories.delete_empty(&category)?
+                };
+                json!({"category": category, "path": path})
+            }
             "principal_create" => {
-                m.actor.require_manager()?;
+                self.require_resource_management()?;
                 let d: Principal = serde_json::from_value(args)?;
+                if m.actor.role != Role::Manager && d.kind != PrincipalKind::Agent {
+                    bail!("resource management can create only Agent identities");
+                }
                 serde_json::to_value(m.im.create_principal(PrincipalInput {
                     id: PrincipalId::new(d.id),
                     kind: d.kind,
@@ -77,20 +147,53 @@ impl ToolService {
                 )
             }
             "agent_bind" => {
-                m.actor.require_manager()?;
+                self.require_resource_management()?;
+                let mut args = args;
+                let fields = args.as_object_mut().expect("validated object");
+                fields
+                    .entry("working_directory")
+                    .or_insert(json!(self.home));
+                fields.entry("max_steps").or_insert(json!(0));
                 let binding: Binding = serde_json::from_value(args)?;
-                serde_json::to_value(BindingStore::open(&self.home)?.bind(binding)?)?
+                let store = BindingStore::open(&self.home)?;
+                let binding = store.bind(binding)?;
+                let status = store
+                    .list_with_state()?
+                    .into_iter()
+                    .find(|b| b.binding.principal == binding.principal)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("binding changed concurrently; check binding_list")
+                    })?;
+                let mut value = serde_json::to_value(&status)?;
+                value["next_step"] = json!(if status.enabled {
+                    "Enabled. This identity can process authorized messages according to its policy."
+                } else {
+                    "Still disabled. Call agent_set_enabled(principal, enabled=true) before assigning work."
+                });
+                value
+            }
+            "agent_set_enabled" => {
+                self.require_resource_management()?;
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Enable {
+                    principal: PrincipalId,
+                    enabled: bool,
+                }
+                let d: Enable = serde_json::from_value(args)?;
+                BindingStore::open(&self.home)?.set_enabled(&d.principal, d.enabled)?;
+                json!({"principal":d.principal,"enabled":d.enabled})
             }
             "agent_unbind" => {
-                m.actor.require_manager()?;
+                self.require_resource_management()?;
                 let d: Target = serde_json::from_value(args)?;
                 BindingStore::open(&self.home)?.unbind(&d.principal)?;
                 json!({"unbound":d.principal})
             }
             "binding_list" => {
-                m.actor.require_manager()?;
+                self.require_resource_management()?;
                 let _: Empty = serde_json::from_value(args)?;
-                serde_json::to_value(BindingStore::open(&self.home)?.list()?)?
+                serde_json::to_value(BindingStore::open(&self.home)?.list_with_state()?)?
             }
             "direct_create" => {
                 let d: Target = serde_json::from_value(args)?;
@@ -105,13 +208,35 @@ impl ToolService {
                 )?)?
             }
             "conversation_list" => {
-                let _: Empty = serde_json::from_value(args)?;
-                serde_json::to_value(m.im.list_conversations(&m.actor.principal)?)?
+                let d: ConversationList = serde_json::from_value(args)?;
+                serde_json::to_value(m.im.list_conversation_entries(
+                    &m.actor.principal,
+                    d.include_hidden,
+                    d.groups_only,
+                )?)?
+            }
+            "conversation_hide" | "conversation_show" => {
+                let d: Conversation = serde_json::from_value(args)?;
+                m.im.set_conversation_hidden(
+                    &d.conversation,
+                    &m.actor.principal,
+                    name == "conversation_hide",
+                )?;
+                json!({"updated":true})
+            }
+            "group_dissolve" => {
+                let d: Conversation = serde_json::from_value(args)?;
+                m.im.dissolve_group(&d.conversation, &m.actor.principal)?;
+                json!({"dissolved":true})
             }
             "member_list" => {
                 let d: Conversation = serde_json::from_value(args)?;
-                m.member(&d.conversation)?;
-                serde_json::to_value(m.im.list_members(&d.conversation)?)?
+                let own = m.im.get_member(&d.conversation, &m.actor.principal)?;
+                serde_json::to_value(if own.left_message_seq.is_some() {
+                    vec![own]
+                } else {
+                    m.im.list_members(&d.conversation)?
+                })?
             }
             "member_add" | "member_remove" => {
                 let d: Member = serde_json::from_value(args)?;
@@ -166,8 +291,7 @@ impl ToolService {
             }
             "message_status" => {
                 let d: MessageIdInput = serde_json::from_value(args)?;
-                let message = m.im.get_message(&d.message_id)?;
-                m.member(&message.conversation_id)?;
+                m.im.visible_message(&d.message_id, &m.actor.principal)?;
                 json!(m.im.delivery_status(&d.message_id)?.into_iter().map(|d|json!({"principal":d.principal_id,"state":d.state,"run_id":d.run_id,"error":d.error})).collect::<Vec<_>>())
             }
             _ => bail!("unknown tool"),
@@ -178,7 +302,7 @@ impl ToolService {
 fn schema(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
     json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false}})
 }
-fn schemas(role: Role) -> Vec<Value> {
+fn schemas(role: Role, resource_management: bool) -> Vec<Value> {
     let string = json!({"type":"string"});
     let mut tools = vec![
         schema(
@@ -201,15 +325,33 @@ fn schemas(role: Role) -> Vec<Value> {
         ),
         schema(
             "group_create",
-            "Create a group owned by yourself. Messages broadcast to current members.",
+            "Create a group. Agent creators must have a configured workspace owner, who is automatically included as group owner; the creating Agent is an admin. Messages broadcast to current members.",
             json!({"title":string,"members":{"type":"array","items":string}}),
             &["title", "members"],
         ),
         schema(
             "conversation_list",
-            "List your conversations.",
-            json!({}),
+            "List your personal conversation entries, including read-only departed/dissolved history. groups_only lists your current groups; include_hidden finds removed entries.",
+            json!({"include_hidden":{"type":"boolean"},"groups_only":{"type":"boolean"}}),
             &[],
+        ),
+        schema(
+            "conversation_hide",
+            "Remove only your conversation entry; membership, messages and Agent execution are unchanged. New messages reveal the entry again for active members.",
+            json!({"conversation":string}),
+            &["conversation"],
+        ),
+        schema(
+            "conversation_show",
+            "Restore your personal conversation entry without rejoining or reactivating a group.",
+            json!({"conversation":string}),
+            &["conversation"],
+        ),
+        schema(
+            "group_dissolve",
+            "Permanently dissolve a group you own. Retains read-only history and stops further messages; cannot be restored.",
+            json!({"conversation":string}),
+            &["conversation"],
         ),
         schema(
             "member_list",
@@ -237,7 +379,7 @@ fn schemas(role: Role) -> Vec<Value> {
         ),
         schema(
             "message_send",
-            "Send as your fixed identity. Reuse request_key only for identical content. Use mentions to request group responses; sending does not synchronously wait for agents.",
+            "Send as your fixed identity. Reuse request_key only for identical content. Do not resend a successful message with a new key; identical sends within one runtime Run reuse the first successful key. A successful send to the triggering conversation suppresses automatic final publication. Use mentions to request group responses; sending does not synchronously wait for agents.",
             json!({"conversation":string,"body":string,"request_key":string,"mentions":{"type":"array","items":string},"reply_to":{"type":["string","null"],"description":"Existing message ID in this conversation. Omit or null for a new message; blank strings are treated as absent."}}),
             &["conversation", "body", "request_key"],
         ),
@@ -260,17 +402,32 @@ fn schemas(role: Role) -> Vec<Value> {
             &["id"],
         ),
     ];
-    if role == Role::Manager {
+    if role == Role::Manager || resource_management {
         let kind = json!({"enum":["provider","model","prompt","skill","mcp","agent"]});
         tools.extend([
             schema("resource_list","List resource summaries. Secrets are redacted.",json!({"kind":kind}),&["kind"]),
             schema("resource_read","Read a resource by category/name (default category optional). Skills support @scope/package. Secrets are redacted.",json!({"kind":kind,"reference":string}),&["kind","reference"]),
-            schema("resource_write","Create or update resource. data: provider create {base_url,api_key_env}, update either field; model create {provider,model,params?: ModelConfigUpdate}, update ModelConfigUpdate fields directly; prompt {text}; skill create {description}, update {text: full SKILL.md}; mcp single-server {mcpServers:{name:config}}; agent {model,prompt?,skills?,mcps?,description?}, model required on create. Agent arrays replace mounts (empty unmounts all); omitted fields unchanged. Categories must exist. Provider env credentials resolve in the server process, never returned.",json!({"kind":kind,"reference":string,"create":{"type":"boolean"},"data":{"type":"object"}}),&["kind","reference","create","data"]),
-            schema("resource_delete","First omit confirm (or use null) to get dependency-aware deletion plan; then pass exact ordered items as confirm. Empty array does not authorize a nonempty plan. Protects default prompt/gateway.",json!({"kind":kind,"reference":string,"recursive":{"type":"boolean","default":false},"confirm":{"type":["array","null"],"items":string}}),&["kind","reference"]),
-            schema("principal_create","Register external user/service or agent identity. Does not start inference.",json!({"id":string,"name":string,"kind":{"enum":["user","agent","bot","service","other"]}}),&["id","name","kind"]),
-            schema("agent_bind","Host an Agent principal using an agent definition. Binding affects future unprepared deliveries. allow_mcp also requires worker --allow-mcp. max_depth bounds automated reply chains; default policy is mentioned.",json!({"principal":string,"agent":string,"working_directory":string,"policy":{"enum":["all","mentioned","manual"]},"max_steps":{"type":"integer","minimum":1,"maximum":100},"max_depth":{"type":"integer","minimum":1,"maximum":8},"allow_mcp":{"type":"boolean","default":false}}),&["principal","agent","working_directory","max_steps","max_depth"]),
-            schema("agent_unbind","Stop hosting a participant; existing records remain.",json!({"principal":string}),&["principal"]),
-            schema("binding_list","List hosted agent bindings.",json!({}),&[]),
+            schema("resource_write","Create or update resource. data: provider create {base_url,api_key} (api_key_env alternative), update any field; model create {provider,model,params?: ModelConfigUpdate}, update ModelConfigUpdate fields directly. ModelConfigUpdate.context_window is the input token window (4096..2000000, default 272000) used by runtime auto compaction; it does not limit output tokens; prompt {text}; skill create {description}, update {text: full SKILL.md}; mcp single-server {mcpServers:{name:config}}; agent {model,prompt?,skills?,mcps?,builtin_tools?: [resource_management],description?}, model required on create. Agent arrays replace mounts (empty unmounts all); omitted fields unchanged. Categories must exist. Use exactly one of api_key/api_key_env; credentials are never returned. builtin_tools grants resource and Agent lifecycle management in subsequent runs. Agent writes return a configuration summary plus activation status and next_steps. Do not report an Agent ready until its intended binding has enabled=true. Creating an Agent definition does not enable it: use principal_create(kind=agent), then agent_bind; use binding_list to inspect existing identities first.",json!({"kind":kind,"reference":string,"create":{"type":"boolean"},"data":{"type":"object"}}),&["kind","reference","create","data"]),
+            schema("resource_delete","First omit confirm (or use null) to get dependency-aware deletion plan; then pass exact ordered items as confirm. Empty array does not authorize a nonempty plan. Protects the default prompt.",json!({"kind":kind,"reference":string,"recursive":{"type":"boolean","default":false},"confirm":{"type":["array","null"],"items":string}}),&["kind","reference"]),
+            schema("provider_models", "Fetch model IDs using stored Provider credentials. Calls /models; does not run inference.", json!({"reference":string}), &["reference"]),
+            schema("resource_test", "Validate Provider or MCP configuration only. Does not contact servers or execute MCP commands.", json!({"kind":{"enum":["provider","mcp"]},"reference":string}), &["kind","reference"]),
+            schema("resource_category_list", "List categories in a resource domain.", json!({"kind":kind}), &["kind"]),
+            schema("resource_category_create", "Create a category in a resource domain.", json!({"kind":kind,"category":string}), &["kind","category"]),
+            schema("resource_category_delete", "Delete an empty non-default category. Nonempty and default categories are protected.", json!({"kind":kind,"category":string}), &["kind","category"]),
+        ]);
+    }
+    if role == Role::Manager || resource_management {
+        let principal_kinds = if role == Role::Manager {
+            json!({"enum":["user","agent","bot","service","other"]})
+        } else {
+            json!({"enum":["agent"]})
+        };
+        tools.extend([
+            schema("principal_create","Register a new identity (resource-managed Agents may create only kind=agent). Does not enable execution: create the Agent resource, register its identity, then agent_bind. Use principal_list before creating; never reuse another Agent identity accidentally.",json!({"id":string,"name":string,"kind":principal_kinds}),&["id","name","kind"]),
+            schema("agent_bind","Configure an Agent identity to run an existing Agent definition. New bindings start enabled; updating an existing disabled binding preserves disabled state, so call agent_set_enabled(true) to resume. Defaults: workspace home directory, unlimited model steps, mentioned policy, MCP disabled. May trigger pending authorized messages. Check binding_list first: reusing a principal updates its existing binding. allow_mcp still requires discussion authorization.",json!({"principal":string,"agent":string,"working_directory":string,"policy":{"enum":["all","mentioned","manual"]},"max_steps":{"type":"integer","description":"Deprecated compatibility field; ignored. Model steps are unlimited."},"allow_mcp":{"type":"boolean","default":false}}),&["principal","agent"]),
+            schema("agent_set_enabled","Enable or disable an existing binding across all conversations while preserving identity, history and running settings. Needs agent_bind first. Enabling may process pending authorized messages; disabling cancels further work, but cannot undo external requests. Disabling yourself stops your current hosted task.",json!({"principal":string,"enabled":{"type":"boolean"}}),&["principal","enabled"]),
+            schema("agent_unbind","Remove an Agent identity’s running settings and disable execution; identity and messages remain. For ordinary stopping use agent_set_enabled(false) instead. Unbind before deleting a bound Agent resource.",json!({"principal":string}),&["principal"]),
+            schema("binding_list","List saved agent bindings, including their enabled state.",json!({}),&[]),
         ]);
     }
     tools
@@ -348,6 +505,14 @@ fn matches_spec(spec: &Value, value: &Value) -> bool {
 struct Empty {}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct ConversationList {
+    #[serde(default)]
+    include_hidden: bool,
+    #[serde(default)]
+    groups_only: bool,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Kind {
     kind: String,
 }
@@ -356,6 +521,17 @@ struct Kind {
 struct Reference {
     kind: String,
     reference: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderReference {
+    reference: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Category {
+    kind: String,
+    category: String,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

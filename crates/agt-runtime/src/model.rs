@@ -1,13 +1,38 @@
 use std::io::Read;
 use std::time::Duration;
 
+use agt_core::CancellationToken;
+use agt_model::ModelApiFormat;
 use serde_json::{Value, json};
 
 use crate::{ResolvedAgent, Result, RuntimeError};
 
-/// Returns one assistant message (content and/or function tool_calls).
+/// Public text deltas and operational phases; never raw private reasoning.
+pub enum ModelEvent<'a> {
+    Attempt(u32),
+    Retrying,
+    Text(&'a str),
+    Reasoning,
+    Tool,
+}
+
+/// Returns one complete assistant message (content and/or function tool_calls).
 /// Implementations must report truncated/refused responses as errors.
 pub trait ModelClient {
+    fn complete_stream(
+        &mut self,
+        agent: &ResolvedAgent,
+        messages: &[Value],
+        tools: &[Value],
+        _progress: &mut dyn FnMut(ModelEvent<'_>) -> Result<()>,
+    ) -> Result<Value> {
+        self.complete(agent, messages, tools)
+    }
+
+    /// Retry waits must observe hosted cancellation as well as the caller token.
+    fn check_canceled(&self) -> Result<()> {
+        Ok(())
+    }
     fn complete(
         &mut self,
         agent: &ResolvedAgent,
@@ -16,6 +41,100 @@ pub trait ModelClient {
     ) -> Result<Value>;
 }
 
+/// Retries one logical model step, never tools or the whole Run.
+pub(crate) fn complete_with_retry(
+    model: &mut dyn ModelClient,
+    agent: &ResolvedAgent,
+    messages: &[Value],
+    tools: &[Value],
+    cancellation: &CancellationToken,
+    attempts: &mut u32,
+) -> Result<Value> {
+    complete_with_progress(
+        model,
+        agent,
+        messages,
+        tools,
+        cancellation,
+        attempts,
+        &mut |_| Ok(()),
+    )
+}
+
+pub(crate) fn complete_with_progress(
+    model: &mut dyn ModelClient,
+    agent: &ResolvedAgent,
+    messages: &[Value],
+    tools: &[Value],
+    cancellation: &CancellationToken,
+    attempts: &mut u32,
+    progress: &mut dyn FnMut(ModelEvent<'_>) -> Result<()>,
+) -> Result<Value> {
+    const MAX_ATTEMPTS: u32 = 10;
+    for attempt in 1..=MAX_ATTEMPTS {
+        check_retry_canceled(model, cancellation)?;
+        *attempts = attempt;
+        progress(ModelEvent::Attempt(attempt))?;
+        let result = model
+            .complete_stream(agent, messages, tools, progress)
+            .and_then(|message| {
+                if message["content"]
+                    .as_str()
+                    .is_none_or(|s| s.trim().is_empty())
+                    && message["tool_calls"].as_array().is_none_or(Vec::is_empty)
+                {
+                    Err(RuntimeError::Model("empty model response"))
+                } else {
+                    Ok(message)
+                }
+            });
+        check_retry_canceled(model, cancellation)?;
+        match result {
+            Ok(message) => return Ok(message),
+            Err(error) if retryable(&error) => {
+                if attempt == MAX_ATTEMPTS {
+                    return Err(RuntimeError::ModelRetriesExhausted {
+                        attempts: attempt,
+                        last: Box::new(error),
+                    });
+                }
+                progress(ModelEvent::Retrying)?;
+                // Bounded exponential backoff, interruptible between requests.
+                let delay = Duration::from_millis((250u64 << (attempt - 1)).min(4000));
+                let until = std::time::Instant::now() + delay;
+                while let Some(remaining) = until.checked_duration_since(std::time::Instant::now())
+                {
+                    check_retry_canceled(model, cancellation)?;
+                    std::thread::sleep(remaining.min(Duration::from_millis(50)));
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!()
+}
+fn check_retry_canceled(model: &dyn ModelClient, token: &CancellationToken) -> Result<()> {
+    if token.is_canceled() {
+        return Err(RuntimeError::Canceled);
+    }
+    model.check_canceled()
+}
+fn retryable(error: &RuntimeError) -> bool {
+    matches!(
+        error,
+        RuntimeError::HttpStatus(_)
+            | RuntimeError::Model(
+                "HTTP request failed or timed out"
+                    | "cannot read HTTP response"
+                    | "invalid JSON response"
+                    | "empty model response"
+                    | "model returned an error"
+                    | "incomplete event stream"
+            )
+    )
+}
+
+/// Routes HTTP requests by the model's API format; retains its historical name.
 #[derive(Default)]
 pub struct ChatCompletions;
 
@@ -25,6 +144,15 @@ impl ModelClient for ChatCompletions {
         agent: &ResolvedAgent,
         messages: &[Value],
         tools: &[Value],
+    ) -> Result<Value> {
+        self.complete_stream(agent, messages, tools, &mut |_| Ok(()))
+    }
+    fn complete_stream(
+        &mut self,
+        agent: &ResolvedAgent,
+        messages: &[Value],
+        tools: &[Value],
+        progress: &mut dyn FnMut(ModelEvent<'_>) -> Result<()>,
     ) -> Result<Value> {
         let mut url = reqwest::Url::parse(&agent.provider.base_url)
             .map_err(|_| RuntimeError::Configuration("invalid provider URL"))?;
@@ -38,22 +166,43 @@ impl ModelClient for ChatCompletions {
                 "provider URL must be HTTP(S) without credentials, query or fragment",
             ));
         }
-        url.set_path(&format!(
-            "{}/chat/completions",
-            url.path().trim_end_matches('/')
-        ));
+        let responses = agent.model.api_format == ModelApiFormat::Responses;
+        let endpoint = if responses {
+            "responses"
+        } else {
+            "chat/completions"
+        };
+        url.set_path(&format!("{}/{endpoint}", url.path().trim_end_matches('/')));
         let params = &agent.model.params;
-        let mut body = json!({"model": agent.model.model, "messages": messages, "stream": false});
-        if let Some(effort) = params.reasoning_effort {
-            body["reasoning_effort"] = json!(effort.as_str());
+        let mut body = if responses {
+            responses_request(messages, tools)?
+        } else {
+            let mut body = json!({"messages": messages});
+            if !tools.is_empty() {
+                body["tools"] = json!(tools);
+            }
+            body
+        };
+        body["model"] = json!(agent.model.model);
+        body["stream"] = json!(true);
+        if !responses {
+            body["stream_options"] = json!({"include_usage":true});
+        }
+        if let Some(effort) = &params.reasoning_effort {
+            if responses {
+                body["reasoning"] = json!({"effort": effort.as_str()});
+            } else {
+                body["reasoning_effort"] = json!(effort.as_str());
+            }
         } else {
             body["temperature"] = json!(params.temperature);
         }
         if let Some(limit) = params.max_tokens {
-            body["max_completion_tokens"] = json!(limit);
-        }
-        if !tools.is_empty() {
-            body["tools"] = json!(tools);
+            body[if responses {
+                "max_output_tokens"
+            } else {
+                "max_completion_tokens"
+            }] = json!(limit);
         }
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(u64::from(params.timeout)))
@@ -69,6 +218,21 @@ impl ModelClient for ChatCompletions {
         if !response.status().is_success() {
             return Err(RuntimeError::HttpStatus(response.status().as_u16()));
         }
+        if response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| {
+                v.split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .eq_ignore_ascii_case("text/event-stream")
+            })
+        {
+            return crate::model_stream::read(response, responses, progress);
+        }
+        // Compatible providers may ignore stream=true and return a single JSON response.
         const MAX_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
         let mut bytes = Vec::new();
         response
@@ -80,13 +244,150 @@ impl ModelClient for ChatCompletions {
         }
         let response: Value = serde_json::from_slice(&bytes)
             .map_err(|_| RuntimeError::Model("invalid JSON response"))?;
+        if !response["error"].is_null() {
+            return Err(RuntimeError::Model("model returned an error"));
+        }
+        if response["choices"].as_array().is_some_and(Vec::is_empty)
+            || response.is_null()
+            || response.as_object().is_some_and(serde_json::Map::is_empty)
+        {
+            return Err(RuntimeError::Model("empty model response"));
+        }
+        if responses {
+            return responses_message(&response)
+                .map(|message| attach_usage(message, &response["usage"], true));
+        }
         let choice = &response["choices"][0];
         let message = &choice["message"];
         match choice["finish_reason"].as_str() {
-            Some("stop" | "tool_calls") if message["refusal"].is_null() => Ok(message.clone()),
+            Some("stop" | "tool_calls") if message["refusal"].is_null() => {
+                Ok(attach_usage(message.clone(), &response["usage"], false))
+            }
             _ => Err(RuntimeError::Model(
                 "response was incomplete, refused or unsupported",
             )),
+        }
+    }
+}
+
+// Host-only accounting. Runtime consumes/removes this before appending to history.
+pub(crate) fn attach_usage(mut message: Value, usage: &Value, responses: bool) -> Value {
+    let total = usage["total_tokens"].as_u64().or_else(|| {
+        let (input, output) = if responses {
+            ("input_tokens", "output_tokens")
+        } else {
+            ("prompt_tokens", "completion_tokens")
+        };
+        Some(
+            usage[input]
+                .as_u64()?
+                .saturating_add(usage[output].as_u64()?),
+        )
+    });
+    // Ignore nonsensical zero totals; cached input is already included in input/total.
+    if let Some(total) = total.filter(|n| *n > 0) {
+        message["_agt_total_tokens"] = json!(total);
+    }
+    message
+}
+
+fn responses_request(messages: &[Value], tools: &[Value]) -> Result<Value> {
+    let mut input = Vec::new();
+    for message in messages {
+        // Keep complete output (including reasoning and phase) in this run's
+        // in-memory transcript, never in shared client state or audit records.
+        if let Some(output) = message["_responses_output"].as_array() {
+            input.extend(output.iter().cloned());
+        } else if message["role"] == "tool" {
+            input.push(json!({"type":"function_call_output", "call_id":message["tool_call_id"], "output":message["content"]}));
+        } else {
+            input.push(message.clone());
+        }
+    }
+    let mut body = json!({"input":input,"store":false,"include":["reasoning.encrypted_content"]});
+    if !tools.is_empty() {
+        let converted = tools
+            .iter()
+            .map(|tool| {
+                let mut function = tool["function"]
+                    .as_object()
+                    .cloned()
+                    .ok_or(RuntimeError::Model("invalid function tool schema"))?;
+                function.insert("type".into(), json!("function"));
+                // Responses defaults to strict; preserve optional fields in existing
+                // MCP/framework schemas unless the schema explicitly opts in.
+                function.entry("strict").or_insert(json!(false));
+                Ok(Value::Object(function))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        body["tools"] = json!(converted);
+    }
+    Ok(body)
+}
+
+pub(crate) fn responses_message(response: &Value) -> Result<Value> {
+    let invalid = || RuntimeError::Model("response was incomplete, refused or unsupported");
+    if response["status"] != "completed" || !response["error"].is_null() {
+        return Err(invalid());
+    }
+    let output = response["output"].as_array().ok_or_else(invalid)?;
+    let mut content = String::new();
+    let mut calls = Vec::new();
+    for item in output {
+        if !item["status"].is_null() && item["status"] != "completed" {
+            return Err(invalid());
+        }
+        match item["type"].as_str() {
+            Some("reasoning") => {}
+            Some("message") if item["role"] == "assistant" => {
+                for part in item["content"].as_array().ok_or_else(invalid)? {
+                    if part["type"] != "output_text" {
+                        return Err(invalid());
+                    }
+                    content.push_str(part["text"].as_str().ok_or_else(invalid)?);
+                }
+            }
+            Some("function_call") => calls.push(json!({"type":"function", "id":item["call_id"],
+                "function":{"name":item["name"],"arguments":item["arguments"]}})),
+            _ => return Err(invalid()),
+        }
+    }
+    Ok(json!({"role":"assistant","content":content,"tool_calls":calls,"_responses_output":output}))
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::*;
+    #[test]
+    fn protocol_usage_counts_cached_input_once_and_omissions_fall_back() {
+        let message = json!({"role":"assistant","content":"ok"});
+        assert_eq!(
+            attach_usage(
+                message.clone(),
+                &json!({"total_tokens":101,"prompt_tokens":100,"completion_tokens":1,"prompt_tokens_details":{"cached_tokens":80}}),
+                false
+            )["_agt_total_tokens"],
+            101
+        );
+        assert_eq!(
+            attach_usage(
+                message.clone(),
+                &json!({"input_tokens":100,"output_tokens":2,"input_tokens_details":{"cached_tokens":80}}),
+                true
+            )["_agt_total_tokens"],
+            102
+        );
+        for missing in [
+            Value::Null,
+            json!({}),
+            json!({"total_tokens":0}),
+            json!({"total_tokens":-1}),
+        ] {
+            assert!(
+                attach_usage(message.clone(), &missing, false)
+                    .get("_agt_total_tokens")
+                    .is_none()
+            );
         }
     }
 }

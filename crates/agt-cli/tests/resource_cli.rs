@@ -269,3 +269,115 @@ fn default_home_is_prepared_without_explicit_init() {
 
     let _ = fs::remove_dir_all(parent);
 }
+
+#[test]
+fn builtin_resource_mounts_are_configurable_from_cli() {
+    let home = temp_home("builtin");
+    assert!(init(&home).status.success());
+    for args in [
+        vec![
+            "provider",
+            "create",
+            "p",
+            "--base-url",
+            "http://localhost/v1",
+            "--api-key",
+            "fixture",
+        ],
+        vec![
+            "model",
+            "create",
+            "m",
+            "--provider",
+            "p",
+            "--model",
+            "fixture",
+        ],
+        vec![
+            "agent",
+            "create",
+            "a",
+            "--model",
+            "m",
+            "--builtin-tool",
+            "resource_management",
+        ],
+    ] {
+        assert!(run(&home, &args).status.success());
+    }
+    let info = || {
+        serde_json::from_slice::<serde_json::Value>(
+            &run(&home, &["--output", "json", "agent", "info", "a"]).stdout,
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        info()["builtin_tools"],
+        serde_json::json!(["resource_management"])
+    );
+    assert!(
+        run(
+            &home,
+            &[
+                "agent",
+                "update",
+                "a",
+                "--remove-builtin-tool",
+                "resource_management"
+            ]
+        )
+        .status
+        .success()
+    );
+    assert_eq!(info()["builtin_tools"], serde_json::json!([]));
+    assert!(
+        run(
+            &home,
+            &[
+                "agent",
+                "update",
+                "a",
+                "--add-builtin-tool",
+                "resource_management"
+            ]
+        )
+        .status
+        .success()
+    );
+    assert!(
+        !run(
+            &home,
+            &[
+                "agent",
+                "update",
+                "a",
+                "--description",
+                "must-not-save",
+                "--add-builtin-tool",
+                "unknown"
+            ]
+        )
+        .status
+        .success()
+    );
+    assert_eq!(info()["description"], "");
+    assert!(
+        !run(
+            &home,
+            &[
+                "agent",
+                "create",
+                "duplicate",
+                "--model",
+                "m",
+                "--builtin-tool",
+                "resource_management",
+                "--builtin-tool",
+                "resource_management"
+            ]
+        )
+        .status
+        .success()
+    );
+    fs::remove_dir_all(home).unwrap();
+}

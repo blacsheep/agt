@@ -1,5 +1,5 @@
 use crate::deletion::{ResourceKey, ResourceKind};
-use agt_agent::{AgentConfig, AgentStore};
+use agt_agent::{AgentConfig, AgentStore, BuiltinTool};
 use agt_core::{CategoryName, McpId, ModelId, PackageRef, PromptId, QualifiedRef, ResourceRef};
 use agt_mcp::{McpDocument, McpStore, McpWritePlan};
 use agt_model::{ModelConfig, ModelConfigUpdate, ModelReference, ModelStore, ModelSummary};
@@ -61,8 +61,11 @@ impl Resources {
             "provider" => {
                 if create {
                     let d: ProviderCreate = serde_json::from_value(data)?;
-                    let secret = std::env::var(d.api_key_env).map_err(|_| {
-                        anyhow::anyhow!("provider credential environment variable is unavailable")
+                    let secret = provider_secret(d.api_key, d.api_key_env)?.ok_or_else(|| {
+                        crate::ToolError::invalid(
+                            Some("data.api_key"),
+                            "Provider creation requires api_key or api_key_env.",
+                        )
                     })?;
                     ProviderStore::new(h).create_in(
                         &category,
@@ -70,16 +73,7 @@ impl Resources {
                     )?;
                 } else {
                     let d: ProviderUpdate = serde_json::from_value(data)?;
-                    let secret = d
-                        .api_key_env
-                        .map(|key| {
-                            std::env::var(key).map_err(|_| {
-                                anyhow::anyhow!(
-                                    "provider credential environment variable is unavailable"
-                                )
-                            })
-                        })
-                        .transpose()?;
+                    let secret = provider_secret(d.api_key, d.api_key_env)?;
                     ProviderStore::new(h).update_in(
                         &category,
                         &name,
@@ -138,7 +132,11 @@ impl Resources {
                 let document =
                     McpDocument::parse(Path::new("mcp.json"), &serde_json::to_string(&data)?)?;
                 if document.name.as_str() != name {
-                    bail!("MCP server identity mismatch");
+                    return Err(crate::ToolError::invalid(
+                        Some("data.mcpServers"),
+                        "MCP server name must match the resource name.",
+                    )
+                    .into());
                 }
                 let plan = if create {
                     McpWritePlan::create(document)
@@ -170,6 +168,42 @@ impl Resources {
             _ => bail!("unknown resource kind"),
         }
         self.read(kind, reference)
+    }
+    pub fn provider_models(&self, reference: &str) -> Result<Value> {
+        let (category, name) = resource_ref("provider", reference)?;
+        Ok(serde_json::to_value(
+            ProviderStore::new(&self.home).list_models_summary_in(&category, &name)?,
+        )?)
+    }
+    pub fn test(&self, kind: &str, reference: &str) -> Result<Value> {
+        let (category, name) = resource_ref(kind, reference)?;
+        match kind {
+            "provider" => Ok(serde_json::to_value(
+                ProviderStore::new(&self.home).validate_summary_in(&category, &name)?,
+            )?),
+            "mcp" => {
+                McpStore::new(&self.home)
+                    .read_in(&category, &name)?
+                    .document
+                    .validate()?;
+                Ok(
+                    json!({"resource": self.read(kind, reference)?, "status": "valid", "connected": false}),
+                )
+            }
+            _ => bail!("configuration testing supports provider and mcp only"),
+        }
+    }
+    pub fn categories(&self, kind: &str) -> Result<agt_config::DefinitionCategories> {
+        let h = &self.home;
+        Ok(match kind {
+            "provider" => ProviderStore::new(h).categories(),
+            "model" => ModelStore::new(h).categories(),
+            "prompt" => PromptStore::new(h).categories(),
+            "skill" => SkillStore::new(h).categories(),
+            "mcp" => McpStore::new(h).categories(),
+            "agent" => AgentStore::new(h).categories(),
+            _ => bail!("unknown resource kind"),
+        })
     }
     pub fn delete(
         &self,
@@ -214,23 +248,60 @@ pub fn resource_ref(kind: &str, raw: &str) -> Result<(CategoryName, String)> {
         } else {
             raw.split_once('/').unwrap_or(("default", raw))
         };
-        let _: PackageRef = name.parse()?;
+        let _: PackageRef = name.parse().map_err(|_| crate::ToolError::invalid(
+            Some("reference"),
+            "Skill names require lowercase letters, digits and single hyphens; use package or @scope/package (each component at most 64 characters).",
+        ))?;
         Ok((CategoryName::new(category)?, name.into()))
     } else {
         crate::named_ref(raw)
     }
 }
 
+fn provider_secret(key: Option<String>, env: Option<String>) -> Result<Option<String>> {
+    match (key, env) {
+        (Some(_), Some(_)) => Err(crate::ToolError::invalid(
+            Some("data.api_key"),
+            "Use api_key or api_key_env, not both.",
+        )
+        .into()),
+        (Some(key), None) if key.trim().is_empty() => Err(crate::ToolError::invalid(
+            Some("data.api_key"),
+            "API key must not be empty.",
+        )
+        .into()),
+        (Some(key), None) => Ok(Some(key)),
+        (None, Some(env)) => provider_credential(&env).map(Some),
+        (None, None) => Ok(None),
+    }
+}
+
+fn provider_credential(key: &str) -> Result<String> {
+    let secret = std::env::var(key.trim()).map_err(|_| crate::ToolError::invalid(
+        Some("data.api_key_env"),
+        "Provider credential environment variable is unavailable. Set it before starting the Web server, then restart the server.",
+    ))?;
+    if secret.trim().is_empty() {
+        return Err(crate::ToolError::invalid(
+            Some("data.api_key_env"),
+            "Provider credential environment variable is empty. Set a non-empty API key and restart the Web server.",
+        ).into());
+    }
+    Ok(secret)
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProviderCreate {
     base_url: String,
-    api_key_env: String,
+    api_key: Option<String>,
+    api_key_env: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProviderUpdate {
     base_url: Option<String>,
+    api_key: Option<String>,
     api_key_env: Option<String>,
 }
 #[derive(Deserialize)]
@@ -258,12 +329,13 @@ struct AgentWrite {
     prompt: Option<String>,
     skills: Option<Vec<String>>,
     mcps: Option<Vec<String>>,
+    builtin_tools: Option<Vec<BuiltinTool>>,
     description: Option<String>,
 }
 fn apply_agent(config: &mut AgentConfig, d: &AgentWrite) -> Result<()> {
     if let Some(value) = &d.model {
         let (c, n) = crate::named_ref(value)?;
-        config.model = Some(QualifiedRef::new(c, ModelId::new(n)));
+        config.model = QualifiedRef::new(c, ModelId::new(n));
     }
     if let Some(value) = &d.prompt {
         let (c, n) = crate::named_ref(value)?;
@@ -286,6 +358,9 @@ fn apply_agent(config: &mut AgentConfig, d: &AgentWrite) -> Result<()> {
                 Ok(QualifiedRef::new(c, McpId::new(n)))
             })
             .collect::<Result<_>>()?;
+    }
+    if let Some(values) = &d.builtin_tools {
+        config.builtin_tools = values.clone();
     }
     if let Some(value) = &d.description {
         config.description = value.clone();

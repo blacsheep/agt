@@ -53,7 +53,7 @@ pub fn serve(service: &ToolService, mut input: impl BufRead, mut output: impl Wr
                 } else {
                     initialized = true;
                     Ok(
-                        json!({"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"agt-framework","version":env!("CARGO_PKG_VERSION")},"instructions":"Your identity and role are fixed by the host. Send messages then inspect history/inbox; a separately launched agt worker executes hosted agents."}),
+                        json!({"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"agt-framework","version":env!("CARGO_PKG_VERSION")},"instructions":"Your identity and role are fixed by the host. Send messages then inspect history/inbox; the host authorizes discussions and runs agt schedule run to execute hosted agents."}),
                     )
                 }
             }

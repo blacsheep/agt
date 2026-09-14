@@ -706,8 +706,7 @@ fn read_next_message_bytes(
     limits: McpLimits,
 ) -> std::result::Result<Option<Vec<u8>>, TransportReadError> {
     loop {
-        let initial_line_max = limits.max_frame_bytes.max(limits.max_legacy_header_bytes);
-        let Some(mut line) = read_bounded_line(reader, initial_line_max, "frame_or_header_bytes")?
+        let Some(mut line) = read_bounded_line(reader, limits.max_frame_bytes, "frame_bytes")?
         else {
             return Ok(None);
         };
@@ -724,43 +723,6 @@ fn read_next_message_bytes(
                 });
             }
             return Ok(Some(line));
-        }
-        if let Some(length) = parse_content_length(&line)? {
-            if line.len() > limits.max_legacy_header_bytes {
-                return Err(TransportReadError::Limit {
-                    limit: "legacy_header_bytes",
-                    max: limits.max_legacy_header_bytes,
-                    actual: line.len(),
-                });
-            }
-            let mut header_bytes = line.len();
-            loop {
-                let remaining = limits.max_legacy_header_bytes.saturating_sub(header_bytes);
-                let Some(mut header) = read_bounded_line(reader, remaining, "legacy_header_bytes")?
-                else {
-                    return Err(TransportReadError::Io(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        "读取 Content-Length 头时遇到 EOF",
-                    )));
-                };
-                header_bytes = header_bytes.saturating_add(header.len());
-                trim_line_ending(&mut header);
-                if header.is_empty() {
-                    break;
-                }
-            }
-            if length > limits.max_frame_bytes {
-                return Err(TransportReadError::Limit {
-                    limit: "frame_bytes",
-                    max: limits.max_frame_bytes,
-                    actual: length,
-                });
-            }
-            let mut body = vec![0; length];
-            reader
-                .read_exact(&mut body)
-                .map_err(TransportReadError::Io)?;
-            return Ok(Some(body));
         }
         return Err(TransportReadError::Io(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -808,22 +770,6 @@ fn trim_line_ending(line: &mut Vec<u8>) {
     if line.last() == Some(&b'\r') {
         line.pop();
     }
-}
-
-fn parse_content_length(line: &[u8]) -> std::result::Result<Option<usize>, TransportReadError> {
-    let text = std::str::from_utf8(line).map_err(|source| {
-        TransportReadError::Io(io::Error::new(io::ErrorKind::InvalidData, source))
-    })?;
-    let Some((key, value)) = text.split_once(':') else {
-        return Ok(None);
-    };
-    if !key.trim().eq_ignore_ascii_case("Content-Length") {
-        return Ok(None);
-    }
-    let length = value.trim().parse::<usize>().map_err(|source| {
-        TransportReadError::Io(io::Error::new(io::ErrorKind::InvalidData, source))
-    })?;
-    Ok(Some(length))
 }
 
 fn serialized_len(value: &impl serde::Serialize) -> serde_json::Result<usize> {
@@ -1113,10 +1059,9 @@ for raw_line in sys.stdin:
     }
 
     #[test]
-    fn bounded_reader_rejects_oversized_newline_content_length_and_headers() {
+    fn bounded_reader_rejects_oversized_newline_frames() {
         let limits = McpLimits {
             max_frame_bytes: 16,
-            max_legacy_header_bytes: 24,
             ..McpLimits::default()
         };
 
@@ -1128,26 +1073,6 @@ for raw_line in sys.stdin:
             error,
             TransportReadError::Limit {
                 limit: "frame_bytes",
-                ..
-            }
-        ));
-
-        let mut content_length = Cursor::new(b"Content-Length: 17\r\n\r\n".to_vec());
-        let error = read_next_message_bytes(&mut content_length, limits).expect_err("body limit");
-        assert!(matches!(
-            error,
-            TransportReadError::Limit {
-                limit: "frame_bytes",
-                ..
-            }
-        ));
-
-        let mut headers = Cursor::new(b"Content-Length: 2\r\nX-Long: 123456789\r\n\r\n{}".to_vec());
-        let error = read_next_message_bytes(&mut headers, limits).expect_err("header limit");
-        assert!(matches!(
-            error,
-            TransportReadError::Limit {
-                limit: "legacy_header_bytes",
                 ..
             }
         ));

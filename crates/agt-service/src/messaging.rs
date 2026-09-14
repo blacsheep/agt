@@ -17,7 +17,7 @@ pub enum Role {
 pub struct Actor {
     pub principal: PrincipalId,
     pub role: Role,
-    /// Set only by hosted execution. Tools cannot lower this depth.
+    /// Host-owned causal-depth metadata for diagnostics, never an execution limit.
     pub automated_depth: Option<u32>,
 }
 
@@ -45,12 +45,22 @@ pub struct MessageInput {
 pub struct Messaging {
     pub im: ImStore,
     pub actor: Actor,
+    discussion: Option<String>,
 }
 impl Messaging {
     pub fn open(home: &Path, actor: Actor) -> Result<Self> {
         let im = ImStore::open(crate::database_path(home, "im", "im.db")?)?;
         im.get_principal(&actor.principal)?;
-        Ok(Self { im, actor })
+        Ok(Self {
+            im,
+            actor,
+            discussion: None,
+        })
+    }
+    /// Runtime-only context, never accepted from model tool arguments.
+    pub fn with_discussion(mut self, discussion: Option<String>) -> Self {
+        self.discussion = discussion;
+        self
     }
     pub fn member(&self, conversation: &ConversationId) -> Result<()> {
         if self
@@ -114,11 +124,21 @@ impl Messaging {
                 .into());
             }
         }
-        self.im.send_message(SendMessageRequest{
-            conversation_id:input.conversation,sender_id:self.actor.principal.clone(),body:input.body,
-            client_message_id:Some(format!("tool:{}",input.request_key)),reply_to_id:input.reply_to,
-            metadata:json!({"mentions":input.mentions,"automated_depth":self.actor.automated_depth.unwrap_or(0)}),idempotency_key:None,
-        }).map_err(Into::into)
+        let mut metadata = json!({"mentions":input.mentions,"automated_depth":self.actor.automated_depth.unwrap_or(0)});
+        if let Some(id) = &self.discussion {
+            metadata["discussion_id"] = json!(id);
+        }
+        self.im
+            .send_message(SendMessageRequest {
+                conversation_id: input.conversation,
+                sender_id: self.actor.principal.clone(),
+                body: input.body,
+                client_message_id: Some(format!("tool:{}", input.request_key)),
+                reply_to_id: input.reply_to,
+                metadata,
+                idempotency_key: None,
+            })
+            .map_err(Into::into)
     }
     pub fn history(
         &self,
@@ -143,18 +163,11 @@ impl Messaging {
         &self,
         message: &agt_im::Message,
         policy: crate::ResponsePolicy,
-        max_depth: u32,
     ) -> Result<bool> {
         self.member(&message.conversation_id)?;
         let conversation = self.im.get_conversation(&message.conversation_id)?;
-        let depth = message
-            .metadata
-            .get("automated_depth")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
         if message.deleted_at.is_some()
             || conversation.state != ConversationState::Active
-            || depth >= u64::from(max_depth)
             || policy == crate::ResponsePolicy::Manual
         {
             return Ok(false);
