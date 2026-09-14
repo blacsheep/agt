@@ -1,0 +1,141 @@
+#![cfg(unix)]
+use agt_harness::{Codex, Environment, Event, Execution, Sandbox, Tool};
+use serde_json::json;
+use std::os::unix::fs::PermissionsExt;
+fn fixture() -> (tempfile::TempDir, Environment) {
+    let dir = tempfile::tempdir().unwrap();
+    let exe = dir.path().join("codex");
+    std::fs::write(&exe, include_str!("fixtures/codex.py")).unwrap();
+    std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let config = Environment {
+        engine: "codex".into(),
+        executable: exe,
+        working_directory: dir.path().into(),
+        model: None,
+        sandbox: Sandbox::ReadOnly,
+        timeout_seconds: 10,
+    };
+    (dir, config)
+}
+#[test]
+fn streams_final_and_bridges_tools_without_model_retries() {
+    let (_dir, config) = fixture();
+    let mut preview = String::new();
+    let mut thread = String::new();
+    let mut event = |e: Event<'_>| {
+        match e {
+            Event::Text(t) => preview.push_str(t),
+            Event::Thread(t) => thread = t.into(),
+            _ => {}
+        };
+        Ok(())
+    };
+    let mut client = Codex::connect(&config, &mut event).unwrap();
+    let tools = [Tool {
+        name: "framework_resource_list".into(),
+        description: "list".into(),
+        input_schema: json!({"type":"object"}),
+    }];
+    let mut calls = 0;
+    let output = client
+        .execute(
+            &config,
+            Execution {
+                input: "TOOL",
+                instructions: "role",
+                thread: None,
+                tools: &tools,
+            },
+            &mut event,
+            &mut |name, args| {
+                assert_eq!(name, "framework_resource_list");
+                assert_eq!(args["kind"], "agent");
+                calls += 1;
+                Ok(json!([]))
+            },
+        )
+        .unwrap();
+    assert_eq!(output, "tool completed");
+    assert_eq!(calls, 1);
+    assert_eq!(preview, "working preview");
+    assert!(!thread.is_empty());
+    drop(client);
+    let mut event = |_: Event<'_>| Ok(());
+    let mut client = Codex::connect(&config, &mut event).unwrap();
+    assert_eq!(
+        client
+            .execute(
+                &config,
+                Execution {
+                    input: "continue",
+                    instructions: "role",
+                    thread: Some(&thread),
+                    tools: &tools
+                },
+                &mut event,
+                &mut |_, _| unreachable!()
+            )
+            .unwrap(),
+        "fixture final answer"
+    );
+}
+#[test]
+fn failures_empty_and_approvals_are_not_replayed() {
+    for input in ["FAIL", "EMPTY", "APPROVE"] {
+        let (dir, config) = fixture();
+        let mut event = |_: Event<'_>| Ok(());
+        let mut client = Codex::connect(&config, &mut event).unwrap();
+        assert!(
+            client
+                .execute(
+                    &config,
+                    Execution {
+                        input,
+                        instructions: "",
+                        thread: None,
+                        tools: &[]
+                    },
+                    &mut event,
+                    &mut |_, _| unreachable!()
+                )
+                .is_err()
+        );
+        drop(client);
+        let log = std::fs::read_to_string(dir.path().join("protocol.jsonl")).unwrap();
+        assert_eq!(log.lines().filter(|l| l.contains("turn/start")).count(), 1);
+    }
+}
+#[test]
+fn cancellation_during_silent_execution_reaps_process() {
+    let (dir, config) = fixture();
+    let start = std::time::Instant::now();
+    let mut event = |_: Event<'_>| {
+        if start.elapsed().as_millis() > 250 {
+            anyhow::bail!("canceled");
+        }
+        Ok(())
+    };
+    let mut client = Codex::connect(&config, &mut event).unwrap();
+    assert!(
+        client
+            .execute(
+                &config,
+                Execution {
+                    input: "HANG",
+                    instructions: "",
+                    thread: None,
+                    tools: &[]
+                },
+                &mut event,
+                &mut |_, _| unreachable!()
+            )
+            .is_err()
+    );
+    drop(client);
+    assert!(start.elapsed().as_secs() < 3);
+    let pid = std::fs::read_to_string(dir.path().join("started"))
+        .unwrap()
+        .parse::<i32>()
+        .unwrap();
+    assert_eq!(unsafe { libc::kill(pid, 0) }, -1);
+}

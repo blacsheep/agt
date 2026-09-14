@@ -7,9 +7,25 @@ use crate::paths::{AgtPaths, default_agt_home};
 
 const DEFAULT_CONFIG: &str = "# agt 用户配置\n";
 
-const DEFAULT_DIRS: &[&str] = &["providers", "models", "skills", "mcps", "prompts", "agents"];
+const DEFAULT_DIRS: &[&str] = &[
+    "environments",
+    "providers",
+    "models",
+    "skills",
+    "mcps",
+    "prompts",
+    "agents",
+];
 
-const DEFINITION_DIRS: &[&str] = &["providers", "models", "skills", "mcps", "prompts", "agents"];
+const DEFINITION_DIRS: &[&str] = &[
+    "environments",
+    "providers",
+    "models",
+    "skills",
+    "mcps",
+    "prompts",
+    "agents",
+];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InitSummary {
@@ -70,7 +86,15 @@ mod tests {
 
         assert_eq!(summary.home, home);
         assert!(summary.config_file.is_file());
-        for dir in ["providers", "models", "skills", "mcps", "prompts", "agents"] {
+        for dir in [
+            "environments",
+            "providers",
+            "models",
+            "skills",
+            "mcps",
+            "prompts",
+            "agents",
+        ] {
             assert!(summary.home.join(dir).is_dir(), "missing {dir}");
         }
         for domain in DEFINITION_DIRS {

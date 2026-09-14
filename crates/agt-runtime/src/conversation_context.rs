@@ -6,7 +6,11 @@ use agt_im::{ConversationId, ImStore, MessageListOptions, PrincipalId};
 use serde_json::{Value, json};
 use std::path::Path;
 
-fn visible_history(im: &ImStore, task: &ScheduledTask, cutoff: i64) -> crate::Result<Vec<Value>> {
+pub(crate) fn visible_history(
+    im: &ImStore,
+    task: &ScheduledTask,
+    cutoff: i64,
+) -> crate::Result<Vec<Value>> {
     let mut result = Vec::new();
     let mut before = None;
     loop {

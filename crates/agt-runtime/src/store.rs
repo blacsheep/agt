@@ -32,6 +32,8 @@ pub struct RunRecord {
     pub context: crate::ContextCheckpoint,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<crate::RunProgress>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<serde_json::Value>,
 }
 
 pub struct RunStore {
@@ -147,6 +149,7 @@ impl RunStore {
             tool_failures: 0,
             context: Default::default(),
             progress: None,
+            execution: None,
         };
         tx.execute(
             "INSERT INTO runs (id, request_key, request_hash, parent_run_id, record_json)

@@ -130,7 +130,11 @@ pub(crate) fn schedule(command: ScheduleCommand, home: &Path, output: OutputMode
     };
     match command {
         ScheduleCommand::Run { watch, concurrency } => {
+            let cancellation = crate::signals::cancellation();
             let mut scheduler = loop {
+                if cancellation.is_canceled() {
+                    return Ok(());
+                }
                 match agt_runtime::Scheduler::open(home, concurrency) {
                     Ok(scheduler) => break scheduler,
                     Err(error) if watch && error.to_string().contains("owns this home") => {
@@ -139,7 +143,7 @@ pub(crate) fn schedule(command: ScheduleCommand, home: &Path, output: OutputMode
                     Err(error) => return Err(error),
                 }
             };
-            scheduler.run(watch, &agt_core::CancellationToken::new())?;
+            scheduler.run(watch, &cancellation)?;
         }
         ScheduleCommand::Start {
             conversation,

@@ -1,6 +1,8 @@
 use crate::deletion::{ResourceKey, ResourceKind};
 use agt_agent::{AgentConfig, AgentStore, BuiltinTool};
-use agt_core::{CategoryName, McpId, ModelId, PackageRef, PromptId, QualifiedRef, ResourceRef};
+use agt_core::{
+    CategoryName, EnvId, McpId, ModelId, PackageRef, PromptId, QualifiedRef, ResourceRef,
+};
 use agt_mcp::{McpDocument, McpStore, McpWritePlan};
 use agt_model::{ModelConfig, ModelConfigUpdate, ModelReference, ModelStore, ModelSummary};
 use agt_prompt::{PromptContentResult, PromptStore};
@@ -23,6 +25,7 @@ impl Resources {
     pub fn list(&self, kind: &str) -> Result<Value> {
         let h = &self.home;
         Ok(match kind {
+            "environment" => agt_harness::EnvironmentStore::new(h).scan_summary()?,
             "provider" => serde_json::to_value(ProviderStore::new(h).scan_summary()?)?,
             "model" => serde_json::to_value(ModelStore::new(h).scan_summary()?)?,
             "prompt" => serde_json::to_value(PromptStore::new(h).scan_summary()?)?,
@@ -36,6 +39,9 @@ impl Resources {
         let (category, name) = resource_ref(kind, reference)?;
         let h = &self.home;
         Ok(match kind {
+            "environment" => serde_json::to_value(
+                agt_harness::EnvironmentStore::new(h).read_in(&category, &name)?,
+            )?,
             "provider" => serde_json::to_value(ProviderSummary::from(
                 &ProviderStore::new(h).read_in(&category, &name)?,
             ))?,
@@ -58,6 +64,30 @@ impl Resources {
         let (category, name) = resource_ref(kind, reference)?;
         let h = &self.home;
         match kind {
+            "environment" => {
+                let config = if create {
+                    data
+                } else {
+                    let mut old = serde_json::to_value(
+                        agt_harness::EnvironmentStore::new(h)
+                            .read_in(&category, &name)?
+                            .config,
+                    )?;
+                    for (key, value) in data
+                        .as_object()
+                        .ok_or_else(|| anyhow::anyhow!("data must be an object"))?
+                    {
+                        old[key] = value.clone();
+                    }
+                    old
+                };
+                agt_harness::EnvironmentStore::new(h).write_in(
+                    &category,
+                    &name,
+                    &serde_json::from_value(config)?,
+                    create,
+                )?;
+            }
             "provider" => {
                 if create {
                     let d: ProviderCreate = serde_json::from_value(data)?;
@@ -153,12 +183,17 @@ impl Resources {
                     })
                 };
                 if create {
-                    let model = d
-                        .model
-                        .as_ref()
-                        .ok_or_else(|| anyhow::anyhow!("model required"))?;
-                    let (_, leaf) = crate::named_ref(model)?;
-                    let mut config = AgentConfig::new(&name, leaf)?;
+                    let mut config = if let Some(environment) = &d.environment {
+                        let (c, n) = crate::named_ref(environment)?;
+                        AgentConfig::external(&name, QualifiedRef::new(c, EnvId::new(n)))?
+                    } else {
+                        let model = d
+                            .model
+                            .as_ref()
+                            .ok_or_else(|| anyhow::anyhow!("model or environment required"))?;
+                        let (_, leaf) = crate::named_ref(model)?;
+                        AgentConfig::new(&name, leaf)?
+                    };
                     mutate(&mut config)?;
                     AgentStore::new(h).create_in(&category, &config)?;
                 } else {
@@ -196,6 +231,7 @@ impl Resources {
     pub fn categories(&self, kind: &str) -> Result<agt_config::DefinitionCategories> {
         let h = &self.home;
         Ok(match kind {
+            "environment" => agt_harness::EnvironmentStore::new(h).categories(),
             "provider" => ProviderStore::new(h).categories(),
             "model" => ModelStore::new(h).categories(),
             "prompt" => PromptStore::new(h).categories(),
@@ -214,6 +250,7 @@ impl Resources {
     ) -> Result<Value> {
         let (category, name) = resource_ref(kind, reference)?;
         let kind = match kind {
+            "environment" => ResourceKind::Environment,
             "provider" => ResourceKind::Provider,
             "model" => ResourceKind::Model,
             "prompt" => ResourceKind::Prompt,
@@ -325,6 +362,7 @@ struct SkillCreate {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AgentWrite {
+    environment: Option<String>,
     model: Option<String>,
     prompt: Option<String>,
     skills: Option<Vec<String>>,
@@ -333,9 +371,18 @@ struct AgentWrite {
     description: Option<String>,
 }
 fn apply_agent(config: &mut AgentConfig, d: &AgentWrite) -> Result<()> {
+    if d.model.is_some() && d.environment.is_some() {
+        bail!("choose model or environment, not both");
+    }
+    if let Some(value) = &d.environment {
+        let (c, n) = crate::named_ref(value)?;
+        config.environment = Some(QualifiedRef::new(c, EnvId::new(n)));
+        config.model = None;
+    }
     if let Some(value) = &d.model {
         let (c, n) = crate::named_ref(value)?;
-        config.model = QualifiedRef::new(c, ModelId::new(n));
+        config.model = Some(QualifiedRef::new(c, ModelId::new(n)));
+        config.environment = None;
     }
     if let Some(value) = &d.prompt {
         let (c, n) = crate::named_ref(value)?;

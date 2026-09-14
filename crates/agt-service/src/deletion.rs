@@ -18,6 +18,7 @@ pub enum ResourceKind {
     Prompt,
     Skill,
     Mcp,
+    Environment,
 }
 
 impl ResourceKind {
@@ -29,6 +30,7 @@ impl ResourceKind {
             Self::Prompt => "prompt",
             Self::Skill => "skill",
             Self::Mcp => "mcp",
+            Self::Environment => "environment",
         }
     }
 }
@@ -120,9 +122,11 @@ fn delete_rank(kind: ResourceKind) -> u8 {
     match kind {
         ResourceKind::Agent => 0,
         ResourceKind::Model => 1,
-        ResourceKind::Provider | ResourceKind::Prompt | ResourceKind::Skill | ResourceKind::Mcp => {
-            2
-        }
+        ResourceKind::Environment
+        | ResourceKind::Provider
+        | ResourceKind::Prompt
+        | ResourceKind::Skill
+        | ResourceKind::Mcp => 2,
     }
 }
 
@@ -168,6 +172,13 @@ fn load_graph(home: &Path) -> Result<ResourceGraph> {
     }
 
     let mut graph = ResourceGraph::default();
+    for item in agt_harness::EnvironmentStore::new(home).scan()? {
+        graph.nodes.insert(ResourceKey {
+            kind: ResourceKind::Environment,
+            category: item.category,
+            name: item.name,
+        });
+    }
     for item in provider_scan.items {
         graph.nodes.insert(ResourceKey {
             kind: ResourceKind::Provider,
@@ -217,16 +228,28 @@ fn load_graph(home: &Path) -> Result<ResourceGraph> {
             name: item.config.name.to_string(),
         };
         graph.nodes.insert(agent.clone());
-        let model = item.config.model;
-        add_edge(
-            &mut graph,
-            ResourceKey {
-                kind: ResourceKind::Model,
-                category: model.category().to_string(),
-                name: model.name().to_string(),
-            },
-            agent.clone(),
-        );
+        if let Some(model) = item.config.model {
+            add_edge(
+                &mut graph,
+                ResourceKey {
+                    kind: ResourceKind::Model,
+                    category: model.category().to_string(),
+                    name: model.name().to_string(),
+                },
+                agent.clone(),
+            );
+        }
+        if let Some(environment) = item.config.environment {
+            add_edge(
+                &mut graph,
+                ResourceKey {
+                    kind: ResourceKind::Environment,
+                    category: environment.category().to_string(),
+                    name: environment.name().to_string(),
+                },
+                agent.clone(),
+            );
+        }
         add_edge(
             &mut graph,
             ResourceKey {
@@ -400,6 +423,11 @@ fn rollback_moves(moved: &[(PathBuf, PathBuf)]) -> Result<()> {
 fn resource_dir(home: &Path, key: &ResourceKey) -> Result<PathBuf> {
     let category = CategoryName::new(&key.category)?;
     match key.kind {
+        ResourceKind::Environment => Ok(agt_harness::EnvironmentStore::new(home)
+            .file(&category, &key.name)?
+            .parent()
+            .unwrap()
+            .to_owned()),
         ResourceKind::Provider => ProviderStore::new(home)
             .provider_dir_in(&category, &key.name)
             .map_err(Into::into),

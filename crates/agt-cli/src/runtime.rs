@@ -1,7 +1,6 @@
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-use agt_core::CancellationToken;
 use agt_mcp::DefaultMcpClientFactory;
 use agt_runtime::{ChatCompletions, RunRequest, RunState, RunStore, Runtime};
 use anyhow::{Result, bail};
@@ -71,7 +70,7 @@ pub(crate) fn execute(args: AgentRunArgs, home: &Path, output: OutputMode) -> Re
     }
     let mut model = ChatCompletions;
     let mut runtime = Runtime::open(home, &mut model, &DefaultMcpClientFactory)?;
-    let record = runtime.run(request, &CancellationToken::new())?;
+    let record = runtime.run(request, &crate::signals::cancellation())?;
     emit(&record, output)?;
     if record.state != RunState::Completed {
         bail!(

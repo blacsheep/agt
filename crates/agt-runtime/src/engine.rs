@@ -58,6 +58,19 @@ impl<'a> Runtime<'a> {
         let mut step_count = 0;
         let result = (|| {
             check_canceled(cancellation)?;
+            if crate::harness::agent_config(&self.home, &request.agent)?
+                .environment
+                .is_some()
+            {
+                return crate::harness::execute(
+                    &self.home,
+                    &mut record,
+                    &self.store,
+                    cancellation,
+                    self.scheduled_task.as_ref(),
+                    self.discussion.as_deref(),
+                );
+            }
             let agents = std::iter::once(&request.agent)
                 .chain(&request.delegates)
                 .map(|name| Ok((name.clone(), ResolvedAgent::load(&self.home, name)?)))
@@ -601,7 +614,7 @@ fn check_canceled(token: &CancellationToken) -> Result<()> {
     }
 }
 
-fn bind_principal(im: &ImStore, agent: &str) -> Result<PrincipalId> {
+pub(crate) fn bind_principal(im: &ImStore, agent: &str) -> Result<PrincipalId> {
     let id = PrincipalId::new(format!("runtime:{agent}"));
     let metadata = json!({"agent_ref":agent,"binding":"agt-runtime-v1"});
     match im.create_principal(PrincipalInput {

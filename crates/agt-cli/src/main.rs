@@ -27,6 +27,7 @@ use serde_json::Value;
 
 mod framework;
 mod runtime;
+mod signals;
 
 #[derive(Debug, Parser)]
 #[command(name = "agt", version, about = "CLI-first agent resource manager")]
@@ -85,6 +86,9 @@ enum Command {
     /// manage agent definitions
     #[command(subcommand)]
     Agent(AgentCommand),
+    /// manage reusable external execution environments
+    #[command(subcommand, alias = "env")]
+    Environment(EnvironmentCommand),
     /// inspect persisted agent executions
     #[command(subcommand)]
     Run(runtime::RunCommand),
@@ -330,6 +334,27 @@ struct McpWriteArgs {
 }
 
 #[derive(Debug, Subcommand)]
+enum EnvironmentCommand {
+    Create(EnvironmentWriteArgs),
+    Update(EnvironmentWriteArgs),
+    List(ListArgs),
+    Info(RefArgs),
+    Test(RefArgs),
+    Delete(DeleteArgs),
+    #[command(subcommand)]
+    Category(CategoryCommand),
+}
+#[derive(Debug, Args)]
+struct EnvironmentWriteArgs {
+    name: String,
+    /// JSON environment configuration (create: full object; update: patch)
+    #[arg(long)]
+    file: PathBuf,
+    #[arg(long)]
+    category: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
 enum AgentCommand {
     /// execute an agent with optional explicit delegation
     Run(runtime::AgentRunArgs),
@@ -352,8 +377,14 @@ struct AgentCreateArgs {
     name: String,
     #[arg(long = "builtin-tool")]
     builtin_tools: Vec<BuiltinTool>,
+    #[arg(
+        long,
+        required_unless_present = "environment",
+        conflicts_with = "environment"
+    )]
+    model: Option<String>,
     #[arg(long)]
-    model: String,
+    environment: Option<String>,
     #[arg(long)]
     prompt: Option<String>,
     #[arg(long = "skill")]
@@ -377,8 +408,10 @@ struct AgentUpdateArgs {
     category: Option<String>,
     #[arg(long)]
     description: Option<String>,
-    #[arg(long)]
+    #[arg(long, conflicts_with = "environment")]
     model: Option<String>,
+    #[arg(long)]
+    environment: Option<String>,
     #[arg(long)]
     prompt: Option<String>,
     #[arg(long = "add-skill")]
@@ -696,6 +729,7 @@ fn dispatch(command: Command, home: &Path, output: OutputMode, yes: bool) -> Res
         Command::Prompt(command) => dispatch_prompt(command, home, output, yes),
         Command::Skill(command) => dispatch_skill(command, home, output, yes),
         Command::Mcp(command) => dispatch_mcp(command, home, output, yes),
+        Command::Environment(command) => dispatch_environment(command, home, output, yes),
         Command::Agent(command) => dispatch_agent(command, home, output, yes),
         Command::Run(command) => runtime::inspect(command, home, output),
         Command::Im(command) => dispatch_im(command, home, output),
@@ -1282,9 +1316,16 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
         AgentCommand::Create(args) => {
             let category = parse_category(args.category.as_deref())?;
             PromptStore::new(home).ensure_default_prompt()?;
-            let (model_category, model_name) = parse_named_ref(&args.model, None)?;
-            let mut config = AgentConfig::new(&args.name, &model_name)?;
-            config.model = QualifiedRef::new(model_category, ModelId::new(model_name));
+            let mut config = if let Some(environment) = &args.environment {
+                let (c, n) = parse_named_ref(environment, None)?;
+                AgentConfig::external(&args.name, QualifiedRef::new(c, agt_core::EnvId::new(n)))?
+            } else {
+                let (c, n) =
+                    parse_named_ref(args.model.as_deref().context("model required")?, None)?;
+                let mut config = AgentConfig::new(&args.name, &n)?;
+                config.model = Some(QualifiedRef::new(c, ModelId::new(n)));
+                config
+            };
             config.builtin_tools = args.builtin_tools;
             if let Some(prompt) = args.prompt {
                 let (prompt_category, prompt_name) = parse_named_ref(&prompt, None)?;
@@ -1324,6 +1365,7 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
             if args.description.is_none()
                 && args.model.is_none()
+                && args.environment.is_none()
                 && args.prompt.is_none()
                 && args.add_skills.is_empty()
                 && args.remove_skills.is_empty()
@@ -1334,6 +1376,10 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
             {
                 bail!("至少提供一个 Agent 更新字段");
             }
+            let environment = args
+                .environment
+                .map(|v| parse_named_ref(&v, None))
+                .transpose()?;
             let model = args
                 .model
                 .map(|value| parse_named_ref(&value, None))
@@ -1384,7 +1430,13 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
                     config.set_description(description);
                 }
                 if let Some((model_category, model_name)) = model {
-                    config.model = QualifiedRef::new(model_category, ModelId::new(model_name));
+                    config.model =
+                        Some(QualifiedRef::new(model_category, ModelId::new(model_name)));
+                    config.environment = None;
+                }
+                if let Some((c, n)) = environment {
+                    config.environment = Some(QualifiedRef::new(c, agt_core::EnvId::new(n)));
+                    config.model = None;
                 }
                 if let Some((prompt_category, prompt_name)) = prompt {
                     config.prompt = QualifiedRef::new(prompt_category, PromptId::new(prompt_name));
@@ -1461,6 +1513,9 @@ fn category_command(
                 ResourceKind::Model => ModelStore::new(home).categories().create(&category)?,
                 ResourceKind::Prompt => PromptStore::new(home).categories().create(&category)?,
                 ResourceKind::Skill => SkillStore::new(home).categories().create(&category)?,
+                ResourceKind::Environment => agt_harness::EnvironmentStore::new(home)
+                    .categories()
+                    .create(&category)?,
                 ResourceKind::Mcp => McpStore::new(home).categories().create(&category)?,
                 ResourceKind::Agent => AgentStore::new(home).categories().create(&category)?,
             };
@@ -1475,6 +1530,9 @@ fn category_command(
                 ResourceKind::Model => ModelStore::new(home).categories().list()?,
                 ResourceKind::Prompt => PromptStore::new(home).categories().list()?,
                 ResourceKind::Skill => SkillStore::new(home).categories().list()?,
+                ResourceKind::Environment => agt_harness::EnvironmentStore::new(home)
+                    .categories()
+                    .list()?,
                 ResourceKind::Mcp => McpStore::new(home).categories().list()?,
                 ResourceKind::Agent => AgentStore::new(home).categories().list()?,
             };
@@ -1491,6 +1549,9 @@ fn category_command(
             .categories()
             .delete_empty(&category)?,
         ResourceKind::Skill => SkillStore::new(home).categories().delete_empty(&category)?,
+        ResourceKind::Environment => agt_harness::EnvironmentStore::new(home)
+            .categories()
+            .delete_empty(&category)?,
         ResourceKind::Mcp => McpStore::new(home).categories().delete_empty(&category)?,
         ResourceKind::Agent => AgentStore::new(home).categories().delete_empty(&category)?,
     };
@@ -1683,6 +1744,64 @@ fn delete_resource(
     let deleted = agt_service::deletion::execute_delete(home, &target, recursive, &selected)?;
     emit(
         &serde_json::json!({"deleted": deleted.iter().map(ResourceKey::display).collect::<Vec<_>>() }),
+        output,
+    )
+}
+
+fn dispatch_environment(
+    command: EnvironmentCommand,
+    home: &Path,
+    output: OutputMode,
+    yes: bool,
+) -> Result<()> {
+    let resources = agt_service::Resources::new(home);
+    match command {
+        EnvironmentCommand::Create(args) => environment_write(args, true, &resources, output),
+        EnvironmentCommand::Update(args) => environment_write(args, false, &resources, output),
+        EnvironmentCommand::List(args) => {
+            let mut value = resources.list("environment")?;
+            if let Some(category) = args.category {
+                value["items"]
+                    .as_array_mut()
+                    .unwrap()
+                    .retain(|v| v["category"] == category);
+            }
+            emit(&value, output)
+        }
+        EnvironmentCommand::Info(args) => {
+            let (c, n) = parse_named_ref(&args.name, args.category.as_deref())?;
+            emit(&resources.read("environment", &format!("{c}/{n}"))?, output)
+        }
+        EnvironmentCommand::Test(args) => {
+            let (c, n) = parse_named_ref(&args.name, args.category.as_deref())?;
+            let environment = agt_harness::EnvironmentStore::new(home).read_in(&c, &n)?;
+            emit(&agt_harness::Codex::test(&environment.config)?, output)
+        }
+        EnvironmentCommand::Category(command) => {
+            category_command(ResourceKind::Environment, command, home, output)
+        }
+        EnvironmentCommand::Delete(args) => delete_resource(
+            ResourceKind::Environment,
+            &args.name,
+            args.category.as_deref(),
+            args.recursive,
+            args.dry_run,
+            home,
+            output,
+            yes,
+        ),
+    }
+}
+fn environment_write(
+    args: EnvironmentWriteArgs,
+    create: bool,
+    resources: &agt_service::Resources,
+    output: OutputMode,
+) -> Result<()> {
+    let (c, n) = parse_named_ref(&args.name, args.category.as_deref())?;
+    let data = serde_json::from_str(&fs::read_to_string(args.file)?)?;
+    emit(
+        &resources.write("environment", &format!("{c}/{n}"), create, data)?,
         output,
     )
 }

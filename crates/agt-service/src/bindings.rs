@@ -67,7 +67,20 @@ impl BindingStore {
 
     pub fn bind(&self, mut binding: Binding) -> Result<Binding> {
         let (category, name) = crate::named_ref(&binding.agent)?;
-        AgentStore::new(&self.home).read_in(&category, &name)?;
+        let agent = AgentStore::new(&self.home)
+            .read_in(&category, &name)?
+            .config;
+        if let Some(environment) = agent.environment {
+            let environment = agt_harness::EnvironmentStore::new(&self.home)
+                .read_in(environment.category(), environment.name().as_str())?
+                .config;
+            environment.validate()?;
+            binding.working_directory = environment.working_directory;
+            if binding.policy == ResponsePolicy::All {
+                binding.policy = ResponsePolicy::Mentioned;
+            }
+            binding.allow_mcp = false;
+        }
         binding.agent = format!("{category}/{name}");
         let im = ImStore::open(crate::database_path(&self.home, "im", "im.db")?)?;
         if im.get_principal(&binding.principal)?.kind != PrincipalKind::Agent {

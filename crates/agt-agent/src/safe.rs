@@ -23,7 +23,8 @@ pub struct AgentSummary {
     pub category: String,
     pub name: String,
     pub description: String,
-    pub model: AgentRefSummary,
+    pub model: Option<AgentRefSummary>,
+    pub environment: Option<AgentRefSummary>,
     pub prompt: AgentRefSummary,
     pub skills: Vec<String>,
     pub mcps: Vec<AgentRefSummary>,
@@ -37,7 +38,12 @@ impl From<&StoredAgent> for AgentSummary {
             category: agent.category.to_string(),
             name: agent.config.name.to_string(),
             description: agent.config.description.clone(),
-            model: AgentRefSummary::from_ref(&agent.config.model),
+            model: agent.config.model.as_ref().map(AgentRefSummary::from_ref),
+            environment: agent
+                .config
+                .environment
+                .as_ref()
+                .map(AgentRefSummary::from_ref),
             prompt: AgentRefSummary::from_ref(&agent.config.prompt),
             skills: agent
                 .config
@@ -227,7 +233,7 @@ mod tests {
 
         let summary = AgentSummary::from(&stored);
 
-        let model = summary.model;
+        let model = summary.model.unwrap();
         assert_eq!(model.category, "default");
         assert_eq!(model.name, "model");
         assert_eq!(summary.prompt.name, "default");

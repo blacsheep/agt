@@ -32,7 +32,9 @@ impl ResolvedAgent {
             .read_in(&category, leaf)
             .map_err(|_| RuntimeError::Configuration("cannot load agent definition"))?
             .config;
-        let reference = &agent.model;
+        let reference = agent.model.as_ref().ok_or(RuntimeError::Configuration(
+            "external agent requires harness execution",
+        ))?;
         let model = ModelStore::new(home)
             .read_in(reference.category(), reference.name().as_str())
             .map_err(|_| RuntimeError::Configuration("cannot load model definition"))?

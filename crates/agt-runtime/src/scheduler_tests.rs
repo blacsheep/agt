@@ -1057,3 +1057,181 @@ fn reset_during_summary_generation_cannot_recreate_the_summary() {
             .is_none()
     );
 }
+
+#[cfg(unix)]
+fn external_fixture() -> (tempfile::TempDir, ToolService, String) {
+    use std::os::unix::fs::PermissionsExt;
+    let (home, user, group) = fixture();
+    let path = home.path();
+    let exe = path.join("codex-fixture");
+    std::fs::write(
+        &exe,
+        include_str!("../../agt-harness/tests/fixtures/codex.py"),
+    )
+    .unwrap();
+    std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
+    agt_harness::EnvironmentStore::new(path)
+        .write_in(
+            &agt_core::CategoryName::default(),
+            "local",
+            &agt_harness::Environment {
+                engine: "codex".into(),
+                executable: exe,
+                working_directory: path.into(),
+                model: None,
+                sandbox: agt_harness::Sandbox::ReadOnly,
+                timeout_seconds: 10,
+            },
+            true,
+        )
+        .unwrap();
+    AgentStore::new(path)
+        .update_in(&agt_core::CategoryName::default(), "a", |a| {
+            a.model = None;
+            a.environment = Some(agt_core::QualifiedRef::in_default(agt_core::EnvId::new(
+                "local",
+            )));
+            Ok(())
+        })
+        .unwrap();
+    (home, user, group)
+}
+#[cfg(unix)]
+#[test]
+fn external_engine_uses_private_sessions_incremental_history_and_reset() {
+    let (home, user, _) = external_fixture();
+    let path = home.path();
+    let chat = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut scheduler = begin(path, &user, &chat);
+    struct NoModel;
+    impl ModelClient for NoModel {
+        fn complete(
+            &mut self,
+            _: &ResolvedAgent,
+            _: &[Value],
+            _: &[Value],
+        ) -> crate::Result<Value> {
+            panic!("external engine must never call native model")
+        }
+    }
+    let task = claim(&mut scheduler, "a");
+    execute(path, task.clone(), &mut NoModel, &CancellationToken::new()).unwrap();
+    let done = scheduler.store.get(&task.id).unwrap();
+    assert_eq!(done.state, "completed", "{:?}", done.reason);
+    for (key, reset) in [("follow-up", false), ("fresh", true)] {
+        if reset {
+            reset_conversation_context(path, &chat, "user").unwrap();
+        }
+        let sent = user
+            .call(
+                "message_send",
+                json!({"conversation":chat,"body":key,"request_key":key}),
+            )
+            .unwrap();
+        start_discussion(
+            path,
+            &chat,
+            Some(sent["message"]["id"].as_str().unwrap()),
+            false,
+        )
+        .unwrap();
+        scheduler.scan().unwrap();
+        let task = claim(&mut scheduler, "a");
+        execute(path, task.clone(), &mut NoModel, &CancellationToken::new()).unwrap();
+        assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+    }
+    let log = std::fs::read_to_string(path.join("protocol.jsonl")).unwrap();
+    let events: Vec<Value> = log
+        .lines()
+        .map(|s| serde_json::from_str(s).unwrap())
+        .collect();
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| e["method"] == "thread/start")
+            .count(),
+        2
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| e["method"] == "thread/resume")
+            .count(),
+        1
+    );
+    let turns: Vec<Value> = events
+        .iter()
+        .filter(|e| e["method"] == "turn/start")
+        .map(|e| serde_json::from_str(e["params"]["input"][0]["text"].as_str().unwrap()).unwrap())
+        .collect();
+    assert!(
+        !turns[1]["history"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["body"] == "question")
+    );
+    assert!(!turns[2].to_string().contains("follow-up"));
+}
+
+#[cfg(unix)]
+#[test]
+fn external_group_requires_mention_and_reset_cancels_without_publication() {
+    let (home, user, chat) = external_fixture();
+    let path = home.path();
+    let mut scheduler = begin(path, &user, &chat);
+    let task = claim(&mut scheduler, "a");
+    execute(
+        path,
+        task.clone(),
+        &mut Answer(json!({})),
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "skipped");
+    assert!(!path.join("protocol.jsonl").exists());
+    let sent = user
+        .call(
+            "message_send",
+            json!({"conversation":chat,"body":"HANG","mentions":["a"],"request_key":"hang"}),
+        )
+        .unwrap();
+    start_discussion(
+        path,
+        &chat,
+        Some(sent["message"]["id"].as_str().unwrap()),
+        false,
+    )
+    .unwrap();
+    scheduler.scan().unwrap();
+    let task = claim(&mut scheduler, "a");
+    let task_id = task.id.clone();
+    let work = path.to_owned();
+    let handle = std::thread::spawn(move || {
+        execute(
+            &work,
+            task,
+            &mut Answer(json!({})),
+            &CancellationToken::new(),
+        )
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !path.join("started").exists() {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    reset_conversation_context(path, &chat, "user").unwrap();
+    handle.join().unwrap().unwrap();
+    let runs = crate::RunStore::open(path).unwrap().list(10).unwrap();
+    assert_eq!(runs[0].state, RunState::Canceled);
+    assert_ne!(scheduler.store.get(&task_id).unwrap().state, "completed");
+    let messages = user
+        .call("message_history", json!({"conversation":chat}))
+        .unwrap();
+    assert_eq!(messages["messages"].as_array().unwrap().len(), 2);
+}

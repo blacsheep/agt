@@ -7,6 +7,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+agt-harness.workspace = true
 agt-config.workspace = true
 agt-core.workspace = true
 agt-model.workspace = true

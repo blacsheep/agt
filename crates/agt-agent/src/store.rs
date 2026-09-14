@@ -368,7 +368,8 @@ impl AgentStore {
     ) -> Result<StoredAgent> {
         self.ensure_model_exists(&model)?;
         self.update_in(agent_category, agent, |config| {
-            config.model = model;
+            config.model = Some(model);
+            config.environment = None;
             Ok(())
         })
     }
@@ -503,7 +504,16 @@ impl AgentStore {
     }
 
     fn ensure_all_references_exist(&self, config: &AgentConfig) -> Result<()> {
-        self.ensure_model_exists(&config.model)?;
+        if let Some(model) = &config.model {
+            self.ensure_model_exists(model)?;
+        }
+        if let Some(environment) = &config.environment {
+            agt_harness::EnvironmentStore::new(self.paths.home())
+                .read_in(environment.category(), environment.name().as_str())
+                .map_err(|e| AgentError::InvalidConfig {
+                    message: e.to_string(),
+                })?;
+        }
         self.ensure_prompt_exists(&config.prompt)?;
         for skill in &config.skills {
             self.ensure_skill_reference_available(skill)?;
@@ -736,7 +746,10 @@ mod tests {
 
         let loaded = store.read("coder").expect("read agent");
         assert_eq!(loaded.config.name.as_str(), "coder");
-        assert_eq!(loaded.config.model.name().as_str(), "fast-model");
+        assert_eq!(
+            loaded.config.model.as_ref().unwrap().name().as_str(),
+            "fast-model"
+        );
 
         let agents = store.list().expect("list agents");
         assert_eq!(agents.len(), 1);
@@ -745,7 +758,10 @@ mod tests {
         let updated = store
             .set_model("coder", "reasoning-model")
             .expect("set model");
-        assert_eq!(updated.config.model.name().as_str(), "reasoning-model");
+        assert_eq!(
+            updated.config.model.as_ref().unwrap().name().as_str(),
+            "reasoning-model"
+        );
 
         let team = CategoryName::new("team").unwrap();
         let prompt_store = PromptStore::new(&home);
