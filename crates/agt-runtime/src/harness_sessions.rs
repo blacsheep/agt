@@ -109,6 +109,26 @@ impl HarnessSessions {
             busy: row.7,
         })
     }
+    /// Pin inherited defaults once the engine reports them, without replacing explicit selections.
+    pub(crate) fn resolve_default(
+        &self,
+        id: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
+    ) -> Result<()> {
+        let mut session = self.get(id)?;
+        if session.config.model.is_none() {
+            session.config.model = model.map(str::to_owned);
+        }
+        if session.config.reasoning_effort.is_none() {
+            session.config.reasoning_effort = effort.map(str::to_owned);
+        }
+        self.db.execute(
+            "UPDATE sessions_v3 SET config=?2 WHERE scope=?1",
+            params![id, serde_json::to_string(&session.config)?],
+        )?;
+        Ok(())
+    }
     pub fn list(&self) -> Result<Vec<HarnessSession>> {
         let mut stmt = self
             .db
@@ -180,6 +200,13 @@ impl HarnessSessions {
             .execute("UPDATE sessions_v3 SET dirty=0 WHERE scope=?1", [id])?;
         result?;
         self.get(id)
+    }
+    pub fn cancel_conversation(&self, conversation: &str) -> Result<()> {
+        self.db.execute(
+            "UPDATE sessions_v3 SET cancel=1 WHERE conversation=?1 AND dirty=1",
+            [conversation],
+        )?;
+        Ok(())
     }
     pub fn cancel(&self, id: &str) -> Result<()> {
         self.get(id)?;

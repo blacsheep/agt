@@ -25,12 +25,14 @@ for line in sys.stdin:
  elif method=='thread/name/set':reply(id,{})
  elif method=='thread/compact/start':
   reply(id,{})
+  if p['threadId']=='hang-compact':
+   (root/'compacting').write_text('1');time.sleep(60)
   time.sleep(0.1)
   note('item/completed',{'threadId':p['threadId'],'item':{'type':'contextCompaction','id':'compact'}})
   note('turn/completed',{'threadId':p['threadId'],'turn':{'id':'compact-turn','status':'completed'}})
  elif method=='thread/start':
-  thread='thread-'+str(time.time_ns());reply(id,{'thread':{'id':thread},'model':'fixture-effective-model'})
- elif method=='thread/resume':thread=p['threadId'];reply(id,{'thread':{'id':thread},'model':'fixture-effective-model'})
+  thread='thread-'+str(time.time_ns());reply(id,{'thread':{'id':thread},'model':'fixture-effective-model','reasoningEffort':'high'})
+ elif method=='thread/resume':thread=p['threadId'];reply(id,{'thread':{'id':thread},'model':'fixture-effective-model','reasoningEffort':'high'})
  elif method=='turn/start':
   turn='turn-'+str(time.time_ns());reply(id,{'turn':{'id':turn,'status':'inProgress'}})
   note('turn/started',{'threadId':thread,'turn':{'id':turn}})

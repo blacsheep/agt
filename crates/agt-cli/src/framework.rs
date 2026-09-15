@@ -154,7 +154,8 @@ pub(crate) fn schedule(command: ScheduleCommand, home: &Path, output: OutputMode
             agt_runtime::ScheduleStore::open(home)?.control(&conversation, "pause", false, now())?
         }
         ScheduleCommand::End { conversation } => {
-            agt_runtime::ScheduleStore::open(home)?.control(&conversation, "end", false, now())?
+            agt_runtime::ScheduleStore::open(home)?.control(&conversation, "end", false, now())?;
+            agt_runtime::HarnessSessions::open(home)?.cancel_conversation(&conversation)?
         }
         ScheduleCommand::Dissolve {
             conversation,

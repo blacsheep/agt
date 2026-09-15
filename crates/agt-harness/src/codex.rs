@@ -24,6 +24,7 @@ pub enum Event<'a> {
     Thread(&'a str),
     Turn(&'a str),
     Model(&'a str),
+    ReasoningEffort(&'a str),
 }
 /// A single local app-server connection. stdout is protocol-only; stderr is drained, not exposed.
 pub struct Codex {
@@ -156,6 +157,8 @@ impl Codex {
     pub fn models(environment: &Environment) -> Result<Value> {
         let mut event = |_: Event<'_>| Ok(());
         let mut client = Self::connect(environment, &mut event)?;
+        // Metadata requests must finish before the Web CLI request timeout.
+        client.deadline = Instant::now() + Duration::from_secs(10);
         client.catalog(
             "model/list",
             json!({"limit":100,"includeHidden":false}),
@@ -192,6 +195,8 @@ impl Codex {
     pub fn inspect(environment: &Environment, operation: &str) -> Result<Value> {
         let mut event = |_: Event<'_>| Ok(());
         let mut client = Self::connect(environment, &mut event)?;
+        // Metadata requests must finish before the Web CLI request timeout.
+        client.deadline = Instant::now() + Duration::from_secs(10);
         match operation {
             "skills" => client.request(
                 "skills/list",
@@ -205,6 +210,8 @@ impl Codex {
     pub fn rename(environment: &Environment, thread: &str, name: &str) -> Result<()> {
         let mut event = |_: Event<'_>| Ok(());
         let mut client = Self::connect(environment, &mut event)?;
+        // Metadata requests must finish before the Web CLI request timeout.
+        client.deadline = Instant::now() + Duration::from_secs(10);
         client.request(
             "thread/name/set",
             json!({"threadId":thread,"name":name}),
@@ -264,6 +271,9 @@ impl Codex {
         let response = self.request(method, params, event)?;
         if let Some(model) = response["model"].as_str() {
             event(Event::Model(model))?;
+        }
+        if let Some(effort) = response["reasoningEffort"].as_str() {
+            event(Event::ReasoningEffort(effort))?;
         }
         let thread = response["thread"]["id"]
             .as_str()

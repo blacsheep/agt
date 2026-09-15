@@ -197,6 +197,7 @@ pub fn delete_scheduled_conversation(
         [conversation],
     )?;
     store.connection.execute_batch("COMMIT")?;
+    crate::HarnessSessions::open(home)?.cancel_conversation(conversation)?;
     Ok(result)
 }
 
@@ -209,6 +210,7 @@ pub fn dissolve_scheduled_group(home: &Path, conversation: &str, actor: &str) ->
         [conversation],
     )?;
     store.connection.execute_batch("COMMIT")?;
+    crate::HarnessSessions::open(home)?.cancel_conversation(conversation)?;
     Ok(())
 }
 
@@ -242,6 +244,7 @@ pub fn reset_conversation_context(
     crate::context_store::ContextStore::open(home)?.clear(conversation)?;
     store.connection.execute("UPDATE discussions SET state='ended' WHERE conversation=?1 OR id IN (SELECT discussion FROM tasks WHERE conversation=?1)", [conversation])?;
     store.connection.execute_batch("COMMIT")?;
+    crate::HarnessSessions::open(home)?.cancel_conversation(conversation)?;
     Ok(
         json!({"conversation":conversation,"reset_through_seq":chat.last_message_seq,"history_preserved":true}),
     )

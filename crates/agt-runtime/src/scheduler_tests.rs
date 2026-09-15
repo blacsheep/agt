@@ -1125,6 +1125,15 @@ fn external_engine_uses_private_sessions_incremental_history_and_reset() {
     execute(path, task.clone(), &mut NoModel, &CancellationToken::new()).unwrap();
     let done = scheduler.store.get(&task.id).unwrap();
     assert_eq!(done.state, "completed", "{:?}", done.reason);
+    let snapshot = crate::HarnessSessions::open(path)
+        .unwrap()
+        .current(path, "a", &chat)
+        .unwrap();
+    assert_eq!(
+        snapshot.config.model.as_deref(),
+        Some("fixture-effective-model")
+    );
+    assert_eq!(snapshot.config.reasoning_effort.as_deref(), Some("high"));
     for (key, reset) in [("follow-up", false), ("fresh", true)] {
         if reset {
             reset_conversation_context(path, &chat, "user").unwrap();
@@ -1406,6 +1415,46 @@ fn harness_session_snapshots_models_names_and_compaction_are_isolated() {
     assert_eq!(turn["params"]["model"], "fixture-model");
     assert_eq!(turn["params"]["effort"], "xhigh");
     assert!(protocol.iter().any(|e|e["method"]=="thread/name/set" && e["params"]["name"]=="Backend follow-up"));
+    store
+        .configure(&session.id, "fixture-model", Some("high"))
+        .unwrap();
+    let message=user.call("message_send",json!({"conversation":chat,"body":"continue after model change","request_key":"model-change"})).unwrap();
+    start_discussion(
+        path,
+        &chat,
+        Some(message["message"]["id"].as_str().unwrap()),
+        false,
+    )
+    .unwrap();
+    scheduler.scan().unwrap();
+    let task = claim(&mut scheduler, "a");
+    execute(
+        path,
+        task.clone(),
+        &mut Answer(json!({})),
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+    assert_eq!(
+        store.get(&session.id).unwrap().session_id,
+        completed.session_id
+    );
+    let log: Vec<Value> = std::fs::read_to_string(path.join("protocol.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let turn = log
+        .iter()
+        .rev()
+        .find(|v| v["method"] == "turn/start")
+        .unwrap();
+    assert_eq!(turn["params"]["effort"], "high");
+    assert_eq!(
+        log.iter().filter(|v| v["method"] == "thread/start").count(),
+        1
+    );
     store.lock(&session.id).unwrap();
     assert!(store.configure(&session.id, "fixture-model", None).is_err());
     assert!(store.rename(&session.id, "busy").is_err());
@@ -1413,4 +1462,42 @@ fn harness_session_snapshots_models_names_and_compaction_are_isolated() {
     let fresh = store.current(path, "a", &chat).unwrap();
     assert_ne!(fresh.id, session.id);
     assert_eq!(fresh.config, changed);
+}
+
+#[cfg(unix)]
+#[test]
+fn harness_compaction_cancellation_keeps_the_unknown_outcome_fenced() {
+    let (home, user, _) = external_fixture();
+    let path = home.path();
+    let chat = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let store = crate::HarnessSessions::open(path).unwrap();
+    let session = store.current(path, "a", &chat).unwrap();
+    store
+        .db
+        .execute(
+            "UPDATE sessions_v3 SET thread='hang-compact' WHERE scope=?1",
+            [&session.id],
+        )
+        .unwrap();
+    let work = path.to_owned();
+    let id = session.id.clone();
+    let handle = std::thread::spawn(move || {
+        crate::HarnessSessions::open(&work)
+            .unwrap()
+            .compact(&id, &CancellationToken::new())
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !path.join("compacting").exists() {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    store.cancel_conversation(&chat).unwrap();
+    assert!(handle.join().unwrap().is_err());
+    assert!(store.get(&session.id).unwrap().busy);
+    assert!(store.configure(&session.id, "fixture-model", None).is_err());
 }

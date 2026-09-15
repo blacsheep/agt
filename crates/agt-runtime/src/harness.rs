@@ -256,7 +256,13 @@ pub(crate) fn execute(
                 record.execution.as_mut().unwrap()["turn_id"] = json!(id);
                 store.save(record)?;
             }
+            Event::ReasoningEffort(effort) => {
+                sessions.resolve_default(&scope, None, Some(effort))?;
+                record.execution.as_mut().unwrap()["reasoning_effort"] = json!(effort);
+                store.save(record)?;
+            }
             Event::Model(model) => {
+                sessions.resolve_default(&scope, Some(model), None)?;
                 record.execution.as_mut().unwrap()["model"] = json!(model);
                 store.save(record)?;
             }
@@ -333,7 +339,7 @@ pub(crate) fn execute(
         &mut call,
     );
     drop(client);
-    if result.is_ok() && !session.title.is_empty() {
+    if result.is_ok() && thread.is_none() && !session.title.is_empty() {
         let saved = sessions.get(&scope).map_err(error)?;
         if let Some(thread) = saved.session_id {
             Codex::rename(&environment, &thread, &session.title).map_err(error)?;
