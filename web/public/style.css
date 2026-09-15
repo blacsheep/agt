@@ -1566,3 +1566,10 @@ body { font-size: 14px; -webkit-font-smoothing: antialiased; }
 .environment-options { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 8px; }
 .environment-options summary { cursor: pointer; margin-bottom: 12px; }
 .resource-actions { flex-wrap: wrap; }
+
+.chat-command-list { display: grid; gap: 6px; margin: 16px 0; }
+.chat-command { display: grid; grid-template-columns: 76px 1fr; gap: 12px; text-align: left; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--ink); }
+.chat-command:hover, .chat-command:focus-visible { background: var(--accent-light); border-color: var(--accent); }
+.chat-command code { color: var(--accent); }
+.chat-command small { display: block; margin-top: 4px; line-height: 1.5; color: var(--muted); }
+.command-agent { padding: 16px 0; border-bottom: 1px solid var(--line); }

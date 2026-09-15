@@ -212,6 +212,11 @@ try {
   await evaluate(`closeModal(); messages=async()=>{}; document.querySelector('#message-body').value='/new 是什么意思？';`);
   await click('#send');
   await wait('!state.sending');
+  assert.equal(await evaluate('document.querySelector("#modal").open'), true);
+  assert.deepEqual(await evaluate('commandCalls'), []);
+  await click('#command-as-text');
+  await click('#send');
+  await wait('!state.sending');
   assert.equal(await evaluate('commandCalls[0].path'), 'tool');
   assert.equal(await evaluate('commandCalls[0].data.name'), 'message_send');
   assert.equal(await evaluate('commandCalls[0].data.args.body'), '/new 是什么意思？');

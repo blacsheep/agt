@@ -51,6 +51,38 @@ Codex 自身配置中的工具仍由 Codex 管理，其权限和认证不由 AGT
 作用域包括 Agent principal、聊天 conversation、上下文 reset cutoff、实际配置指纹。
 无聊天身份的显式 agent run 每次新建独立线程。
 恢复时校验已发送历史仍可见且未被修改；不匹配则新建线程。正常恢复只发送增量历史。
+
+### 输入格式（v2）
+
+调度 envelope 仍保存在 AGT Run 中用于审计，但不直接传给 Codex。
+显式 agent run 保留输入原文（包括合法 JSON）；普通单条私聊同样仅发送对方原文。
+多条消息按 IM seq 排序，显示真实发送者名称、ID 和身份类型。历史背景与新消息
+分区，每条消息只出现一次。身份、参与者和通信工具规则置于 developerInstructions。
+恢复线程时，通过发布消息的 client_message_id、原 Run、发送者、会话、正文和
+外部 thread_id 一起验证，剔除 Codex 已保存的自身答复；不能只按发送者或相同正文过滤。
+原生运行器保留结构化 JSON，但当前批次不重复出现在 history，trigger 只引用消息 ID。
+
+输入格式版本纳入会话指纹。升级自 v1 时创建新的干净 Codex 线程，并以可见 Web 历史
+作为背景；旧 Codex 线程与 Web 聊天记录保留。旧线程的私有工具上下文不会复制到新线程。
+
+### Web 命令控制通道
+
+共享命令解析器覆盖 Web 与 HTTP 写入边界。单行斜杠命令不写入 IM，也不调用模型：
+
+- `/`、`/help`：可用命令与能力说明。
+- `/new`、`/clear`：现有上下文重置确认；后者不删除 Web 聊天记录。
+- `/stop`：现有结束讨论确认。
+- `/model`、`/status`：读取本会话成员的配置与最近 Run 元数据。后端 model 字段由
+  thread/start/resume 的实际响应记录，不能用模型自述替代；缺少时明确显示未报告。
+  这不是 Codex TUI 的原生模型选择器。修改共享环境的影响范围在编辑入口明确提示。
+- `/compact`、`/review`、`/diff`、`/resume`、`/fork`、`/permissions` 等尚未映射，
+  未知命令和带参数命令也明确说明不支持，不静默转成用户消息。
+- `//model` 通过显式 literal_message 标记发送 `/model` 文本，用于讨论命令本身。
+  多行引用、普通句子中的斜杠和 `/tmp/project` 一类路径仍属于普通消息。
+
+命令来源仅限 Web 操作者；Agent 发送的斜杠文本不成为管理员控制命令。
+群聊模型/状态按 Agent 分别展示；不支持 @ 定向执行这些命令。
+命令语义依据：<https://developers.openai.com/codex/cli/slash-commands/>。
 `/new` 通过现有调度围栏终止旧任务，新的 reset cutoff 使下次执行使用新线程。
 它不会擦除 Codex 的长期记忆、项目文件或 AGT 聊天历史。
 
@@ -81,3 +113,9 @@ Web 验证创建/编辑环境与 Agent、缺少模型时选择外部环境、桌
 - Linux SIGTERM 测试确认 CLI 经取消路径结束 Run 并回收本地 Codex 进程。
 - 本机 codex-cli 0.154.0 的真实 app-server 握手及 account/read 成功；未发起真实模型推理。
 - 真实模型执行、Windows 进程树清理、其他 Codex 版本以及其他引擎仍需各自验收。
+
+### 输入与命令修订验收
+
+- 全工作区 Rust 测试、Clippy（所有 target，禁止警告）、格式及 diff 检查通过。
+- Web 接口测试 20 项通过；Harness 与工作区浏览器回归通过，覆盖命令拦截、显式普通文本发送、模型状态与上下文重置。
+- 协议桩验证私聊原文、群聊发送者与顺序、已发布回复去重；本次未调用真实模型。

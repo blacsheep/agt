@@ -324,7 +324,7 @@ function showResetContext(c, fromComposer = false) {
     if (state.conversation?.id === c.id) {
       state.generation++;
       state.runs = state.runs.map(r => r.conversation === c.id ? {...r, progress:null} : r); renderLiveReplies();
-      if (fromComposer && $('#message-body').value.trim() === '/new') {
+      if (fromComposer && ['new','clear'].includes(AgtCommands.parse($('#message-body').value)?.name)) {
         $('#message-body').value = ''; state.pendingSend = null; renderMentions(); $('#message-body').focus();
       }
     }
@@ -1022,10 +1022,14 @@ $('#debug-mode').checked = debugMode; document.body.classList.toggle('debug-mode
 $('#debug-mode').onchange = () => { debugMode = $('#debug-mode').checked; localStorage.setItem('agt-debug-mode', String(debugMode)); document.body.classList.toggle('debug-mode', debugMode); if ($('#modal').open && !state.modalBusy) $('#modal').close(); renderMessages(); renderReplyStatus(); renderActivity(); };
 $('#older').onclick = () => messages(false, true).catch(e => notify(errorText(e), true));
 $('#refresh').onclick = async () => { try { await bootstrap(); await conversations(); await messages(true); await activity(); notify('已同步本地状态。'); } catch (e) { notify(errorText(e), true); } };
+$('#chat-commands').onclick = () => { if(canParticipate()) showChatCommand({name:'help',args:''}); };
 $('#composer').onsubmit = async event => {
   event.preventDefault(); if (state.sending || !canParticipate()) return;
-  const body = $('#message-body').value.trim(); if (!body) return;
-  if (body === '/new') { showResetContext(state.conversation, true); return; }
+  let body = $('#message-body').value.trim(); if (!body) return;
+  const command = AgtCommands.parse(body);
+  if (command?.type === 'command') { await showChatCommand(command); return; }
+  const literalMessage = command?.type === 'literal';
+  if (literalMessage) body = command.text;
   const args = { conversation: state.conversation.id, body, mentions: mentionedPrincipals(body) };
   closeMentions();
   const autoReply = $('#auto-reply').checked;
@@ -1034,7 +1038,7 @@ $('#composer').onsubmit = async event => {
   state.sending = true; $('#send').disabled = true; renderIdentities(); $('#message-body').disabled = true;
   $('#send').textContent = '发送中…'; renderReplyStatus();
   try {
-    await api('tool', { name: 'message_send', args: { ...args, request_key: state.pendingSend.key }, auto_reply: autoReply });
+    await api('tool', { name: 'message_send', args: { ...args, request_key: state.pendingSend.key }, auto_reply: autoReply, literal_message: literalMessage });
     $('#message-body').value = ''; state.pendingSend = null; renderMentions();
     notify(autoReply ? '消息已发送，已安排 Agent 回复。' : '消息已保存，点击「继续回复」可让 Agent 回应。');
     await messages(true); await conversations(); await activity();
@@ -1047,7 +1051,7 @@ $('#message-body').onclick = showMentionOptions;
 $('#message-body').onblur = closeMentions;
 $('#message-body').onkeydown = event => {
   if (event.isComposing) return;
-  if (event.key === 'Enter' && !event.shiftKey && $('#message-body').value.trim() === '/new') { event.preventDefault(); $('#composer').requestSubmit(); return; }
+  if (event.key === 'Enter' && !event.shiftKey && AgtCommands.parse($('#message-body').value)?.type === 'command') { event.preventDefault(); $('#composer').requestSubmit(); return; }
   if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); closeMentions(); $('#composer').requestSubmit(); return; }
   if (!mentionOptions.length) return;
   if (event.key === 'Escape') { event.preventDefault(); closeMentions(); }
@@ -1114,4 +1118,26 @@ async function showEnvironmentEdit(reference) {
     $('#modal-body').innerHTML=`<form id="modal-form">${environmentFields(value)}<p class="form-note">修改影响后续任务，并为引用此环境的 Agent 建立新的执行会话；正在运行的任务保留原配置。</p><div class="form-actions"><button class="primary" type="submit">保存环境</button></div></form>`;
     formHandler(async data=>{await tool('resource_write',{kind:'environment',reference,create:false,data:environmentData(data)});$('#modal').close();await bootstrap();notify('运行环境已更新。');});
   } catch(e) {if(generation===modalGeneration)modalError(e);}
+}
+
+async function showChatCommand(command) {
+  const supported = AgtCommands.items.find(c=>c.name===command.name);
+  if (supported && !command.args && ['new','clear'].includes(command.name)) { showResetContext(state.conversation,true); return; }
+  if (supported && !command.args && command.name==='stop') { if ($('#end-reply').disabled) dialog('当前没有可停止的讨论','<p class="form-note">本会话没有待处理的讨论。可用 /status 查看最近运行。</p>'); else $('#end-reply').click(); return; }
+  if (supported && !command.args && ['model','status'].includes(command.name)) { await showChatRuntime(command.name); return; }
+  const heading = command.name==='help' && !command.args ? '会话命令' : supported ? '此命令暂不支持参数' : '此命令尚未接入 Web';
+  dialog(heading, `<p class="form-note">这里使用 AGT 的会话控制通道。Codex 终端命令不会被当成模型消息执行；本次没有发送聊天消息。</p><div class="chat-command-list">${AgtCommands.items.filter(c=>c.name!=='clear').map(c=>`<button type="button" class="chat-command" data-chat-command="${c.name}"><code>/${esc(c.name)}</code><span><strong>${esc(c.label)}</strong><small>${esc(c.description)}</small></span></button>`).join('')}</div><details class="environment-options"><summary>其他 Codex 命令如何处理？</summary><p class="form-note">/compact、/review、/diff、/resume、/fork、/permissions、/skills、/mcp 等终端功能尚未映射。请在对应 Codex 客户端操作，或用自然语言提出任务。带参数的命令目前不会执行；群内命令不支持 @ 定向控制。</p></details><div class="form-actions"><button id="command-as-text" class="secondary" type="button" ${AgtCommands.parse($('#message-body').value)?.type==='command'?'':'disabled'}>改为普通文本草稿</button></div><p class="form-note">要讨论命令本身，可输入 //model 等双斜杠文本，再点击发送。</p>`);
+  $$('[data-chat-command]').forEach(button=>button.onclick=()=>{ $('#modal').close(); showChatCommand({name:button.dataset.chatCommand,args:''}); });
+  $('#command-as-text').onclick=()=>{ $('#message-body').value='/'+$('#message-body').value.trim(); closeModal(); $('#message-body').focus(); resizeComposer(); };
+}
+async function showChatRuntime(kind) {
+  const conversation=state.conversation.id;
+  dialog(kind==='model' ? '本会话的模型' : '本会话的运行状态','<p class="form-note">正在读取配置和运行记录，不调用模型…</p>');
+  const generation=modalGeneration;
+  try {
+    const result=await api('chat-status',{conversation});
+    if(generation!==modalGeneration || !$('#modal').open)return;
+    $('#modal-body').innerHTML=`<p class="form-note">按 Agent 分别显示。最近执行模型来自后端返回值，可能与修改后的配置不同；没有记录时不推测。</p>${result.agents.map(a=>`<section class="command-agent"><div class="card-head"><strong>${esc(nameOf(a.principal))}</strong><span class="tag">${a.engine==='native'?'AGT 内置':esc(a.engine)}</span></div><dl class="resource-details"><dt>启用状态</dt><dd>${a.enabled?'已启用':'已停用'}</dd><dt>配置模型</dt><dd>${esc(a.configured_model || '沿用外部引擎默认配置')}</dd><dt>最近执行模型</dt><dd>${esc(a.last_run?.reported_model || '后端尚未报告')}</dd><dt>最近执行</dt><dd>${esc(a.last_run ? stateNames[a.last_run.state] || a.last_run.state : '暂无记录')}</dd>${a.environment?`<dt>运行环境</dt><dd>${esc(a.environment)}</dd>`:''}</dl>${a.environment?`<button class="secondary" type="button" data-command-environment="${esc(a.environment)}">编辑共享环境…</button><p class="form-note">修改模型会影响引用该环境的所有 Agent，后续任务将建立新的执行会话。</p>`:''}</section>`).join('') || '<p class="form-note">本会话暂无已配置运行设置的 Agent。</p>'}`;
+    $$('[data-command-environment]').forEach(b=>b.onclick=()=>showEnvironmentEdit(b.dataset.commandEnvironment));
+  } catch(e) {if(generation===modalGeneration && $('#modal').open){$('#modal-body').innerHTML='';modalError(e);}}
 }

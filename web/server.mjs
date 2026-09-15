@@ -1,4 +1,5 @@
 import http from 'node:http';
+import './public/commands.js';
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { readFile, realpath, access } from 'node:fs/promises';
@@ -10,7 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const readTools = new Set(['conversation_list', 'member_list', 'message_history', 'message_status', 'message_inbox']);
 const writeTools = new Set(['direct_create', 'group_create', 'message_send', 'member_add', 'member_remove', 'resource_write', 'principal_create', 'agent_bind', 'agent_unbind', 'agent_set_enabled']);
 const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent', 'environment'];
-const assets = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
+const assets = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
 
 export class ApiError extends Error {
   constructor(status, code, message, field) { super(message); Object.assign(this, { status, code, field }); }
@@ -121,6 +122,21 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         };
         // Never serialize private Run input, final output, tool arguments or summaries.
         send(200, { scheduler, runs: runs.map(r => ({ id: r.id, agent: r.request.agent, conversation: r.request.trigger?.conversation_id, state: r.state, model_steps: r.model_steps, tool_failures: r.tool_failures, error: r.error ? '执行失败，请查看消息投递了解原因。' : null, progress: progress(r) })) });
+      } else if (req.method === 'POST' && url.pathname === '/api/chat-status') {
+        const data = await body(req), conversation = str(data.conversation);
+        if ('viewer' in data || 'principal' in data || 'actor' in data) throw new ApiError(403, 'identity_fixed', '查看身份由启动者固定。');
+        const members = await member(conversation);
+        if (!members.some(m => m.principal_id === principal && m.left_message_seq == null)) throw new ApiError(403, 'not_member', '仅当前会话成员可查看运行信息。');
+        const [bindings, runs] = await Promise.all([tool('binding_list'), run(['run','list','--limit','200'])]);
+        const agents = await Promise.all(bindings.filter(b => members.some(m => m.principal_id === b.principal && m.left_message_seq == null)).map(async b => {
+          const definition = await tool('resource_read', {kind:'agent',reference:b.agent});
+          const environment = definition.environment && `${definition.environment.category}/${definition.environment.name}`;
+          const config = await tool('resource_read', {kind:environment ? 'environment' : 'model',reference:environment || `${definition.model.category}/${definition.model.name}`});
+          const last = runs.find(r => r.request.trigger?.conversation_id === conversation && r.request.trigger?.principal === b.principal && r.request.agent === b.agent);
+          return {principal:b.principal,agent:b.agent,enabled:b.enabled !== false,engine:environment ? config.engine : 'native',environment:environment || null,configured_model:config.model || null,
+            last_run:last ? {id:last.id,state:last.state,reported_model:typeof last.execution?.model === 'string' ? last.execution.model : null,environment:last.execution?.environment || null} : null};
+        }));
+        send(200,{conversation,agents});
       } else if (req.method === 'POST' && url.pathname === '/api/read') {
         const data = await body(req); const name = str(data.name);
         if (!readTools.has(name)) throw new ApiError(403, 'tool_denied', '观察接口仅允许读取会话。');
@@ -131,6 +147,8 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         if ('viewer' in data || 'principal' in data) throw new ApiError(403, 'identity_fixed', '写入身份由启动者固定。');
         if (data.auto_reply !== undefined && typeof data.auto_reply !== 'boolean') throw new ApiError(400, 'invalid_arguments', '自动回复必须为布尔值。');
         const args = object(data.args ?? {});
+        if (data.literal_message !== undefined && typeof data.literal_message !== 'boolean') throw new ApiError(400, 'invalid_arguments', '普通文本标记必须为布尔值。');
+        if (name === 'message_send' && data.literal_message !== true && AgtCommands.parse(args.body)?.type === 'command') throw new ApiError(400, 'chat_command_required', '这是控制命令，请通过 Web 命令入口执行；如需讨论命令本身，请明确按普通文本发送。');
         if (name === 'resource_write' && args.kind === 'provider' && 'api_key_env' in object(args.data)) throw new ApiError(400, 'invalid_arguments', '请直接输入 API Key，Web 不支持环境变量方式。', 'data.api_key');
         let result;
         if (name === 'resource_write' && args.kind === 'provider' && args.data && typeof args.data === 'object' && 'api_key' in args.data) {

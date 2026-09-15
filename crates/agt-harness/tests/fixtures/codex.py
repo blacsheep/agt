@@ -18,8 +18,8 @@ for line in sys.stdin:
  if method=='initialize':reply(id,{'userAgent':'fixture/1'})
  elif method=='account/read':reply(id,{'account':None,'requiresOpenaiAuth':False})
  elif method=='thread/start':
-  thread='thread-'+str(time.time_ns());reply(id,{'thread':{'id':thread}})
- elif method=='thread/resume':thread=p['threadId'];reply(id,{'thread':{'id':thread}})
+  thread='thread-'+str(time.time_ns());reply(id,{'thread':{'id':thread},'model':'fixture-effective-model'})
+ elif method=='thread/resume':thread=p['threadId'];reply(id,{'thread':{'id':thread},'model':'fixture-effective-model'})
  elif method=='turn/start':
   turn='turn-'+str(time.time_ns());reply(id,{'turn':{'id':turn,'status':'inProgress'}})
   note('turn/started',{'threadId':thread,'turn':{'id':turn}})

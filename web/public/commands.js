@@ -1,0 +1,19 @@
+// Shared by the console and its HTTP boundary. No shell or model command forwarding.
+globalThis.AgtCommands = Object.freeze({
+  items: Object.freeze([
+    { name: 'help', label: '命令帮助', description: '查看 Web 已接入的命令与边界。' },
+    { name: 'new', label: '重置上下文', description: '确认后重置本会话 Agent 的工作上下文，保留聊天记录。' },
+    { name: 'clear', label: '重置上下文', description: '/new 的别名；不会删除聊天记录或项目文件。' },
+    { name: 'model', label: '模型信息', description: '查看配置模型和最近执行时后端报告的模型，不询问模型自身。' },
+    { name: 'status', label: '会话运行状态', description: '查看本会话 Agent 的启用状态、执行方式和最近运行。' },
+    { name: 'stop', label: '停止本会话 Agent', description: '确认后结束本轮讨论，停止相关执行。' },
+  ]),
+  parse(text) {
+    if (typeof text !== 'string') return null;
+    const value = text.trim();
+    if (value === '/') return {type:'command',name:'help',args:''};
+    if (value.startsWith('//')) return { type: 'literal', text: value.slice(1) };
+    const match = /^\/([a-z][a-z0-9_-]*)(?:[ \t]+([^\r\n]*))?$/i.exec(value);
+    return match ? { type: 'command', name: match[1].toLowerCase(), args: (match[2] || '').trim() } : null;
+  },
+});

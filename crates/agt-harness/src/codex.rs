@@ -23,6 +23,7 @@ pub enum Event<'a> {
     Tool,
     Thread(&'a str),
     Turn(&'a str),
+    Model(&'a str),
 }
 /// A single local app-server connection. stdout is protocol-only; stderr is drained, not exposed.
 pub struct Codex {
@@ -166,7 +167,11 @@ impl Codex {
             params["dynamicTools"] = json!(execution.tools.iter().map(|t| json!({"type":"function","name":t.name,"description":t.description,"inputSchema":t.input_schema})).collect::<Vec<_>>());
             "thread/start"
         };
-        let thread = self.request(method, params, event)?["thread"]["id"]
+        let response = self.request(method, params, event)?;
+        if let Some(model) = response["model"].as_str() {
+            event(Event::Model(model))?;
+        }
+        let thread = response["thread"]["id"]
             .as_str()
             .context("Codex omitted thread id")?
             .to_owned();

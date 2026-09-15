@@ -6,6 +6,7 @@ mod conversation_context;
 pub use context::ContextCheckpoint;
 mod engine;
 mod harness;
+mod harness_input;
 mod model;
 mod model_stream;
 mod participation;

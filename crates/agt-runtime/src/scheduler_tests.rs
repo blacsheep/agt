@@ -1164,19 +1164,12 @@ fn external_engine_uses_private_sessions_incremental_history_and_reset() {
             .count(),
         1
     );
-    let turns: Vec<Value> = events
+    let turns: Vec<&str> = events
         .iter()
         .filter(|e| e["method"] == "turn/start")
-        .map(|e| serde_json::from_str(e["params"]["input"][0]["text"].as_str().unwrap()).unwrap())
+        .map(|e| e["params"]["input"][0]["text"].as_str().unwrap())
         .collect();
-    assert!(
-        !turns[1]["history"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|m| m["body"] == "question")
-    );
-    assert!(!turns[2].to_string().contains("follow-up"));
+    assert_eq!(turns, vec!["question", "follow-up", "fresh"]);
 }
 
 #[cfg(unix)]
@@ -1234,4 +1227,97 @@ fn external_group_requires_mention_and_reset_cancels_without_publication() {
         .call("message_history", json!({"conversation":chat}))
         .unwrap();
     assert_eq!(messages["messages"].as_array().unwrap().len(), 2);
+}
+
+#[cfg(unix)]
+#[test]
+fn external_group_transcript_preserves_senders_order_and_each_body_once() {
+    let (home, user, chat) = external_fixture();
+    let path = home.path();
+    let mut scheduler = begin(path, &user, &chat);
+    let peer = ToolService::open(
+        path,
+        Actor {
+            principal: PrincipalId::new("b"),
+            role: Role::Participant,
+            automated_depth: None,
+        },
+    )
+    .unwrap();
+    peer.call("message_send",json!({"conversation":chat,"body":"API changes are ready\nPlease review.","request_key":"peer-one"})).unwrap();
+    user.call(
+        "message_send",
+        json!({"conversation":chat,"body":"Please coordinate","request_key":"user-two"}),
+    )
+    .unwrap();
+    let mut task = claim(&mut scheduler, "a");
+    task.through_seq = im(path)
+        .unwrap()
+        .get_conversation(&ConversationId::new(&chat))
+        .unwrap()
+        .last_message_seq;
+    let history =
+        crate::conversation_context::visible_history(&im(path).unwrap(), &task, 0).unwrap();
+    task.triggers = history
+        .iter()
+        .map(|m| m["message_id"].as_str().unwrap().to_owned())
+        .collect();
+    let text = crate::harness_input::render(
+        &im(path).unwrap(),
+        &crate::RunStore::open(path).unwrap(),
+        &task,
+        &history,
+        0,
+        None,
+    )
+    .unwrap();
+    assert_eq!(text.matches("question").count(), 1);
+    assert_eq!(text.matches("API changes are ready").count(), 1);
+    assert_eq!(text.matches("Please coordinate").count(), 1);
+    assert!(text.contains("\"b\" [id=\"b\", Agent]:\n  API changes are ready\n  Please review."));
+    assert!(text.find("question").unwrap() < text.find("API changes").unwrap());
+    assert!(text.find("API changes").unwrap() < text.find("Please coordinate").unwrap());
+    assert!(!text.contains("context_reset_through_seq"));
+}
+
+#[test]
+fn native_scheduled_input_keeps_peer_identity_without_duplicate_trigger_body() {
+    let (home, user, chat) = fixture();
+    let path = home.path();
+    let peer = ToolService::open(
+        path,
+        Actor {
+            principal: PrincipalId::new("b"),
+            role: Role::Participant,
+            automated_depth: None,
+        },
+    )
+    .unwrap();
+    peer.call(
+        "message_send",
+        json!({"conversation":chat,"body":"peer background","request_key":"peer-background"}),
+    )
+    .unwrap();
+    let mut scheduler = begin(path, &user, &chat);
+    let task = claim(&mut scheduler, "a");
+    struct Capture(Vec<Value>);
+    impl ModelClient for Capture {
+        fn complete(
+            &mut self,
+            _: &ResolvedAgent,
+            messages: &[Value],
+            _: &[Value],
+        ) -> crate::Result<Value> {
+            self.0 = messages.to_vec();
+            Ok(json!({"role":"assistant","content":"answer"}))
+        }
+    }
+    let mut model = Capture(vec![]);
+    execute(path, task, &mut model, &CancellationToken::new()).unwrap();
+    let input: Value = serde_json::from_str(model.0[1]["content"].as_str().unwrap()).unwrap();
+    assert_eq!(input["messages"][0]["sender"], "user");
+    assert!(input["trigger"].get("body").is_none());
+    assert_eq!(input["history"][0]["sender"], "b");
+    assert_eq!(input.to_string().matches("peer background").count(), 1);
+    assert_eq!(input.to_string().matches("question").count(), 1);
 }

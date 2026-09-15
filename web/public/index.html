@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AGT Studio · 多 Agent 工作台</title>
     <link rel="stylesheet" href="/style.css" />
+    <script src="/commands.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body class="workspace-page">
@@ -133,6 +134,7 @@
               <div class="compose-bottom">
                 <div class="compose-preferences">
                   <label class="auto-reply-label"><input id="auto-reply" type="checkbox" checked />发送后自动回复</label>
+                  <button id="chat-commands" class="quiet" type="button" aria-label="查看会话命令">/ 命令</button>
                   <small id="compose-hint">会调用模型 · Ctrl / ⌘ + Enter 发送</small>
                 </div
                 ><button id="send" class="primary" type="submit">

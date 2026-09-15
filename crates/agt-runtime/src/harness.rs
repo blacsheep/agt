@@ -121,8 +121,36 @@ pub(crate) fn execute(
             input_schema: s["inputSchema"].clone(),
         })
         .collect();
+    let im = if task.is_some() {
+        Some(
+            agt_im::ImStore::open(crate::store::database_path(home, "im", "im.db")?)
+                .map_err(error)?,
+        )
+    } else {
+        None
+    };
+    let input_context: Value = if task.is_some() {
+        serde_json::from_str(&record.request.input)?
+    } else {
+        Value::Null
+    };
+    let history = input_context["history"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let cutoff = input_context["context_reset_through_seq"]
+        .as_i64()
+        .unwrap_or(0);
+    // Keep role, identity and transport policy out of the user's message.
+    let config_instructions = instructions.clone();
+    if let Some(task) = task {
+        instructions.push_str(&crate::harness_input::instructions(
+            im.as_ref().unwrap(),
+            task,
+        )?);
+    }
     let config_hash = crate::fingerprint(&serde_json::to_vec(
-        &json!({"agent":format!("{agent:?}"),"environment":environment,"instructions":instructions,"tools":tools.iter().map(|t|json!([t.name,t.input_schema])).collect::<Vec<_>>()}),
+        &json!({"agent":format!("{agent:?}"),"environment":environment,"input_format":2,"instructions":config_instructions,"tools":tools.iter().map(|t|json!([t.name,t.input_schema])).collect::<Vec<_>>()}),
     )?);
     record.config_fingerprint = Some(config_hash.clone());
     let session_db = Connection::open(crate::store::database_path(
@@ -132,14 +160,6 @@ pub(crate) fn execute(
     )?)?;
     session_db.busy_timeout(std::time::Duration::from_secs(5))?;
     session_db.execute_batch("CREATE TABLE IF NOT EXISTS sessions(scope TEXT PRIMARY KEY,thread TEXT,through_seq INTEGER NOT NULL,source_hash TEXT NOT NULL,dirty INTEGER NOT NULL);")?;
-    let mut input: Value = serde_json::from_str(&record.request.input)
-        .unwrap_or(json!({"input":record.request.input}));
-    let history = if task.is_some() {
-        input["history"].as_array().cloned().unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    let cutoff = input["context_reset_through_seq"].as_i64().unwrap_or(0);
     let scope = if let Some(t) = task {
         crate::fingerprint(&serde_json::to_vec(&json!([
             t.principal,
@@ -158,6 +178,7 @@ pub(crate) fn execute(
         )
         .optional()?;
     let mut thread = None;
+    let mut after = cutoff;
     if let Some((saved_thread, through, source, dirty)) = saved {
         if dirty {
             return Err(error(
@@ -170,15 +191,21 @@ pub(crate) fn execute(
             .collect();
         if crate::fingerprint(&serde_json::to_vec(&prefix)?) == source {
             thread = saved_thread;
-            input["history"] = json!(
-                history
-                    .iter()
-                    .filter(|v| v["seq"].as_i64().unwrap_or(0) > through)
-                    .collect::<Vec<_>>()
-            );
+            after = through;
         }
     }
-    let input = input.to_string();
+    let input = if let Some(task) = task {
+        crate::harness_input::render(
+            im.as_ref().unwrap(),
+            store,
+            task,
+            &history,
+            after,
+            thread.as_deref(),
+        )?
+    } else {
+        record.request.input.clone()
+    };
     if input.len() + instructions.len() > 1024 * 1024 {
         return Err(error(
             "external input exceeds 1 MiB; reset context or shorten the request",
@@ -230,6 +257,10 @@ pub(crate) fn execute(
             }
             Event::Turn(id) => {
                 record.execution.as_mut().unwrap()["turn_id"] = json!(id);
+                store.save(record)?;
+            }
+            Event::Model(model) => {
+                record.execution.as_mut().unwrap()["model"] = json!(model);
                 store.save(record)?;
             }
             Event::Tick => {}

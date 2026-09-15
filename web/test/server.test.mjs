@@ -474,3 +474,30 @@ test('Agent entry organization only permits explicit hide/show for Agent identit
   assert.equal(calls[0].includes('--manager'),false);
   assert.equal((await send({agent:'agent',action:'show',conversations:['one'],confirm:true})).status,200);
 });
+
+test('slash commands never reach message_send implicitly; literal messages are explicit', async t => {
+  const seen=[];
+  const {request}=await fixture(t,async args=>{seen.push(args);return {};});
+  for(const body of ['/model','/model new-model','/compact','/review','/resume','/permissions','/new','/clear','/anything-future']) {
+    const response=await request('/api/tool',{name:'message_send',args:{conversation:'c',body,request_key:body}});
+    assert.equal(response.status,400,body);assert.equal((await response.json()).error.code,'chat_command_required');
+  }
+  assert.equal(seen.length,0);
+  assert.equal((await request('/api/tool',{name:'message_send',literal_message:true,args:{conversation:'c',body:'/model',request_key:'literal'}})).status,200);
+  assert.equal(JSON.parse(seen.at(-1).at(-1)).body,'/model');
+  for(const body of ['/tmp/project','Explain /model','/model\nThis is quoted text']) assert.equal(AgtCommands.parse(body),null);
+  assert.deepEqual(AgtCommands.parse('//model'),{type:'literal',text:'/model'});
+});
+
+test('chat model/status reads are membership scoped and expose only reported metadata',async t=>{
+  const {request}=await fixture(t,async args=>{
+    if(args.includes('member_list')) return [{principal_id:'operator',left_message_seq:null},{principal_id:'a',left_message_seq:null}];
+    if(args.includes('binding_list')) return [{principal:'a',agent:'default/a',enabled:true},{principal:'other',agent:'default/other'}];
+    if(args.includes('resource_read')) {const q=JSON.parse(args.at(-1));return q.kind==='agent'?{environment:{category:'default',name:'local'}}:{engine:'codex',model:null};}
+    if(args[0]==='run')return [{id:'r',state:'completed',request:{agent:'default/a',trigger:{conversation_id:'chat',principal:'a'},input:'PRIVATE'},output:'PRIVATE',execution:{model:'reported-model',environment:'default/local',thread_id:'PRIVATE'}}];
+    throw new Error('unexpected operation');
+  });
+  const response=await request('/api/chat-status',{conversation:'chat'});assert.equal(response.status,200);
+  const data=await response.json();assert.equal(data.agents.length,1);assert.equal(data.agents[0].configured_model,null);assert.equal(data.agents[0].last_run.reported_model,'reported-model');assert.doesNotMatch(JSON.stringify(data),/PRIVATE/);
+  assert.equal((await request('/api/chat-status',{conversation:'chat',viewer:'other'})).status,403);
+});
