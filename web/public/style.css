@@ -1573,3 +1573,10 @@ body { font-size: 14px; -webkit-font-smoothing: antialiased; }
 .chat-command code { color: var(--accent); }
 .chat-command small { display: block; margin-top: 4px; line-height: 1.5; color: var(--muted); }
 .command-agent { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.harness-session-summary { padding: 12px 0; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.harness-session-summary > .tag { margin-left: 10px; }
+.harness-session-summary dd, .session-id { overflow-wrap: anywhere; }
+.harness-capability-list section { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.harness-capability-list p { margin: 6px 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+#harness-detail select, #harness-detail input { max-width: 100%; }
+#harness-feedback:empty { display: none; }

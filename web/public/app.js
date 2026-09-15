@@ -1,7 +1,7 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const labels = { provider: 'Provider', model: '模型', prompt: 'Prompt', skill: 'Skills', mcp: 'MCP', environment: '运行环境', agent: 'Agent' };
+const labels = { provider: 'Provider', model: '模型', prompt: 'Prompt', skill: 'Skills', mcp: 'MCP', environment: 'Harness', agent: 'Agent' };
 const stateNames = { completed: '已完成', running: '执行中', failed: '失败', canceled: '已取消', succeeded: '成功', started: '结果待确认', idle: '等待执行', skipped: '已跳过', pending: '待执行', processing: '处理中' };
 let token = location.hash.slice(1) || sessionStorage.getItem('agt-token');
 if (location.hash) { sessionStorage.setItem('agt-token', token); history.replaceState(null, '', location.pathname); }
@@ -773,7 +773,7 @@ function showBinding(agent) {
     const cwd = $('#modal-form [name=cwd]'); cwd.readOnly=true; cwd.value=environment?.working_directory || state.boot.home;
     $('#modal-form [name=allow_mcp]').disabled=true;
     const policy = $('#modal-form [name=policy]'); policy.querySelector('[value=all]').disabled=true; if(policy.value==='all')policy.value='mentioned';
-    cwd.closest('.field')?.insertAdjacentHTML('beforeend','<small>由运行环境管理；外部 Agent 仅响应私聊和群内 @。</small>');
+    cwd.closest('.field')?.insertAdjacentHTML('beforeend','<small>由Harness管理；外部 Agent 仅响应私聊和群内 @。</small>');
   }
   formHandler(async data => { const principal = data.get('principal').trim(); await ensurePrincipal(principal, principal); await tool('agent_bind', bindingData(data, principal, agent)); $('#modal').close(); await bootstrap(); notify('运行设置已保存。'); });
   if (binding) $('#unbind').onclick = async () => { if (!confirm('解除运行配置会停用此身份并移除运行设置，身份和消息保留。以后需重新配置才能启用。确认？')) return; try { await tool('agent_unbind', { principal: binding.principal }); $('#modal').close(); await bootstrap(); } catch (e) { modalError(e); } };
@@ -817,9 +817,10 @@ function showAgent() {
 }
 function resourceActions(kind, resource) {
   const reference = esc(ref(resource));
-  return `${kind === 'environment' ? `<button class="secondary" data-environment-edit="${reference}">编辑</button><button class="secondary" data-environment-test="${reference}">检查连接</button>` : ''}<button class="secondary" data-resource-read="${reference}" data-resource-type="${kind}">查看</button><button class="quiet error-text" data-resource-delete="${reference}" data-resource-type="${kind}" ${kind === 'prompt' && ref(resource) === 'default/default' ? 'disabled title="默认 Prompt 是保留资源"' : ''}>删除</button>`;
+  return `${kind === 'environment' ? `<button class="secondary" data-environment-edit="${reference}">编辑</button><button class="secondary" data-harness-sessions="${reference}">执行会话</button><button class="secondary" data-environment-test="${reference}">检查连接</button>` : ''}<button class="secondary" data-resource-read="${reference}" data-resource-type="${kind}">查看</button><button class="quiet error-text" data-resource-delete="${reference}" data-resource-type="${kind}" ${kind === 'prompt' && ref(resource) === 'default/default' ? 'disabled title="默认 Prompt 是保留资源"' : ''}>删除</button>`;
 }
 function bindResourceActions(container) {
+  container.querySelectorAll('[data-harness-sessions]').forEach(b=>b.onclick=()=>showHarnessResourceSessions(b.dataset.harnessSessions));
   container.querySelectorAll('[data-environment-edit]').forEach(b => b.onclick = () => showEnvironmentEdit(b.dataset.environmentEdit));
   container.querySelectorAll('[data-environment-test]').forEach(b => b.onclick = async () => {
     b.disabled = true; b.textContent = '检查中…';
@@ -843,8 +844,8 @@ async function showResourceDetail(kind, reference) {
     if (r.description) pairs.push(['说明', r.description]);
     if (kind === 'provider') pairs.push(['Base URL', r.base_url], ['密钥', r.api_key_configured ? '已配置' : '未配置']);
     if (kind === 'model') pairs.push(['Provider', ref(r.provider)], ['模型名称', r.model], ['API 协议', r.api_format], ['推理强度', r.params.reasoning_effort || '未指定'], ['温度', r.params.reasoning_effort ? '指定推理强度时不发送' : r.params.temperature], ['输出上限', r.params.max_tokens ?? '未指定'], ['上下文窗口', `${r.capabilities.context_window ?? 272000} tokens`], ['超时', `${r.params.timeout} 秒`], ['工具调用', r.capabilities.tool_call ? '开启' : '关闭']);
-    if (kind === 'environment') pairs.push(['执行引擎', 'Codex'], ['可执行文件', r.executable], ['工作目录', r.working_directory], ['模型', r.model || '使用 Codex 默认配置'], ['文件权限', r.sandbox === 'workspace_write' ? '工作区可写' : '只读'], ['超时', `${r.timeout_seconds} 秒`]);
-    if (kind === 'agent') pairs.push([r.environment ? '运行环境' : '模型', ref(r.environment || r.model)], ['Prompt', ref(r.prompt)], ['Skills', r.skills.join('、') || '无'], ['MCP', r.mcps.map(ref).join('、') || '无'], ['内置工具', r.builtin_tools?.includes('resource_management') ? '资源管理' : '无']);
+    if (kind === 'environment') pairs.push(['执行引擎', 'Codex'], ['可执行文件', r.executable], ['工作目录', r.working_directory], ['默认模型', r.model || '使用 Codex 默认配置'], ['默认思考档位', r.reasoning_effort || '沿用默认'], ['文件权限', r.sandbox === 'workspace_write' ? '工作区可写' : '只读'], ['超时', `${r.timeout_seconds} 秒`]);
+    if (kind === 'agent') pairs.push([r.environment ? 'Harness' : '模型', ref(r.environment || r.model)], ['Prompt', ref(r.prompt)], ['Skills', r.skills.join('、') || '无'], ['MCP', r.mcps.map(ref).join('、') || '无'], ['内置工具', r.builtin_tools?.includes('resource_management') ? '资源管理' : '无']);
     if (kind === 'mcp') pairs.push(['连接方式', r.transport], ['目标', r.target || '未指定']);
     const details = `<dl class="resource-details">${pairs.map(([label, text]) => `<dt>${esc(label)}</dt><dd>${esc(text)}</dd>`).join('')}</dl>`;
     const promptCharacters = kind === 'prompt' ? Array.from(value.content) : [];
@@ -1081,7 +1082,7 @@ function executionFields(agent = {}) {
   const environment = agent.environment ? ref(agent.environment) : '';
   const environments = items('environment').map(e => [ref(e), `${e.name} · Codex`]);
   if (environment && !environments.some(([id]) => id === environment)) environments.push([environment, `${environment}（连接不可用）`]);
-  return `<section class="execution-settings"><div class="form-grid">${field('执行方式', `<select name="execution">${options([['native','AGT 内置'],['external','外部运行环境']], environment ? 'external' : 'native')}</select>`)}<div data-execution-native>${field('模型', `<select name="model" required><option value="">选择模型…</option>${options(items('model').map(m=>[ref(m),`${m.name} · ${m.model}`]),model)}</select>`)}</div><div data-execution-external class="hidden">${field('运行环境', `<select name="environment"><option value="">选择运行环境…</option>${options(environments,environment)}</select>`, environments.length ? '复用连接配置，每位 Agent 的会话上下文独立。' : '请先在资源库创建运行环境。')}</div></div><p data-execution-external class="form-note hidden">Codex 管理工具循环和上下文压缩；仅响应私聊和群内 @。支持角色 Prompt、Skills 正文和内置资源工具，暂不挂载 AGT MCP。工作目录由运行环境决定。</p></section>`;
+  return `<section class="execution-settings"><div class="form-grid">${field('执行方式', `<select name="execution">${options([['native','AGT 内置'],['external','外部 Harness']], environment ? 'external' : 'native')}</select>`)}<div data-execution-native>${field('模型', `<select name="model" required><option value="">选择模型…</option>${options(items('model').map(m=>[ref(m),`${m.name} · ${m.model}`]),model)}</select>`)}</div><div data-execution-external class="hidden">${field('Harness', `<select name="environment"><option value="">选择 Harness…</option>${options(environments,environment)}</select>`, environments.length ? '复用连接配置，每位 Agent 的会话上下文独立。' : '请先在资源库创建 Harness。')}</div></div><p data-execution-external class="form-note hidden">Codex 管理工具循环和上下文压缩；仅响应私聊和群内 @。支持角色 Prompt、Skills 正文和内置资源工具，暂不挂载 AGT MCP。工作目录由Harness决定。</p></section>`;
 }
 function executionData(data) { return data.get('execution') === 'external' ? {environment:data.get('environment')} : {model:data.get('model')}; }
 function bindExecutionFields() {
@@ -1106,17 +1107,33 @@ function bindExecutionFields() {
   selector.onchange=update; $('#modal-form [name=environment]').onchange=update; update();
 }
 function environmentFields(value = {}) {
-  return `<section class="environment-intro"><span class="tag">Codex</span><p>连接服务器上已安装的 Codex。多个 Agent 可复用此环境，各自保留独立会话。</p></section>${field('可执行文件', `<input name="executable" value="${esc(value.executable || '')}" placeholder="/usr/local/bin/codex" required>`, '服务器上的绝对路径，可运行 command -v codex 查询。')}${field('项目工作目录', `<input name="working_directory" value="${esc(value.working_directory || '')}" placeholder="/home/user/projects/demo" required>`, '同一目录中的 Agent 会共享文件；并行开发建议使用不同目录或 worktree。')}<div class="form-grid">${field('文件权限', `<select name="sandbox">${options([['read_only','只读 · 分析与审查'],['workspace_write','工作区可写 · 开发与修改']],value.sandbox || 'read_only')}</select>`)}${field('任务超时（秒）', `<input type="number" name="timeout_seconds" min="10" max="86400" value="${value.timeout_seconds || 1800}" required>`)}</div><details class="environment-options"><summary>模型与认证说明</summary>${field('模型（可选）', `<input name="external_model" value="${esc(value.model || '')}" placeholder="留空使用 Codex 默认模型">`)}<p class="form-note">认证沿用服务器运行账号的 Codex 配置，请先完成 codex login。环境按已选文件权限执行，不自动批准权限升级；暂不支持交互授权，遇到此类请求会停止并说明原因。/new 重置工作上下文，不删除 Codex 自身的长期记忆或项目文件。</p></details>`;
+  return `<section class="environment-intro"><span class="tag">Codex</span><p>连接服务器上已安装的 Codex。每个 Harness 独立配置项目和默认模型；已有会话保存自己的配置快照。</p></section>${field('说明', `<textarea name="harness_description" maxlength="4096">${esc(value.description||'')}</textarea>`)}${field('可执行文件', `<input name="executable" value="${esc(value.executable || '')}" placeholder="/usr/local/bin/codex" required>`, '服务器上的绝对路径，可运行 command -v codex 查询。')}${field('项目工作目录', `<input name="working_directory" value="${esc(value.working_directory || '')}" placeholder="/home/user/projects/demo" required>`, '同一目录中的 Agent 会共享文件；并行开发建议使用不同目录或 worktree。')}<div class="form-grid">${field('文件权限', `<select name="sandbox">${options([['read_only','只读 · 分析与审查'],['workspace_write','工作区可写 · 开发与修改']],value.sandbox || 'read_only')}</select>`)}${field('任务超时（秒）', `<input type="number" name="timeout_seconds" min="10" max="86400" value="${value.timeout_seconds || 1800}" required>`)}</div><details class="environment-options"><summary>模型与认证说明</summary>${field('默认思考档位（可选）', `<input name="external_effort" value="${esc(value.reasoning_effort||'')}" placeholder="留空沿用 Codex 默认">`)}${field('默认模型（可选）', `<input name="external_model" value="${esc(value.model || '')}" placeholder="留空使用 Codex 默认模型">`)}<p class="form-note">认证沿用服务器运行账号的 Codex 配置，请先完成 codex login。环境按已选文件权限执行，不自动批准权限升级；暂不支持交互授权，遇到此类请求会停止并说明原因。/new 重置工作上下文，不删除 Codex 自身的长期记忆或项目文件。</p></details>`;
 }
-function environmentData(data) { return {engine:'codex',executable:data.get('executable').trim(),working_directory:data.get('working_directory').trim(),sandbox:data.get('sandbox'),model:data.get('external_model').trim() || null,timeout_seconds:Number(data.get('timeout_seconds'))}; }
+function environmentData(data) { return {engine:'codex',description:data.get('harness_description').trim(),reasoning_effort:data.get('external_effort').trim()||null,executable:data.get('executable').trim(),working_directory:data.get('working_directory').trim(),sandbox:data.get('sandbox'),model:data.get('external_model').trim() || null,timeout_seconds:Number(data.get('timeout_seconds'))}; }
 async function showEnvironmentEdit(reference) {
-  dialog(`编辑运行环境 · ${reference}`,'<p class="form-note">正在读取配置…</p>');
+  dialog(`编辑Harness · ${reference}`,'<p class="form-note">正在读取配置…</p>');
   const generation=modalGeneration;
   try {
     const value=await api('resource',{action:'read',kind:'environment',reference});
     if(generation!==modalGeneration || !$('#modal').open)return;
-    $('#modal-body').innerHTML=`<form id="modal-form">${environmentFields(value)}<p class="form-note">修改影响后续任务，并为引用此环境的 Agent 建立新的执行会话；正在运行的任务保留原配置。</p><div class="form-actions"><button class="primary" type="submit">保存环境</button></div></form>`;
-    formHandler(async data=>{await tool('resource_write',{kind:'environment',reference,create:false,data:environmentData(data)});$('#modal').close();await bootstrap();notify('运行环境已更新。');});
+    $('#modal-body').innerHTML=`<form id="modal-form">${environmentFields(value)}<p class="form-note">修改只影响新建执行会话。已有会话保留项目目录、模型和权限快照；可在聊天中用 /model 修改会话模型，或 /new 使用新默认值。</p><div class="form-actions"><button id="harness-default-models" class="secondary" type="button">读取可用模型</button><button id="harness-sessions" class="secondary" type="button">查看执行会话</button><button class="primary" type="submit">保存 Harness</button></div></form>`;
+    $('#harness-sessions').onclick=()=>showHarnessResourceSessions(reference);
+    $('#harness-default-models').onclick=async()=>{
+      const button=$('#harness-default-models');button.disabled=true;
+      try {
+        const catalog=await api('harness',{operation:'resource-models',reference});
+        if(generation!==modalGeneration || !$('#modal').open)return;
+        if(!catalog.data.length)throw new Error('empty model catalog');
+        const previous=$('[name=external_model]');
+        const selected=previous.value;
+        previous.outerHTML=`<select name="external_model"><option value="">沿用 Codex 默认</option>${options(catalog.data.map(m=>[m.model,m.displayName||m.model]),selected)}</select>`;
+        const select=$('[name=external_model]');
+        const update=()=>{const model=catalog.data.find(m=>m.model===select.value);const old=$('[name=external_effort]');old.outerHTML=`<select name="external_effort"><option value="">沿用默认档位</option>${model?options(model.supportedReasoningEfforts.map(e=>[e.reasoningEffort,e.reasoningEffort]),old.value):''}</select>`;};
+        select.onchange=update;update();select.closest('details').open=true;
+        notify('已读取已保存 Harness 连接的模型列表。');
+      }catch(e){if(generation===modalGeneration)notify(errorText(e),true);}finally{if(generation===modalGeneration)button.disabled=false;}
+    };
+    formHandler(async data=>{await tool('resource_write',{kind:'environment',reference,create:false,data:environmentData(data)});$('#modal').close();await bootstrap();notify('Harness已更新。');});
   } catch(e) {if(generation===modalGeneration)modalError(e);}
 }
 
@@ -1124,9 +1141,9 @@ async function showChatCommand(command) {
   const supported = AgtCommands.items.find(c=>c.name===command.name);
   if (supported && !command.args && ['new','clear'].includes(command.name)) { showResetContext(state.conversation,true); return; }
   if (supported && !command.args && command.name==='stop') { if ($('#end-reply').disabled) dialog('当前没有可停止的讨论','<p class="form-note">本会话没有待处理的讨论。可用 /status 查看最近运行。</p>'); else $('#end-reply').click(); return; }
-  if (supported && !command.args && ['model','status'].includes(command.name)) { await showChatRuntime(command.name); return; }
+  if (supported && !command.args && ['model','status','compact','rename','skills','mcp','permissions'].includes(command.name)) { await showHarnessCommand(command.name); return; }
   const heading = command.name==='help' && !command.args ? '会话命令' : supported ? '此命令暂不支持参数' : '此命令尚未接入 Web';
-  dialog(heading, `<p class="form-note">这里使用 AGT 的会话控制通道。Codex 终端命令不会被当成模型消息执行；本次没有发送聊天消息。</p><div class="chat-command-list">${AgtCommands.items.filter(c=>c.name!=='clear').map(c=>`<button type="button" class="chat-command" data-chat-command="${c.name}"><code>/${esc(c.name)}</code><span><strong>${esc(c.label)}</strong><small>${esc(c.description)}</small></span></button>`).join('')}</div><details class="environment-options"><summary>其他 Codex 命令如何处理？</summary><p class="form-note">/compact、/review、/diff、/resume、/fork、/permissions、/skills、/mcp 等终端功能尚未映射。请在对应 Codex 客户端操作，或用自然语言提出任务。带参数的命令目前不会执行；群内命令不支持 @ 定向控制。</p></details><div class="form-actions"><button id="command-as-text" class="secondary" type="button" ${AgtCommands.parse($('#message-body').value)?.type==='command'?'':'disabled'}>改为普通文本草稿</button></div><p class="form-note">要讨论命令本身，可输入 //model 等双斜杠文本，再点击发送。</p>`);
+  dialog(heading, `<p class="form-note">这里使用 AGT 的会话控制通道。Codex 终端命令不会被当成模型消息执行；本次没有发送聊天消息。</p><div class="chat-command-list">${AgtCommands.items.filter(c=>c.name!=='clear').map(c=>`<button type="button" class="chat-command" data-chat-command="${c.name}"><code>/${esc(c.name)}</code><span><strong>${esc(c.label)}</strong><small>${esc(c.description)}</small></span></button>`).join('')}</div><details class="environment-options"><summary>其他 Codex 命令如何处理？</summary><p class="form-note">/review、/diff、/resume、/fork 和交互审批尚未映射。请在对应 Codex 客户端操作，或用自然语言提出任务。带参数的命令目前不会执行；群内命令不支持 @ 定向控制。</p></details><div class="form-actions"><button id="command-as-text" class="secondary" type="button" ${AgtCommands.parse($('#message-body').value)?.type==='command'?'':'disabled'}>改为普通文本草稿</button></div><p class="form-note">要讨论命令本身，可输入 //model 等双斜杠文本，再点击发送。</p>`);
   $$('[data-chat-command]').forEach(button=>button.onclick=()=>{ $('#modal').close(); showChatCommand({name:button.dataset.chatCommand,args:''}); });
   $('#command-as-text').onclick=()=>{ $('#message-body').value='/'+$('#message-body').value.trim(); closeModal(); $('#message-body').focus(); resizeComposer(); };
 }
@@ -1137,7 +1154,68 @@ async function showChatRuntime(kind) {
   try {
     const result=await api('chat-status',{conversation});
     if(generation!==modalGeneration || !$('#modal').open)return;
-    $('#modal-body').innerHTML=`<p class="form-note">按 Agent 分别显示。最近执行模型来自后端返回值，可能与修改后的配置不同；没有记录时不推测。</p>${result.agents.map(a=>`<section class="command-agent"><div class="card-head"><strong>${esc(nameOf(a.principal))}</strong><span class="tag">${a.engine==='native'?'AGT 内置':esc(a.engine)}</span></div><dl class="resource-details"><dt>启用状态</dt><dd>${a.enabled?'已启用':'已停用'}</dd><dt>配置模型</dt><dd>${esc(a.configured_model || '沿用外部引擎默认配置')}</dd><dt>最近执行模型</dt><dd>${esc(a.last_run?.reported_model || '后端尚未报告')}</dd><dt>最近执行</dt><dd>${esc(a.last_run ? stateNames[a.last_run.state] || a.last_run.state : '暂无记录')}</dd>${a.environment?`<dt>运行环境</dt><dd>${esc(a.environment)}</dd>`:''}</dl>${a.environment?`<button class="secondary" type="button" data-command-environment="${esc(a.environment)}">编辑共享环境…</button><p class="form-note">修改模型会影响引用该环境的所有 Agent，后续任务将建立新的执行会话。</p>`:''}</section>`).join('') || '<p class="form-note">本会话暂无已配置运行设置的 Agent。</p>'}`;
+    $('#modal-body').innerHTML=`<p class="form-note">按 Agent 分别显示。最近执行模型来自后端返回值，可能与修改后的配置不同；没有记录时不推测。</p>${result.agents.map(a=>`<section class="command-agent"><div class="card-head"><strong>${esc(nameOf(a.principal))}</strong><span class="tag">${a.engine==='native'?'AGT 内置':esc(a.engine)}</span></div><dl class="resource-details"><dt>启用状态</dt><dd>${a.enabled?'已启用':'已停用'}</dd><dt>配置模型</dt><dd>${esc(a.configured_model || '沿用外部引擎默认配置')}</dd><dt>最近执行模型</dt><dd>${esc(a.last_run?.reported_model || '后端尚未报告')}</dd><dt>最近执行</dt><dd>${esc(a.last_run ? stateNames[a.last_run.state] || a.last_run.state : '暂无记录')}</dd>${a.environment?`<dt>Harness</dt><dd>${esc(a.environment)}</dd>`:''}</dl>${a.environment?`<button class="secondary" type="button" data-command-environment="${esc(a.environment)}">编辑共享环境…</button><p class="form-note">修改默认配置只影响新会话；已有会话保留配置快照。</p>`:''}</section>`).join('') || '<p class="form-note">本会话暂无已配置运行设置的 Agent。</p>'}`;
     $$('[data-command-environment]').forEach(b=>b.onclick=()=>showEnvironmentEdit(b.dataset.commandEnvironment));
   } catch(e) {if(generation===modalGeneration && $('#modal').open){$('#modal-body').innerHTML='';modalError(e);}}
+}
+
+async function showHarnessCommand(kind) {
+  const conversation=state.conversation.id;
+  const targets=state.boot.bindings.filter(b=>state.members.some(m=>m.principal_id===b.principal && m.left_message_seq==null) && items('agent').find(a=>ref(a)===b.agent)?.environment);
+  if (!targets.length) { if(kind==='model'||kind==='status') return showChatRuntime(kind); dialog('本会话没有外部 Harness','<p class="form-note">此操作需要 Agent 关联 Codex Harness。</p>'); return; }
+  const titles={model:'选择会话模型',status:'执行会话',compact:'压缩上下文',rename:'会话命名',skills:'Codex Skills',mcp:'Codex MCP',permissions:'会话权限'};
+  dialog(titles[kind] || '执行会话',`${field('操作对象',`<select id="harness-target">${options(targets.map(b=>[b.principal,nameOf(b.principal)]))}</select>`)}<div id="harness-detail"><p class="form-note">正在读取执行会话…</p></div>`);
+  const generation=modalGeneration;
+  let version=0;
+  const load=async()=>{
+    const request=++version, target=$('#harness-target').value;
+    const active=()=>generation===modalGeneration && $('#modal').open && request===version;
+    const call=(operation,extra={})=>api('harness',{operation,conversation,target,...extra});
+    $('#harness-detail').innerHTML='<p class="form-note">正在读取执行会话…</p>';
+    try {
+      const session=await call('current');
+      if(!active())return;
+      const operate=(operation,extra={})=>call(operation,{session:session.id,...extra});
+      const info=`<div class="harness-session-summary"><strong>${esc(session.title||'未命名执行会话')}</strong><span class="tag">${session.busy?'执行中或待检查':'就绪'}</span><dl class="resource-details"><dt>Harness</dt><dd>${esc(session.environment)}</dd><dt>项目目录</dt><dd>${esc(session.config.working_directory)}</dd><dt>Session ID</dt><dd>${esc(session.session_id||'首次执行时由 Codex 生成')}</dd></dl></div>`;
+      $('#harness-detail').innerHTML=info;
+      if(kind==='model') {
+        $('#harness-detail').insertAdjacentHTML('beforeend','<p id="harness-loading" class="form-note">正在读取 Codex 可用模型…</p>');
+        const catalog=await operate('models'); if(!active())return;
+        $('#harness-loading').remove();
+        const models=catalog.data;
+        if(!models.length){$('#harness-detail').insertAdjacentHTML('beforeend','<p class="form-note">当前连接没有返回可选模型。请检查 Codex 登录与服务配置。</p>');return;}
+        const selected=models.some(m=>m.model===session.config.model)?session.config.model:(models.find(m=>m.isDefault)||models[0]).model;
+        $('#harness-detail').insertAdjacentHTML('beforeend',`<form id="harness-model-form">${field('模型',`<select name="model">${options(models.map(m=>[m.model,m.displayName||m.model]),selected)}</select>`)}<p id="harness-model-description" class="form-note"></p>${field('思考档位','<select name="effort"></select>')}<p class="form-note">当前设置：${esc(session.config.model||'Codex 默认')} · ${esc(session.config.reasoning_effort||'默认档位')}。保存仅影响此 Agent 在本聊天中的后续执行，保留 Session ID。</p><div class="form-actions"><button class="primary" type="submit" ${session.busy?'disabled':''}>应用到本会话</button></div><p id="harness-feedback" role="status" class="form-note"></p></form>`);
+        const model=$('#harness-model-form [name=model]'),effort=$('#harness-model-form [name=effort]');
+        const update=()=>{const m=models.find(m=>m.model===model.value);$('#harness-model-description').textContent=m.description||'';effort.innerHTML=options(m.supportedReasoningEfforts.map(e=>[e.reasoningEffort,e.reasoningEffort]),m.model===session.config.model?session.config.reasoning_effort||m.defaultReasoningEffort:m.defaultReasoningEffort);};
+        model.onchange=update;update();
+        $('#harness-model-form').onsubmit=async e=>{e.preventDefault();const button=e.currentTarget.querySelector('button');button.disabled=true;try{await operate('configure',{model:model.value,effort:effort.value});if(active()){$('#harness-feedback').textContent='已保存，下次执行使用新设置。';}}catch(e){if(active())$('#harness-feedback').textContent=errorText(e);}finally{if(active())button.disabled=false;}};
+      } else if(kind==='rename') {
+        $('#harness-detail').insertAdjacentHTML('beforeend',`<form id="harness-rename-form">${field('会话名称',`<input name="title" value="${esc(session.title)}" maxlength="80" required>`,'同步到 Codex 的会话名称；不会修改聊天名称或 Session ID。')}<div class="form-actions"><button class="primary" ${session.busy?'disabled':''}>保存名称</button></div><p id="harness-feedback" role="status" class="form-note"></p></form>`);
+        $('#harness-rename-form').onsubmit=async e=>{e.preventDefault();const b=e.currentTarget.querySelector('button');b.disabled=true;try{await operate('rename',{title:e.currentTarget.elements.title.value});if(active())await load();}catch(e){if(active()){$('#harness-feedback').textContent=errorText(e);b.disabled=false;}}};
+      } else if(kind==='compact') {
+        $('#harness-detail').insertAdjacentHTML('beforeend',`<p class="form-note">由 Codex 压缩当前上下文，可能产生模型费用。保留聊天记录和 Session ID；失败或取消后请检查状态并用 /new 重新开始。</p><div class="form-actions"><button id="harness-compact" class="primary" ${session.busy||!session.session_id?'disabled':''}>开始压缩</button><button id="harness-cancel" class="secondary" ${session.busy?'':'disabled'}>取消执行</button></div><p id="harness-feedback" role="status" class="form-note"></p>`);
+        $('#harness-cancel').onclick=async()=>{try{await operate('cancel');if(active())$('#harness-feedback').textContent='已请求取消，请检查状态后重置上下文。';}catch(e){if(active())$('#harness-feedback').textContent=errorText(e);}};
+        $('#harness-compact').onclick=async()=>{$('#harness-compact').disabled=true;$('#harness-cancel').disabled=false;$('#harness-feedback').textContent='正在压缩，请等待 Codex 完成…';try{await operate('compact');if(active()){$('#harness-feedback').textContent='上下文压缩已完成。';$('#harness-compact').disabled=false;}}catch(e){if(active())$('#harness-feedback').textContent=errorText(e);}finally{if(active())$('#harness-cancel').disabled=true;}};
+      } else if(kind==='skills'||kind==='mcp') {
+        const data=await operate(kind);if(!active())return;
+        const rows=kind==='skills'?data.data.flatMap(d=>d.skills||[]):data.data;
+        $('#harness-detail').insertAdjacentHTML('beforeend',`<p class="form-note">来自此 Harness 项目和运行账户的 Codex 配置。</p><div class="harness-capability-list">${rows.map(r=>`<section><strong>${esc(r.name)}</strong><p>${esc(kind==='skills'?r.description||'':`认证：${r.authStatus||'未报告'} · 工具：${Object.keys(r.tools||{}).length}`)}</p></section>`).join('')||'<p class="form-note">未发现可用项目。</p>'}</div>`);
+        if(kind==='skills'&&data.data.some(d=>d.errors?.length))$('#harness-detail').insertAdjacentHTML('beforeend','<p class="form-note">部分 Skills 读取失败，请检查 Codex 项目配置。</p>');
+      } else {
+        $('#harness-detail').insertAdjacentHTML('beforeend',`<dl class="resource-details"><dt>模型设置</dt><dd>${esc(session.config.model||'Codex 默认')}</dd><dt>思考档位</dt><dd>${esc(session.config.reasoning_effort||'默认')}</dd><dt>文件权限</dt><dd>${session.config.sandbox==='read_only'?'只读':'工作区可写'}</dd><dt>权限升级</dt><dd>不自动批准</dd></dl><p class="form-note">这是此会话保存的配置快照。修改 Harness 默认配置只影响新会话。</p>`);
+      }
+    }catch(e){if(active())$('#harness-detail').innerHTML=`<p class="form-note" role="alert">${esc(errorText(e))}</p>`;}
+  };
+  $('#harness-target').onchange=load;await load();
+}
+async function showHarnessResourceSessions(reference) {
+  dialog('Harness 执行会话','<p class="form-note">正在读取关联会话…</p>');
+  const generation=modalGeneration;
+  try{
+    const records=await api('harness',{operation:'resource-sessions',reference});
+    if(generation!==modalGeneration||!$('#modal').open)return;
+    $('#modal-body').innerHTML=`<p class="form-note">${esc(reference)} · 仅展示你仍在其中的聊天。旧记录保留各自配置。</p><div class="harness-capability-list">${records.map(s=>`<section><strong>${esc(s.title||nameOf(s.principal))}</strong><p>${esc(s.config.model||'Codex 默认')} · ${esc(s.config.working_directory)}</p><p class="session-id">${esc(s.session_id||'尚未执行')}</p><button class="secondary" data-harness-chat="${esc(s.conversation)}">打开聊天</button></section>`).join('')||'<p class="form-note">尚无可见执行会话。在聊天中使用 /model 或发送消息后会建立记录。</p>'}</div>`;
+    $$('[data-harness-chat]').forEach(b=>b.onclick=async()=>{closeModal();switchPage('chat');await conversations();await selectConversation(b.dataset.harnessChat);});
+  }catch(e){if(generation===modalGeneration)modalError(e);}
 }

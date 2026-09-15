@@ -501,3 +501,25 @@ test('chat model/status reads are membership scoped and expose only reported met
   const data=await response.json();assert.equal(data.agents.length,1);assert.equal(data.agents[0].configured_model,null);assert.equal(data.agents[0].last_run.reported_model,'reported-model');assert.doesNotMatch(JSON.stringify(data),/PRIVATE/);
   assert.equal((await request('/api/chat-status',{conversation:'chat',viewer:'other'})).status,403);
 });
+
+test('Harness operations validate membership, current session and fixed identity',async t=>{
+  const calls=[];
+  const {request}=await fixture(t,async args=>{
+    calls.push(args);
+    if(args.includes('member_list'))return [{principal_id:'operator',left_message_seq:null},{principal_id:'a',left_message_seq:null}];
+    if(args.includes('current'))return {id:'current-session',principal:'a',conversation:'chat'};
+    return {data:[]};
+  });
+  const send=extra=>request('/api/harness',{conversation:'chat',target:'a',session:'current-session',operation:'models',...extra});
+  assert.equal((await send({viewer:'other'})).status,403);
+  assert.equal((await send({target:'not-member'})).status,403);
+  assert.equal((await send({session:'someone-elses-session'})).status,409);
+  assert.equal((await send({operation:'arbitrary-rpc'})).status,400);
+  assert.equal(calls.filter(a=>a[0]==='harness' && a[2]==='models').length,0);
+  assert.equal((await send({})).status,200);
+  assert.deepEqual(calls.at(-1),['harness','session','models','current-session']);
+  assert.equal((await send({operation:'configure',model:'fixture-model',effort:'xhigh'})).status,200);
+  assert.deepEqual(calls.at(-1),['harness','session','configure','current-session','--model','fixture-model','--effort','xhigh']);
+  for(const operation of ['compact','cancel','skills','mcp'])assert.equal((await send({operation})).status,200);
+  assert.equal((await send({operation:'rename',title:'Review session'})).status,200);
+});

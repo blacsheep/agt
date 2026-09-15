@@ -75,6 +75,33 @@ try {
   await evaluate(`selectConversation(${JSON.stringify(chat.id)})`);
   await wait('state.conversation?.id=== '+JSON.stringify(chat.id));
   await evaluate('document.querySelector("#auto-reply").checked=false;');
+  await evaluate('showHarnessCommand("model")');
+  await wait('document.querySelector("#harness-model-form [name=model]")');
+  assert.equal(await evaluate('document.querySelector("#harness-model-form [name=model]").value'),'fixture-model');
+  assert.equal(await evaluate('[...document.querySelector("#harness-model-form [name=effort]").options].map(o=>o.value).join(",")'),'high,xhigh');
+  for(const width of [1280,390]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<761});
+    assert.equal(await evaluate('document.querySelector("#modal").scrollWidth<=document.querySelector("#modal").clientWidth+1'),true);
+    if(process.env.AGT_DESIGN_CAPTURE){const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(`/tmp/agt-session-model-${width}.png`,Buffer.from(shot.data,'base64'));}
+  }
+  await evaluate('document.querySelector("#harness-model-form [name=effort]").value="xhigh";document.querySelector("#harness-model-form").requestSubmit()');
+  await wait('document.querySelector("#harness-feedback")?.textContent.includes("已保存")');
+  const sessions=await run(['harness','session','list']);
+  const session=sessions.find(s=>s.conversation===chat.id);
+  assert.equal(session.config.model,'fixture-model');assert.equal(session.config.reasoning_effort,'xhigh');assert.equal(session.session_id,null);
+  assert.equal(await evaluate('items("environment")[0].model'),null);
+  await evaluate('closeModal();showHarnessCommand("rename")');
+  await wait('document.querySelector("#harness-rename-form [name=title]")');
+  await evaluate('document.querySelector("#harness-rename-form [name=title]").value="Backend review";document.querySelector("#harness-rename-form").requestSubmit()');
+  await wait('document.querySelector(".harness-session-summary strong")?.textContent==="Backend review"');
+  await evaluate('closeModal();showHarnessCommand("skills")');
+  await wait('document.querySelector("#harness-detail")?.textContent.includes("fixture-skill")');
+  await evaluate('closeModal();showHarnessCommand("mcp")');
+  await wait('document.querySelector("#harness-detail")?.textContent.includes("fixture-mcp")');
+  await evaluate('closeModal();showHarnessResourceSessions("default/local")');
+  await wait('document.querySelector("[data-harness-chat]")');
+  assert.equal(await evaluate('document.querySelector("[data-harness-chat]").dataset.harnessChat'),chat.id);
+  await evaluate('closeModal()');
   for(const text of ['/model','/status','/compact','/review','/permissions','/model future','/']) {
     await evaluate(`document.querySelector('#message-body').value=${JSON.stringify(text)}; document.querySelector('#composer').requestSubmit();`);
     await wait('document.querySelector("#modal").open && !document.querySelector("#modal-body").textContent.includes("正在读取")');

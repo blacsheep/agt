@@ -21,7 +21,7 @@ export function cliRunner(binary, home) {
   const children = new Set();
   const run = (args, { env = {} } = {}) => new Promise((resolveResult, reject) => {
     const child = execFile(binary, ['--home', home, '--output', 'json', ...args], {
-      env: { ...process.env, ...env }, timeout: 30_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true,
+      env: { ...process.env, ...env }, timeout: args[0] === 'harness' && args[1] === 'session' && args[2] === 'compact' ? 86_400_000 : 30_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true,
     }, (error, stdout) => {
       children.delete(child);
       let value;
@@ -122,6 +122,35 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         };
         // Never serialize private Run input, final output, tool arguments or summaries.
         send(200, { scheduler, runs: runs.map(r => ({ id: r.id, agent: r.request.agent, conversation: r.request.trigger?.conversation_id, state: r.state, model_steps: r.model_steps, tool_failures: r.tool_failures, error: r.error ? '执行失败，请查看消息投递了解原因。' : null, progress: progress(r) })) });
+      } else if (req.method === 'POST' && url.pathname === '/api/harness') {
+        const data = await body(req), operation = str(data.operation);
+        if ('viewer' in data || 'actor' in data || 'principal' in data) throw new ApiError(403, 'identity_fixed', '操作身份由启动者固定。');
+        if (operation === 'capabilities') { send(200, await run(['harness','capabilities'])); return; }
+        if (operation === 'resource-models') { send(200,await run(['harness','models',str(data.reference)])); return; }
+        if (operation === 'resource-sessions') {
+          const reference = str(data.reference);
+          const records = await run(['harness','session','list']);
+          const visible = [];
+          for (const session of records.filter(s=>s.environment===reference && s.conversation)) {
+            const members = await member(session.conversation).catch(()=>[]);
+            if (members.some(m=>m.principal_id===principal && m.left_message_seq==null)) visible.push(session);
+          }
+          send(200,visible); return;
+        }
+        const conversation = str(data.conversation), target = str(data.target);
+        const members = await member(conversation);
+        if (![principal,target].every(id=>members.some(m=>m.principal_id===id && m.left_message_seq==null))) throw new ApiError(403,'not_member','仅当前会话成员可管理该 Agent 的执行会话。');
+        const session = await run(['harness','session','current','--principal',target,'--conversation',conversation]);
+        if (operation === 'current') { send(200,session); return; }
+        if (str(data.session) !== session.id) throw new ApiError(409,'session_changed','执行会话已变化，请刷新后重试。');
+        const args = ['harness','session'];
+        if (['models','skills','mcp','compact','cancel'].includes(operation)) args.push(operation,session.id);
+        else if (operation === 'configure') {
+          args.push('configure',session.id,'--model',str(data.model));
+          if (data.effort) args.push('--effort',str(data.effort));
+        } else if (operation === 'rename') args.push('rename',session.id,str(data.title));
+        else throw new ApiError(400,'unsupported_operation','尚未接入此 Harness 操作。');
+        send(200,await run(args));
       } else if (req.method === 'POST' && url.pathname === '/api/chat-status') {
         const data = await body(req), conversation = str(data.conversation);
         if ('viewer' in data || 'principal' in data || 'actor' in data) throw new ApiError(403, 'identity_fixed', '查看身份由启动者固定。');

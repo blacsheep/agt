@@ -47,8 +47,8 @@ Codex 自身配置中的工具仍由 Codex 管理，其权限和认证不由 AGT
 
 ## 会话与恢复
 
-`runtime/harnesses.db` 保存外部 thread、历史游标、已发送历史摘要哈希及 dirty 标记。
-作用域包括 Agent principal、聊天 conversation、上下文 reset cutoff、实际配置指纹。
+`runtime/harnesses.db` 保存外部 thread、配置快照、历史游标、已发送历史摘要哈希及 dirty 标记。
+作用域包括 Agent 配置、principal、聊天 conversation 和上下文 reset cutoff；资源默认值不纳入会话标识。
 无聊天身份的显式 agent run 每次新建独立线程。
 恢复时校验已发送历史仍可见且未被修改；不匹配则新建线程。正常恢复只发送增量历史。
 
@@ -72,11 +72,12 @@ Codex 自身配置中的工具仍由 Codex 管理，其权限和认证不由 AGT
 - `/`、`/help`：可用命令与能力说明。
 - `/new`、`/clear`：现有上下文重置确认；后者不删除 Web 聊天记录。
 - `/stop`：现有结束讨论确认。
-- `/model`、`/status`：读取本会话成员的配置与最近 Run 元数据。后端 model 字段由
-  thread/start/resume 的实际响应记录，不能用模型自述替代；缺少时明确显示未报告。
-  这不是 Codex TUI 的原生模型选择器。修改共享环境的影响范围在编辑入口明确提示。
-- `/compact`、`/review`、`/diff`、`/resume`、`/fork`、`/permissions` 等尚未映射，
-  未知命令和带参数命令也明确说明不支持，不静默转成用户消息。
+- `/model`：按 Agent 查询 Codex 模型目录与档位，校验后修改当前会话快照，下一轮应用。
+- `/status`、`/permissions`：查看当前 Harness 会话与权限快照；内置 Agent 仍使用运行信息页。
+- `/rename`：同步 Codex 会话名称；`/compact`：启动并等待引擎压缩，可取消。
+- `/skills`、`/mcp`：查询 Codex 自身项目能力，不等于挂载 AGT 的 Skills/MCP。
+- `/review`、`/diff`、`/resume`、`/fork` 和交互审批尚未映射。
+  未知命令和带参数命令明确说明不支持，不静默转成用户消息。
 - `//model` 通过显式 literal_message 标记发送 `/model` 文本，用于讨论命令本身。
   多行引用、普通句子中的斜杠和 `/tmp/project` 一类路径仍属于普通消息。
 
@@ -87,7 +88,7 @@ Codex 自身配置中的工具仍由 Codex 管理，其权限和认证不由 AGT
 它不会擦除 Codex 的长期记忆、项目文件或 AGT 聊天历史。
 
 执行前持久化 dirty 防止并发或崩溃后重复执行。失败/中断不自动恢复：检查 Run 和文件，
-用 /new 后继续。环境配置改变也会建立新的线程。进程关闭不会删除 Codex 保存的线程。
+用 /new 后继续。资源配置改变只影响新会话；已有线程采用快照。进程关闭不会删除 Codex 保存的线程。
 外部输入有 1 MiB 传输保护，超过时明确失败；工作上下文压缩交给外部引擎。
 
 ## 后续接入契约
@@ -127,7 +128,7 @@ Web 验证创建/编辑环境与 Agent、缺少模型时选择外部环境、桌
 引擎适配器封装 app-server；AGT 会话记录与 Codex session_id 分离，thread ID 只取自引擎响应。
 
 `sessions_v3` 按 Agent 配置、principal、conversation、reset cutoff 标识 AGT 会话记录。
-首次准备记录时保存 Environment 配置快照。更新资源默认值不影响已有记录；/new 后
+首次准备记录时保存 Environment 配置快照；首次执行时固定引擎返回的默认模型/档位。更新资源默认值不影响已有记录；/new 后
 新记录采用新默认值。修改 Agent 的角色/工具配置会另建记录，避免旧线程保留失效权限。
 旧 sessions 表保留；首次升级到 v3 创建新线程并重建可见聊天背景，不迁移私有工具上下文。
 同一目录中的文件与运行账户的 Codex 全局配置仍共享；快照不是文件系统或账户隔离。
@@ -147,3 +148,16 @@ Web 验证创建/编辑环境与 Agent、缺少模型时选择外部环境、桌
 修改模型、命名、执行和压缩共享数据库互斥围栏。执行中拒绝修改；取消不等于回滚文件操作。
 CLI 是本机管理员入口，Web 另行验证当前操作者及目标 Agent 的会话成员身份。
 `/review`、`/diff`、任意线程导入/恢复、fork 和交互审批本阶段明确不支持；不提供任意 RPC 透传。
+
+Web `/api/harness` 使用固定操作者，验证操作者及目标 Agent 当前成员身份，按当前会话记录 ID
+拒绝过期或其他会话的操作；不提供任意 RPC 透传。停止讨论、重置和解散也会取消相关压缩。
+
+本轮无推理的真实 Codex model/list 验证返回 6 个模型，包含 max/ultra 等后端声明的档位；
+目录查询不是模型推理端到端验收。协议桩覆盖会话配置隔离、命名、压缩完成及取消围栏。
+
+### v3 验收
+
+- 全工作区 Rust 测试通过；后续默认模型固定与线程内切换修订通过 44 项运行时单元测试。
+- Codex 协议桩 4 项测试通过；全工作区 Clippy 所有 target 禁止警告、格式和 diff 检查通过。
+- Web 接口 21 项测试通过；Harness 与工作区浏览器回归通过，手机/桌面模型选择布局已核验。
+- 验证真实 Codex 模型发现，不发起推理；真实推理、其他引擎和交互审批仍未验收。
