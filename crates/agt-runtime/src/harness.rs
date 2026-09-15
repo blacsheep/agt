@@ -1,7 +1,7 @@
 //! Whole-task external execution: deliberately outside ModelClient and model retries.
 use crate::{Result, RunRecord, RunStore, RuntimeError, ScheduledTask};
 use agt_core::CancellationToken;
-use agt_harness::{Codex, EnvironmentStore, Event, Execution, Tool};
+use agt_harness::{Codex, Event, Execution, HarnessStore, Tool};
 use agt_service::{Actor, Role, ToolService};
 use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
@@ -38,10 +38,10 @@ pub(crate) fn execute(
         ));
     }
     let reference = agent
-        .environment
+        .harness
         .as_ref()
-        .ok_or_else(|| error("missing environment"))?;
-    let environment = EnvironmentStore::new(home)
+        .ok_or_else(|| error("missing harness"))?;
+    let harness = HarnessStore::new(home)
         .read_in(reference.category(), reference.name().as_str())
         .map_err(error)?
         .config;
@@ -158,7 +158,7 @@ pub(crate) fn execute(
                 cutoff,
             ),
             &agent,
-            &environment,
+            &harness,
             if task.is_none() {
                 Some(record.id.as_str())
             } else {
@@ -170,16 +170,16 @@ pub(crate) fn execute(
     sessions.lock(&scope).map_err(error)?;
     // Read the snapshot after acquiring the same lock used by configuration commands.
     let session = sessions.get(&scope).map_err(error)?;
-    let environment = session.config;
-    environment.validate().map_err(error)?;
-    record.request.working_directory = environment.working_directory.clone();
+    let harness = session.config;
+    harness.validate().map_err(error)?;
+    record.request.working_directory = harness.working_directory.clone();
     record.config_fingerprint = Some(crate::fingerprint(&serde_json::to_vec(
-        &json!({"agent":format!("{agent:?}"),"environment":environment,"input_format":3,"instructions":config_instructions,"tools":tools.iter().map(|t|json!([t.name,t.input_schema])).collect::<Vec<_>>()}),
+        &json!({"agent":format!("{agent:?}"),"harness":harness,"input_format":3,"instructions":config_instructions,"tools":tools.iter().map(|t|json!([t.name,t.input_schema])).collect::<Vec<_>>()}),
     )?));
     let session_db = &sessions.db;
     let saved: Option<(Option<String>, i64, String, bool)> = session_db
         .query_row(
-            "SELECT thread,through_seq,source_hash,dirty FROM sessions_v3 WHERE scope=?1",
+            "SELECT thread,through_seq,source_hash,dirty FROM harness_sessions WHERE scope=?1",
             [&scope],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
@@ -231,7 +231,7 @@ pub(crate) fn execute(
     let audit_record = record.clone();
     let failures = std::cell::Cell::new(0u32);
     record.execution =
-        Some(json!({"engine":"codex","environment":reference.to_string(),"session_record":scope}));
+        Some(json!({"engine":"codex","harness":reference.to_string(),"session_record":scope}));
     let current_chat = record
         .request
         .trigger
@@ -248,7 +248,7 @@ pub(crate) fn execute(
                 record.execution.as_mut().unwrap()["thread_id"] = json!(id);
                 store.save(record)?;
                 session_db.execute(
-                    "UPDATE sessions_v3 SET thread=?2 WHERE scope=?1",
+                    "UPDATE harness_sessions SET thread=?2 WHERE scope=?1",
                     params![scope, id],
                 )?;
             }
@@ -270,7 +270,7 @@ pub(crate) fn execute(
         }
         Ok(())
     };
-    let mut client = match Codex::connect(&environment, &mut event) {
+    let mut client = match Codex::connect(&harness, &mut event) {
         Ok(client) => client,
         Err(e) => {
             let e = check().err().unwrap_or_else(|| error(e));
@@ -328,7 +328,7 @@ pub(crate) fn execute(
         result.map_err(Into::into)
     };
     let result = client.execute(
-        &environment,
+        &harness,
         Execution {
             input: &input,
             instructions: &instructions,
@@ -342,7 +342,7 @@ pub(crate) fn execute(
     if result.is_ok() && thread.is_none() && !session.title.is_empty() {
         let saved = sessions.get(&scope).map_err(error)?;
         if let Some(thread) = saved.session_id {
-            Codex::rename(&environment, &thread, &session.title).map_err(error)?;
+            Codex::rename(&harness, &thread, &session.title).map_err(error)?;
         }
     }
     let result = check().and_then(|_| result.map_err(error));
@@ -361,7 +361,7 @@ pub(crate) fn execute(
     let output = result?;
     let save = || {
         session_db.execute(
-            "UPDATE sessions_v3 SET dirty=0,through_seq=?2,source_hash=?3 WHERE scope=?1",
+            "UPDATE harness_sessions SET dirty=0,through_seq=?2,source_hash=?3 WHERE scope=?1",
             params![
                 scope,
                 task.map(|t| t.through_seq).unwrap_or(0),

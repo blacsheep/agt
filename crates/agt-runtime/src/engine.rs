@@ -59,7 +59,7 @@ impl<'a> Runtime<'a> {
         let result = (|| {
             check_canceled(cancellation)?;
             if crate::harness::agent_config(&self.home, &request.agent)?
-                .environment
+                .harness
                 .is_some()
             {
                 return crate::harness::execute(

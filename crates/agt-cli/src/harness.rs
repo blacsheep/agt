@@ -1,5 +1,5 @@
 use crate::{OutputMode, emit, parse_named_ref};
-use agt_harness::{Codex, EnvironmentStore};
+use agt_harness::{Codex, HarnessStore};
 use agt_runtime::HarnessSessions;
 use anyhow::Result;
 use clap::Subcommand;
@@ -9,9 +9,9 @@ use std::path::Path;
 pub(crate) enum HarnessCommand {
     /// Supported engine operations, independent of terminal slash commands
     Capabilities,
-    /// Create, edit and delete reusable Harness resources (environment compatibility)
+    /// Create, edit and delete reusable Harness resources
     #[command(subcommand)]
-    Resource(crate::EnvironmentCommand),
+    Resource(crate::HarnessResourceCommand),
     /// Models and reasoning levels reported by this resource's connection
     Models { reference: String },
     /// Inspect engine-managed skills for the configured project
@@ -73,7 +73,7 @@ pub(crate) fn dispatch(
 ) -> Result<()> {
     match command {
         HarnessCommand::Resource(command) => {
-            crate::dispatch_environment(command, home, output, yes)
+            crate::dispatch_harness_resource(command, home, output, yes)
         }
         HarnessCommand::Capabilities => emit(&Codex::capabilities(), output),
         HarnessCommand::Models { reference } => {
@@ -124,7 +124,7 @@ fn resource_operation(
     operation: &str,
 ) -> Result<()> {
     let (c, n) = parse_named_ref(reference, None)?;
-    let config = EnvironmentStore::new(home).read_in(&c, &n)?.config;
+    let config = HarnessStore::new(home).read_in(&c, &n)?.config;
     emit(
         &if operation == "models" {
             Codex::models(&config)?

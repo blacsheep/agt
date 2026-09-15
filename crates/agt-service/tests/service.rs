@@ -853,23 +853,44 @@ fn mcp_protocol_accepts_direct_provider_keys_and_exposes_resource_extensions() {
 }
 
 #[test]
-fn resource_agents_can_reference_but_cannot_write_execution_environments() {
+fn resource_agents_can_reference_but_cannot_write_execution_harnesses() {
     let home = home();
     let config = json!({"engine":"codex","executable":std::env::current_exe().unwrap(),"working_directory":home.path(),"sandbox":"read_only"});
     let owner = service(home.path(), "owner", true);
     let agent = service(home.path(), "a", false).with_resource_management(true);
-    let args = json!({"kind":"environment","reference":"local","create":true,"data":config});
+    let schemas = owner.schemas();
+    let write = schemas
+        .iter()
+        .find(|s| s["name"] == "resource_write")
+        .unwrap();
+    let kinds = write["inputSchema"]["properties"]["kind"]["enum"]
+        .as_array()
+        .unwrap();
+    assert!(kinds.contains(&json!("harness")));
+    assert!(!kinds.contains(&json!("environment")));
+    assert!(
+        owner
+            .call("resource_list", json!({"kind":"environment"}))
+            .is_err()
+    );
+    assert!(owner.call("resource_write",json!({"kind":"agent","reference":"legacy","create":true,"data":{"environment":"local"}})).is_err());
+    let args = json!({"kind":"harness","reference":"local","create":true,"data":config});
     assert!(agent.call("resource_write", args.clone()).is_err());
     owner.call("resource_write", args).unwrap();
-    let result=agent.call("resource_write",json!({"kind":"agent","reference":"external","create":true,"data":{"environment":"local"}})).unwrap();
+    let result = agent
+        .call(
+            "resource_write",
+            json!({"kind":"agent","reference":"external","create":true,"data":{"harness":"local"}}),
+        )
+        .unwrap();
     assert!(result["model"].is_null());
     assert_eq!(result["activation"]["enabled"], false);
-    assert!(agent.call("resource_write",json!({"kind":"agent","reference":"bad","create":true,"data":{"environment":"local","model":"missing"}})).is_err());
+    assert!(agent.call("resource_write",json!({"kind":"agent","reference":"bad","create":true,"data":{"harness":"local","model":"missing"}})).is_err());
     assert!(
         owner
             .call(
                 "resource_delete",
-                json!({"kind":"environment","reference":"local"})
+                json!({"kind":"harness","reference":"local"})
             )
             .is_err()
     );

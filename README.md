@@ -42,7 +42,8 @@ agt-model      model alias 及 provider 引用
 agt-prompt     PROMPT.md
 agt-skill      SKILL.md（支持 scoped package）
 agt-mcp        mcp.json（stdio/http 配置）
-agt-agent      agent.yaml 及 model/prompt/skill/MCP 挂载
+agt-agent      agent.yaml 及 model/harness/prompt/skill/MCP 引用
+agt-harness    harness.yaml 资源、Codex 协议与执行控制
 agt-im         通用参与者、私聊/群聊、消息、已读和事件存储（SQLite）
 agt-service    资源工具、身份权限、Agent 绑定、响应策略和 stdio MCP 服务
 agt-runtime    模型/工具循环、持久化 Run、消息投递调度和显式委派
@@ -77,6 +78,7 @@ cargo run -q -p agt-cli -- init /tmp/agt-home
   skills/default/
   mcps/default/
   agents/default/
+  harnesses/default/
   im/                         # 首次使用 agt im 时自动创建
     im.db
   runtime/                    # 按首次使用相应功能创建
@@ -223,10 +225,10 @@ agt model delete fast --recursive --dry-run
 ```
 
 依赖图只沿入站引用展开：删除 Provider 会级联其 Model 和 Agent；删除 Prompt、
-Skill 或 MCP 会级联引用它们的 Agent。Agent 使用的其他共享资源不会因为 Agent
+Skill、MCP 或 Harness 会级联引用它们的 Agent。Agent 使用的其他共享资源不会因为 Agent
 被删除而反向删除。`--dry-run` 只输出计划，不修改文件。
 
-删除前会扫描全部六类资源并检查悬空引用、损坏配置和受保护对象；任一检查失败
+删除前会扫描全部七类资源并检查悬空引用、损坏配置和受保护对象；任一检查失败
 都会 fail-closed。`prompt/default/default` 是不可删除的保留资源。
 实际删除先把目录移动到 `<home>/.trash/<timestamp-pid-attempt>`，批量失败时尝试回滚。
 非 TTY 环境必须显式提供 `--yes`；TTY 默认会再次确认。
@@ -334,19 +336,19 @@ Agent 的递归删除，以及 IM 私聊、幂等消息和群成员生命周期�
 
 ## 外部 Harness 执行
 
-运行环境是可复用资源，Agent 选择 `--model` 或 `--environment`（二选一）。
+Harness 是可复用资源，Agent 选择 `--model` 或 `--harness`（二选一）。
 当前实现本机 Codex app-server，其他引擎尚未注册。
 
 ```bash
 # local.json 示例：
 # {"engine":"codex","executable":"/usr/local/bin/codex",
 #  "working_directory":"/absolute/project","sandbox":"read_only"}
-agt environment create local --file local.json
-agt environment test local
-agt agent create reviewer --environment local --prompt review
+agt harness resource create local --file local.json
+agt harness resource test local
+agt agent create reviewer --harness local --prompt review
 agt agent run reviewer --input '审查当前变更'
-# environment 同样支持 list/info/update/delete/category，env 是命令别名。
+# agt harness resource 同样支持 list/info/update/delete/category。
 ```
 
-Web 可在资源库管理运行环境，并在 Agent 编辑页选择外部执行方式。
+Web 可在资源库管理 Harness，并在 Agent 编辑页选择外部执行方式。
 接入边界、会话恢复与取消语义见 [Harness 设计](docs/harness-integration.md)。

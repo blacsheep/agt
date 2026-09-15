@@ -49,7 +49,7 @@ macro_rules! define_id {
 }
 
 define_id!(AgentId);
-define_id!(EnvId);
+define_id!(HarnessId);
 define_id!(SkillId);
 define_id!(McpId);
 define_id!(KbId);

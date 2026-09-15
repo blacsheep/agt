@@ -580,7 +580,7 @@ pub(crate) fn execute(
     let trigger = messaging.im.get_message(&MessageId::new(&task.message))?;
     let policy = BindingStore::open(home)?.policy(&trigger.conversation_id, &binding)?;
     let external = crate::harness::agent_config(home, &binding.agent)?
-        .environment
+        .harness
         .is_some();
     let mut eligible = false;
     let mut batch = Vec::new();

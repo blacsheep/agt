@@ -1,5 +1,6 @@
 use agt_core::{
-    AgentId, CategoryName, EnvId, McpId, ModelId, PackageRef, PromptId, QualifiedRef, ResourceRef,
+    AgentId, CategoryName, HarnessId, McpId, ModelId, PackageRef, PromptId, QualifiedRef,
+    ResourceRef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -35,7 +36,7 @@ pub struct AgentConfig {
     pub name: AgentId,
     pub description: String,
     pub model: Option<QualifiedRef<ModelId>>,
-    pub environment: Option<QualifiedRef<EnvId>>,
+    pub harness: Option<QualifiedRef<HarnessId>>,
     pub prompt: QualifiedRef<PromptId>,
     pub skills: Vec<ResourceRef>,
     pub mcps: Vec<QualifiedRef<McpId>>,
@@ -55,7 +56,7 @@ impl AgentConfig {
             name: AgentId::new(name),
             description: String::new(),
             model: Some(QualifiedRef::in_default(ModelId::new(model))),
-            environment: None,
+            harness: None,
             prompt: QualifiedRef::in_default(PromptId::new(agt_prompt::DEFAULT_PROMPT_NAME)),
             skills: Vec::new(),
             mcps: Vec::new(),
@@ -65,10 +66,10 @@ impl AgentConfig {
         Ok(config)
     }
 
-    pub fn external(name: impl Into<String>, environment: QualifiedRef<EnvId>) -> Result<Self> {
+    pub fn external(name: impl Into<String>, harness: QualifiedRef<HarnessId>) -> Result<Self> {
         let mut config = Self::new(name, "unused")?;
         config.model = None;
-        config.environment = Some(environment);
+        config.harness = Some(harness);
         config.validate()?;
         Ok(config)
     }
@@ -83,18 +84,18 @@ impl AgentConfig {
 
     pub fn validate(&self) -> Result<()> {
         validate_agent_name(self.name.as_str())?;
-        if self.model.is_some() == self.environment.is_some() {
+        if self.model.is_some() == self.harness.is_some() {
             return Err(AgentError::InvalidConfig {
-                message: "choose exactly one of model or environment".into(),
+                message: "choose exactly one of model or harness".into(),
             });
         }
-        if self.environment.is_some() && !self.mcps.is_empty() {
+        if self.harness.is_some() && !self.mcps.is_empty() {
             return Err(AgentError::InvalidConfig {
-                message: "external environments do not yet support AGT MCP mounts".into(),
+                message: "external harnesses do not yet support AGT MCP mounts".into(),
             });
         }
-        if let Some(environment) = &self.environment {
-            validate_agent_name(environment.name().as_str())?;
+        if let Some(harness) = &self.harness {
+            validate_agent_name(harness.name().as_str())?;
         }
         if let Some(model) = &self.model {
             agt_model::validate_model_name(model.name().as_str()).map_err(|error| {
@@ -125,12 +126,13 @@ impl AgentConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct AgentConfigYaml {
     pub name: String,
     #[serde(default)]
     pub description: String,
     pub model: Option<QualifiedRef<ModelId>>,
-    pub environment: Option<QualifiedRef<EnvId>>,
+    pub harness: Option<QualifiedRef<HarnessId>>,
     pub prompt: QualifiedRef<PromptId>,
     #[serde(default)]
     pub skills: Vec<SkillAttachmentYaml>,
@@ -160,7 +162,7 @@ impl TryFrom<AgentConfigYaml> for AgentConfig {
             name: AgentId::new(value.name),
             description: value.description,
             model: value.model,
-            environment: value.environment,
+            harness: value.harness,
             prompt: value.prompt,
             skills: value
                 .skills
@@ -181,7 +183,7 @@ impl From<&AgentConfig> for AgentConfigYaml {
             name: value.name.to_string(),
             description: value.description.clone(),
             model: value.model.clone(),
-            environment: value.environment.clone(),
+            harness: value.harness.clone(),
             prompt: value.prompt.clone(),
             skills: value.skills.iter().map(SkillAttachmentYaml::from).collect(),
             mcps: value.mcps.clone(),
@@ -275,6 +277,12 @@ mod tests {
         assert_eq!(loaded, config);
         assert!(!yaml.contains("interaction:"));
         assert!(!yaml.contains("model_policy:"));
+    }
+
+    #[test]
+    fn rejects_removed_environment_field() {
+        let yaml = "name: coder\nmodel: {category: default, name: fast}\nprompt: {category: default, name: default}\nenvironment: {category: default, name: old}\n";
+        assert!(serde_yaml::from_str::<AgentConfigYaml>(yaml).is_err());
     }
 
     #[test]

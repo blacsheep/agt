@@ -8,7 +8,7 @@ use crate::paths::{AgtPaths, default_agt_home};
 const DEFAULT_CONFIG: &str = "# agt 用户配置\n";
 
 const DEFAULT_DIRS: &[&str] = &[
-    "environments",
+    "harnesses",
     "providers",
     "models",
     "skills",
@@ -18,7 +18,7 @@ const DEFAULT_DIRS: &[&str] = &[
 ];
 
 const DEFINITION_DIRS: &[&str] = &[
-    "environments",
+    "harnesses",
     "providers",
     "models",
     "skills",
@@ -87,7 +87,7 @@ mod tests {
         assert_eq!(summary.home, home);
         assert!(summary.config_file.is_file());
         for dir in [
-            "environments",
+            "harnesses",
             "providers",
             "models",
             "skills",

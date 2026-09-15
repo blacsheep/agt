@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const readTools = new Set(['conversation_list', 'member_list', 'message_history', 'message_status', 'message_inbox']);
 const writeTools = new Set(['direct_create', 'group_create', 'message_send', 'member_add', 'member_remove', 'resource_write', 'principal_create', 'agent_bind', 'agent_unbind', 'agent_set_enabled']);
-const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent', 'environment'];
+const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent', 'harness'];
 const assets = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
 
 export class ApiError extends Error {
@@ -131,7 +131,7 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
           const reference = str(data.reference);
           const records = await run(['harness','session','list']);
           const visible = [];
-          for (const session of records.filter(s=>s.environment===reference && s.conversation)) {
+          for (const session of records.filter(s=>s.harness===reference && s.conversation)) {
             const members = await member(session.conversation).catch(()=>[]);
             if (members.some(m=>m.principal_id===principal && m.left_message_seq==null)) visible.push(session);
           }
@@ -159,11 +159,11 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         const [bindings, runs] = await Promise.all([tool('binding_list'), run(['run','list','--limit','200'])]);
         const agents = await Promise.all(bindings.filter(b => members.some(m => m.principal_id === b.principal && m.left_message_seq == null)).map(async b => {
           const definition = await tool('resource_read', {kind:'agent',reference:b.agent});
-          const environment = definition.environment && `${definition.environment.category}/${definition.environment.name}`;
-          const config = await tool('resource_read', {kind:environment ? 'environment' : 'model',reference:environment || `${definition.model.category}/${definition.model.name}`});
+          const harness = definition.harness && `${definition.harness.category}/${definition.harness.name}`;
+          const config = await tool('resource_read', {kind:harness ? 'harness' : 'model',reference:harness || `${definition.model.category}/${definition.model.name}`});
           const last = runs.find(r => r.request.trigger?.conversation_id === conversation && r.request.trigger?.principal === b.principal && r.request.agent === b.agent);
-          return {principal:b.principal,agent:b.agent,enabled:b.enabled !== false,engine:environment ? config.engine : 'native',environment:environment || null,configured_model:config.model || null,
-            last_run:last ? {id:last.id,state:last.state,reported_model:typeof last.execution?.model === 'string' ? last.execution.model : null,environment:last.execution?.environment || null} : null};
+          return {principal:b.principal,agent:b.agent,enabled:b.enabled !== false,engine:harness ? config.engine : 'native',harness:harness || null,configured_model:config.model || null,
+            last_run:last ? {id:last.id,state:last.state,reported_model:typeof last.execution?.model === 'string' ? last.execution.model : null,harness:last.execution?.harness || null} : null};
         }));
         send(200,{conversation,agents});
       } else if (req.method === 'POST' && url.pathname === '/api/read') {
@@ -188,10 +188,10 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         } else result = await tool(name, args);
         if (name === 'message_send' && data.auto_reply === true) await run(['schedule', 'start', str(args.conversation), '--message', str(result.message.id)]);
         send(200, result);
-      } else if (req.method === 'POST' && url.pathname === '/api/environment-test') {
+      } else if (req.method === 'POST' && url.pathname === '/api/harness-test') {
         const data = await body(req);
         if ('viewer' in data || 'principal' in data) throw new ApiError(403, 'identity_fixed', '连接测试仅供控制台管理员使用。');
-        send(200, await run(['environment', 'test', str(data.reference)]));
+        send(200, await run(['harness', 'resource', 'test', str(data.reference)]));
       } else if (req.method === 'POST' && url.pathname === '/api/provider-models') {
         const data = await body(req);
         const provider = str(data.provider);

@@ -70,12 +70,12 @@ impl BindingStore {
         let agent = AgentStore::new(&self.home)
             .read_in(&category, &name)?
             .config;
-        if let Some(environment) = agent.environment {
-            let environment = agt_harness::EnvironmentStore::new(&self.home)
-                .read_in(environment.category(), environment.name().as_str())?
+        if let Some(harness) = agent.harness {
+            let harness = agt_harness::HarnessStore::new(&self.home)
+                .read_in(harness.category(), harness.name().as_str())?
                 .config;
-            environment.validate()?;
-            binding.working_directory = environment.working_directory;
+            harness.validate()?;
+            binding.working_directory = harness.working_directory;
             if binding.policy == ResponsePolicy::All {
                 binding.policy = ResponsePolicy::Mentioned;
             }

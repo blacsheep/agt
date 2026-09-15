@@ -87,10 +87,7 @@ enum Command {
     /// manage agent definitions
     #[command(subcommand)]
     Agent(AgentCommand),
-    /// manage reusable external execution environments
-    #[command(subcommand, alias = "env")]
-    Environment(EnvironmentCommand),
-    /// inspect and control external Harness sessions
+    /// manage Harness resources, engine capabilities and execution sessions
     #[command(subcommand)]
     Harness(harness::HarnessCommand),
     /// inspect persisted agent executions
@@ -338,9 +335,9 @@ struct McpWriteArgs {
 }
 
 #[derive(Debug, Subcommand)]
-enum EnvironmentCommand {
-    Create(EnvironmentWriteArgs),
-    Update(EnvironmentWriteArgs),
+enum HarnessResourceCommand {
+    Create(HarnessWriteArgs),
+    Update(HarnessWriteArgs),
     List(ListArgs),
     Info(RefArgs),
     Test(RefArgs),
@@ -349,9 +346,9 @@ enum EnvironmentCommand {
     Category(CategoryCommand),
 }
 #[derive(Debug, Args)]
-struct EnvironmentWriteArgs {
+struct HarnessWriteArgs {
     name: String,
-    /// JSON environment configuration (create: full object; update: patch)
+    /// JSON harness configuration (create: full object; update: patch)
     #[arg(long)]
     file: PathBuf,
     #[arg(long)]
@@ -381,14 +378,10 @@ struct AgentCreateArgs {
     name: String,
     #[arg(long = "builtin-tool")]
     builtin_tools: Vec<BuiltinTool>,
-    #[arg(
-        long,
-        required_unless_present = "environment",
-        conflicts_with = "environment"
-    )]
+    #[arg(long, required_unless_present = "harness", conflicts_with = "harness")]
     model: Option<String>,
     #[arg(long)]
-    environment: Option<String>,
+    harness: Option<String>,
     #[arg(long)]
     prompt: Option<String>,
     #[arg(long = "skill")]
@@ -412,10 +405,10 @@ struct AgentUpdateArgs {
     category: Option<String>,
     #[arg(long)]
     description: Option<String>,
-    #[arg(long, conflicts_with = "environment")]
+    #[arg(long, conflicts_with = "harness")]
     model: Option<String>,
     #[arg(long)]
-    environment: Option<String>,
+    harness: Option<String>,
     #[arg(long)]
     prompt: Option<String>,
     #[arg(long = "add-skill")]
@@ -734,7 +727,6 @@ fn dispatch(command: Command, home: &Path, output: OutputMode, yes: bool) -> Res
         Command::Skill(command) => dispatch_skill(command, home, output, yes),
         Command::Mcp(command) => dispatch_mcp(command, home, output, yes),
         Command::Harness(command) => harness::dispatch(command, home, output, yes),
-        Command::Environment(command) => dispatch_environment(command, home, output, yes),
         Command::Agent(command) => dispatch_agent(command, home, output, yes),
         Command::Run(command) => runtime::inspect(command, home, output),
         Command::Im(command) => dispatch_im(command, home, output),
@@ -1321,9 +1313,12 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
         AgentCommand::Create(args) => {
             let category = parse_category(args.category.as_deref())?;
             PromptStore::new(home).ensure_default_prompt()?;
-            let mut config = if let Some(environment) = &args.environment {
-                let (c, n) = parse_named_ref(environment, None)?;
-                AgentConfig::external(&args.name, QualifiedRef::new(c, agt_core::EnvId::new(n)))?
+            let mut config = if let Some(harness) = &args.harness {
+                let (c, n) = parse_named_ref(harness, None)?;
+                AgentConfig::external(
+                    &args.name,
+                    QualifiedRef::new(c, agt_core::HarnessId::new(n)),
+                )?
             } else {
                 let (c, n) =
                     parse_named_ref(args.model.as_deref().context("model required")?, None)?;
@@ -1370,7 +1365,7 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
             if args.description.is_none()
                 && args.model.is_none()
-                && args.environment.is_none()
+                && args.harness.is_none()
                 && args.prompt.is_none()
                 && args.add_skills.is_empty()
                 && args.remove_skills.is_empty()
@@ -1381,8 +1376,8 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
             {
                 bail!("至少提供一个 Agent 更新字段");
             }
-            let environment = args
-                .environment
+            let harness = args
+                .harness
                 .map(|v| parse_named_ref(&v, None))
                 .transpose()?;
             let model = args
@@ -1437,10 +1432,10 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
                 if let Some((model_category, model_name)) = model {
                     config.model =
                         Some(QualifiedRef::new(model_category, ModelId::new(model_name)));
-                    config.environment = None;
+                    config.harness = None;
                 }
-                if let Some((c, n)) = environment {
-                    config.environment = Some(QualifiedRef::new(c, agt_core::EnvId::new(n)));
+                if let Some((c, n)) = harness {
+                    config.harness = Some(QualifiedRef::new(c, agt_core::HarnessId::new(n)));
                     config.model = None;
                 }
                 if let Some((prompt_category, prompt_name)) = prompt {
@@ -1518,7 +1513,7 @@ fn category_command(
                 ResourceKind::Model => ModelStore::new(home).categories().create(&category)?,
                 ResourceKind::Prompt => PromptStore::new(home).categories().create(&category)?,
                 ResourceKind::Skill => SkillStore::new(home).categories().create(&category)?,
-                ResourceKind::Environment => agt_harness::EnvironmentStore::new(home)
+                ResourceKind::Harness => agt_harness::HarnessStore::new(home)
                     .categories()
                     .create(&category)?,
                 ResourceKind::Mcp => McpStore::new(home).categories().create(&category)?,
@@ -1535,9 +1530,9 @@ fn category_command(
                 ResourceKind::Model => ModelStore::new(home).categories().list()?,
                 ResourceKind::Prompt => PromptStore::new(home).categories().list()?,
                 ResourceKind::Skill => SkillStore::new(home).categories().list()?,
-                ResourceKind::Environment => agt_harness::EnvironmentStore::new(home)
-                    .categories()
-                    .list()?,
+                ResourceKind::Harness => {
+                    agt_harness::HarnessStore::new(home).categories().list()?
+                }
                 ResourceKind::Mcp => McpStore::new(home).categories().list()?,
                 ResourceKind::Agent => AgentStore::new(home).categories().list()?,
             };
@@ -1554,7 +1549,7 @@ fn category_command(
             .categories()
             .delete_empty(&category)?,
         ResourceKind::Skill => SkillStore::new(home).categories().delete_empty(&category)?,
-        ResourceKind::Environment => agt_harness::EnvironmentStore::new(home)
+        ResourceKind::Harness => agt_harness::HarnessStore::new(home)
             .categories()
             .delete_empty(&category)?,
         ResourceKind::Mcp => McpStore::new(home).categories().delete_empty(&category)?,
@@ -1753,18 +1748,18 @@ fn delete_resource(
     )
 }
 
-fn dispatch_environment(
-    command: EnvironmentCommand,
+fn dispatch_harness_resource(
+    command: HarnessResourceCommand,
     home: &Path,
     output: OutputMode,
     yes: bool,
 ) -> Result<()> {
     let resources = agt_service::Resources::new(home);
     match command {
-        EnvironmentCommand::Create(args) => environment_write(args, true, &resources, output),
-        EnvironmentCommand::Update(args) => environment_write(args, false, &resources, output),
-        EnvironmentCommand::List(args) => {
-            let mut value = resources.list("environment")?;
+        HarnessResourceCommand::Create(args) => harness_write(args, true, &resources, output),
+        HarnessResourceCommand::Update(args) => harness_write(args, false, &resources, output),
+        HarnessResourceCommand::List(args) => {
+            let mut value = resources.list("harness")?;
             if let Some(category) = args.category {
                 value["items"]
                     .as_array_mut()
@@ -1773,20 +1768,20 @@ fn dispatch_environment(
             }
             emit(&value, output)
         }
-        EnvironmentCommand::Info(args) => {
+        HarnessResourceCommand::Info(args) => {
             let (c, n) = parse_named_ref(&args.name, args.category.as_deref())?;
-            emit(&resources.read("environment", &format!("{c}/{n}"))?, output)
+            emit(&resources.read("harness", &format!("{c}/{n}"))?, output)
         }
-        EnvironmentCommand::Test(args) => {
+        HarnessResourceCommand::Test(args) => {
             let (c, n) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let environment = agt_harness::EnvironmentStore::new(home).read_in(&c, &n)?;
-            emit(&agt_harness::Codex::test(&environment.config)?, output)
+            let harness = agt_harness::HarnessStore::new(home).read_in(&c, &n)?;
+            emit(&agt_harness::Codex::test(&harness.config)?, output)
         }
-        EnvironmentCommand::Category(command) => {
-            category_command(ResourceKind::Environment, command, home, output)
+        HarnessResourceCommand::Category(command) => {
+            category_command(ResourceKind::Harness, command, home, output)
         }
-        EnvironmentCommand::Delete(args) => delete_resource(
-            ResourceKind::Environment,
+        HarnessResourceCommand::Delete(args) => delete_resource(
+            ResourceKind::Harness,
             &args.name,
             args.category.as_deref(),
             args.recursive,
@@ -1797,8 +1792,8 @@ fn dispatch_environment(
         ),
     }
 }
-fn environment_write(
-    args: EnvironmentWriteArgs,
+fn harness_write(
+    args: HarnessWriteArgs,
     create: bool,
     resources: &agt_service::Resources,
     output: OutputMode,
@@ -1806,7 +1801,7 @@ fn environment_write(
     let (c, n) = parse_named_ref(&args.name, args.category.as_deref())?;
     let data = serde_json::from_str(&fs::read_to_string(args.file)?)?;
     emit(
-        &resources.write("environment", &format!("{c}/{n}"), create, data)?,
+        &resources.write("harness", &format!("{c}/{n}"), create, data)?,
         output,
     )
 }

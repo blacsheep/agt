@@ -24,7 +24,7 @@ pub struct AgentSummary {
     pub name: String,
     pub description: String,
     pub model: Option<AgentRefSummary>,
-    pub environment: Option<AgentRefSummary>,
+    pub harness: Option<AgentRefSummary>,
     pub prompt: AgentRefSummary,
     pub skills: Vec<String>,
     pub mcps: Vec<AgentRefSummary>,
@@ -39,11 +39,7 @@ impl From<&StoredAgent> for AgentSummary {
             name: agent.config.name.to_string(),
             description: agent.config.description.clone(),
             model: agent.config.model.as_ref().map(AgentRefSummary::from_ref),
-            environment: agent
-                .config
-                .environment
-                .as_ref()
-                .map(AgentRefSummary::from_ref),
+            harness: agent.config.harness.as_ref().map(AgentRefSummary::from_ref),
             prompt: AgentRefSummary::from_ref(&agent.config.prompt),
             skills: agent
                 .config

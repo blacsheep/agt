@@ -1,13 +1,13 @@
 #![cfg(unix)]
-use agt_harness::{Codex, Environment, Event, Execution, Sandbox, Tool};
+use agt_harness::{Codex, Event, Execution, HarnessConfig, Sandbox, Tool};
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
-fn fixture() -> (tempfile::TempDir, Environment) {
+fn fixture() -> (tempfile::TempDir, HarnessConfig) {
     let dir = tempfile::tempdir().unwrap();
     let exe = dir.path().join("codex");
     std::fs::write(&exe, include_str!("fixtures/codex.py")).unwrap();
     std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
-    let config = Environment {
+    let config = HarnessConfig {
         engine: "codex".into(),
         executable: exe,
         working_directory: dir.path().into(),

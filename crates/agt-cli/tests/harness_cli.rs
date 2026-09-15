@@ -32,12 +32,13 @@ fn external_agent_crud_execution_permissions_and_dependency_protection() {
     fs::set_permissions(&exe, fs::Permissions::from_mode(0o700)).unwrap();
     let config =
         json!({"engine":"codex","executable":exe,"working_directory":home,"sandbox":"read_only"});
-    let file = home.join("environment.json");
+    let file = home.join("harness.json");
     fs::write(&file, config.to_string()).unwrap();
     ok(
         home,
         &[
-            "environment",
+            "harness",
+            "resource",
             "create",
             "local",
             "--file",
@@ -50,16 +51,34 @@ fn external_agent_crud_execution_permissions_and_dependency_protection() {
             "agent",
             "create",
             "coder",
-            "--environment",
+            "--harness",
             "local",
             "--builtin-tool",
             "resource_management",
         ],
     );
     assert!(a["model"].is_null());
-    assert_eq!(a["environment"]["name"], "local");
+    assert_eq!(a["harness"]["name"], "local");
+    assert!(a.get("environment").is_none());
+    assert!(home.join("harnesses/default/local/harness.yaml").is_file());
+    assert!(!home.join("environments").exists());
+    for command in ["environment", "env"] {
+        assert!(!call(home, &[command, "list"]).status.success());
+    }
     assert!(
-        !call(home, &["environment", "delete", "local", "--yes"])
+        !call(
+            home,
+            &["agent", "create", "legacy", "--environment", "local"]
+        )
+        .status
+        .success()
+    );
+    let yaml = fs::read_to_string(home.join("agents/default/coder/agent.yaml")).unwrap();
+    assert!(yaml.contains("harness:"));
+    assert!(!yaml.contains("environment:"));
+
+    assert!(
+        !call(home, &["harness", "resource", "delete", "local", "--yes"])
             .status
             .success()
     );
@@ -70,7 +89,7 @@ fn external_agent_crud_execution_permissions_and_dependency_protection() {
                 "agent",
                 "create",
                 "invalid",
-                "--environment",
+                "--harness",
                 "local",
                 "--model",
                 "fake"
@@ -80,7 +99,7 @@ fn external_agent_crud_execution_permissions_and_dependency_protection() {
         .success()
     );
     assert_eq!(
-        ok(home, &["environment", "test", "local"])["status"],
+        ok(home, &["harness", "resource", "test", "local"])["status"],
         "connected"
     );
     let run = ok(
@@ -112,7 +131,7 @@ fn external_agent_crud_execution_permissions_and_dependency_protection() {
     let log = fs::read_to_string(home.join("protocol.jsonl")).unwrap();
     assert_eq!(log.lines().filter(|l| l.contains("turn/start")).count(), 1);
     ok(home, &["agent", "delete", "coder", "--yes"]);
-    ok(home, &["environment", "delete", "local", "--yes"]);
+    ok(home, &["harness", "resource", "delete", "local", "--yes"]);
 }
 
 #[test]
@@ -127,7 +146,7 @@ fn terminating_cli_cancels_and_reaps_external_process() {
     )
     .unwrap();
     fs::set_permissions(&exe, fs::Permissions::from_mode(0o700)).unwrap();
-    let file = home.join("environment.json");
+    let file = home.join("harness.json");
     fs::write(
         &file,
         json!({"engine":"codex","executable":exe,"working_directory":home,"sandbox":"read_only"})
@@ -137,17 +156,15 @@ fn terminating_cli_cancels_and_reaps_external_process() {
     ok(
         home,
         &[
-            "environment",
+            "harness",
+            "resource",
             "create",
             "local",
             "--file",
             file.to_str().unwrap(),
         ],
     );
-    ok(
-        home,
-        &["agent", "create", "coder", "--environment", "local"],
-    );
+    ok(home, &["agent", "create", "coder", "--harness", "local"]);
     let mut process = Command::new(env!("CARGO_BIN_EXE_agt"))
         .args([
             "--home",

@@ -18,7 +18,7 @@ pub enum ResourceKind {
     Prompt,
     Skill,
     Mcp,
-    Environment,
+    Harness,
 }
 
 impl ResourceKind {
@@ -30,7 +30,7 @@ impl ResourceKind {
             Self::Prompt => "prompt",
             Self::Skill => "skill",
             Self::Mcp => "mcp",
-            Self::Environment => "environment",
+            Self::Harness => "harness",
         }
     }
 }
@@ -122,7 +122,7 @@ fn delete_rank(kind: ResourceKind) -> u8 {
     match kind {
         ResourceKind::Agent => 0,
         ResourceKind::Model => 1,
-        ResourceKind::Environment
+        ResourceKind::Harness
         | ResourceKind::Provider
         | ResourceKind::Prompt
         | ResourceKind::Skill
@@ -172,9 +172,9 @@ fn load_graph(home: &Path) -> Result<ResourceGraph> {
     }
 
     let mut graph = ResourceGraph::default();
-    for item in agt_harness::EnvironmentStore::new(home).scan()? {
+    for item in agt_harness::HarnessStore::new(home).scan()? {
         graph.nodes.insert(ResourceKey {
-            kind: ResourceKind::Environment,
+            kind: ResourceKind::Harness,
             category: item.category,
             name: item.name,
         });
@@ -239,13 +239,13 @@ fn load_graph(home: &Path) -> Result<ResourceGraph> {
                 agent.clone(),
             );
         }
-        if let Some(environment) = item.config.environment {
+        if let Some(harness) = item.config.harness {
             add_edge(
                 &mut graph,
                 ResourceKey {
-                    kind: ResourceKind::Environment,
-                    category: environment.category().to_string(),
-                    name: environment.name().to_string(),
+                    kind: ResourceKind::Harness,
+                    category: harness.category().to_string(),
+                    name: harness.name().to_string(),
                 },
                 agent.clone(),
             );
@@ -423,7 +423,7 @@ fn rollback_moves(moved: &[(PathBuf, PathBuf)]) -> Result<()> {
 fn resource_dir(home: &Path, key: &ResourceKey) -> Result<PathBuf> {
     let category = CategoryName::new(&key.category)?;
     match key.kind {
-        ResourceKind::Environment => Ok(agt_harness::EnvironmentStore::new(home)
+        ResourceKind::Harness => Ok(agt_harness::HarnessStore::new(home)
             .file(&category, &key.name)?
             .parent()
             .unwrap()

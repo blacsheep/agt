@@ -1,5 +1,5 @@
-//! Execution engine adapters and reusable environment definitions. No IM or scheduling policy.
+//! Execution engine adapters and reusable harness definitions. No IM or scheduling policy.
 mod codex;
-mod environment;
+mod resource;
 pub use codex::{Codex, Event, Execution, Tool};
-pub use environment::{Environment, EnvironmentStore, Sandbox, StoredEnvironment};
+pub use resource::{HarnessConfig, HarnessStore, Sandbox, StoredHarness};

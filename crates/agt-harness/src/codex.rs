@@ -1,4 +1,4 @@
-use crate::Environment;
+use crate::HarnessConfig;
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -36,16 +36,16 @@ pub struct Codex {
 }
 impl Codex {
     pub fn connect(
-        environment: &Environment,
+        harness: &HarnessConfig,
         event: &mut dyn FnMut(Event<'_>) -> Result<()>,
     ) -> Result<Self> {
-        environment.validate()?;
-        let mut command = Command::new(&environment.executable);
+        harness.validate()?;
+        let mut command = Command::new(&harness.executable);
         command
             .arg("app-server")
             .arg("--listen")
             .arg("stdio://")
-            .current_dir(&environment.working_directory)
+            .current_dir(&harness.working_directory)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -93,7 +93,7 @@ impl Codex {
         };
         client.request("initialize", json!({"clientInfo":{"name":"agt","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":true}}), event)?;
         client.send(json!({"method":"initialized","params":{}}))?;
-        client.deadline = Instant::now() + Duration::from_secs(environment.timeout_seconds);
+        client.deadline = Instant::now() + Duration::from_secs(harness.timeout_seconds);
         Ok(client)
     }
     fn send(&mut self, value: Value) -> Result<()> {
@@ -142,9 +142,9 @@ impl Codex {
             }
         }
     }
-    pub fn test(environment: &Environment) -> Result<Value> {
+    pub fn test(harness: &HarnessConfig) -> Result<Value> {
         let mut event = |_: Event<'_>| Ok(());
-        let mut client = Self::connect(environment, &mut event)?;
+        let mut client = Self::connect(harness, &mut event)?;
         let account = client.request("account/read", json!({"refreshToken":false}), &mut event)?;
         Ok(
             json!({"status":"connected","engine":"codex","authenticated":!account["account"].is_null(),"requires_openai_auth":account["requiresOpenaiAuth"],"inference":false}),
@@ -154,9 +154,9 @@ impl Codex {
     pub fn capabilities() -> Value {
         json!({"engine":"codex","operations":["models","configure","rename","compact","skills","mcp","status"],"unsupported":["review","diff","fork","import","interactive_approval"]})
     }
-    pub fn models(environment: &Environment) -> Result<Value> {
+    pub fn models(harness: &HarnessConfig) -> Result<Value> {
         let mut event = |_: Event<'_>| Ok(());
-        let mut client = Self::connect(environment, &mut event)?;
+        let mut client = Self::connect(harness, &mut event)?;
         // Metadata requests must finish before the Web CLI request timeout.
         client.deadline = Instant::now() + Duration::from_secs(10);
         client.catalog(
@@ -192,24 +192,24 @@ impl Codex {
         }
         Ok(json!({"data":data}))
     }
-    pub fn inspect(environment: &Environment, operation: &str) -> Result<Value> {
+    pub fn inspect(harness: &HarnessConfig, operation: &str) -> Result<Value> {
         let mut event = |_: Event<'_>| Ok(());
-        let mut client = Self::connect(environment, &mut event)?;
+        let mut client = Self::connect(harness, &mut event)?;
         // Metadata requests must finish before the Web CLI request timeout.
         client.deadline = Instant::now() + Duration::from_secs(10);
         match operation {
             "skills" => client.request(
                 "skills/list",
-                json!({"cwds":[environment.working_directory],"forceReload":true}),
+                json!({"cwds":[harness.working_directory],"forceReload":true}),
                 &mut event,
             ),
             "mcp" => client.catalog("mcpServerStatus/list", json!({"limit":100}), &mut event),
             _ => bail!("unsupported inspection operation"),
         }
     }
-    pub fn rename(environment: &Environment, thread: &str, name: &str) -> Result<()> {
+    pub fn rename(harness: &HarnessConfig, thread: &str, name: &str) -> Result<()> {
         let mut event = |_: Event<'_>| Ok(());
-        let mut client = Self::connect(environment, &mut event)?;
+        let mut client = Self::connect(harness, &mut event)?;
         // Metadata requests must finish before the Web CLI request timeout.
         client.deadline = Instant::now() + Duration::from_secs(10);
         client.request(
@@ -221,12 +221,12 @@ impl Codex {
     }
     /// The RPC acknowledgement is not completion. Keep the connection alive until the turn ends.
     pub fn compact(
-        environment: &Environment,
+        harness: &HarnessConfig,
         thread: &str,
         event: &mut dyn FnMut(Event<'_>) -> Result<()>,
     ) -> Result<()> {
-        let mut client = Self::connect(environment, event)?;
-        client.request("thread/resume", json!({"threadId":thread,"cwd":environment.working_directory,"model":environment.model,"approvalPolicy":"never","sandbox":environment.sandbox.protocol(),"config":{"model_reasoning_effort":environment.reasoning_effort}}), event)?;
+        let mut client = Self::connect(harness, event)?;
+        client.request("thread/resume", json!({"threadId":thread,"cwd":harness.working_directory,"model":harness.model,"approvalPolicy":"never","sandbox":harness.sandbox.protocol(),"config":{"model_reasoning_effort":harness.reasoning_effort}}), event)?;
         client.next_id += 1;
         let id = client.next_id;
         client
@@ -249,16 +249,16 @@ impl Codex {
     }
     pub fn execute(
         &mut self,
-        environment: &Environment,
+        harness: &HarnessConfig,
         execution: Execution<'_>,
         event: &mut dyn FnMut(Event<'_>) -> Result<()>,
         tool: &mut dyn FnMut(&str, Value) -> Result<Value>,
     ) -> Result<String> {
-        let mut params = json!({"cwd":environment.working_directory,"approvalPolicy":"never","sandbox":environment.sandbox.protocol(),"developerInstructions":execution.instructions});
-        if let Some(model) = &environment.model {
+        let mut params = json!({"cwd":harness.working_directory,"approvalPolicy":"never","sandbox":harness.sandbox.protocol(),"developerInstructions":execution.instructions});
+        if let Some(model) = &harness.model {
             params["model"] = json!(model);
         }
-        if let Some(effort) = &environment.reasoning_effort {
+        if let Some(effort) = &harness.reasoning_effort {
             params["config"] = json!({"model_reasoning_effort":effort});
         }
         let method = if let Some(thread) = execution.thread {
@@ -282,7 +282,7 @@ impl Codex {
         event(Event::Thread(&thread))?;
         self.next_id += 1;
         let start_id = self.next_id;
-        self.send(json!({"id":start_id,"method":"turn/start","params":{"threadId":thread,"input":[{"type":"text","text":execution.input}],"model":environment.model,"effort":environment.reasoning_effort}}))?;
+        self.send(json!({"id":start_id,"method":"turn/start","params":{"threadId":thread,"input":[{"type":"text","text":execution.input}],"model":harness.model,"effort":harness.reasoning_effort}}))?;
         let mut turn = None;
         let mut final_text = String::new();
         let result = (|| {
@@ -326,7 +326,7 @@ impl Codex {
                 } else if value.get("id").is_some() && value.get("method").is_some() {
                     self.send(json!({"id":value["id"],"error":{"code":-32601,"message":"AGT does not support this interactive request; task stopped without approval"}}))?;
                     bail!(
-                        "Codex requested {method}; interactive approvals/input are not supported by this environment"
+                        "Codex requested {method}; interactive approvals/input are not supported by this harness"
                     );
                 } else if method == "turn/started" {
                     if let Some(id) = p["turn"]["id"].as_str() {

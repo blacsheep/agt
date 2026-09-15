@@ -1,5 +1,5 @@
 //! AGT-owned session metadata; the engine alone creates thread IDs.
-use agt_harness::{Codex, Environment, EnvironmentStore};
+use agt_harness::{Codex, HarnessConfig, HarnessStore};
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
@@ -13,8 +13,8 @@ pub struct HarnessSession {
     pub principal: String,
     pub conversation: String,
     pub agent: String,
-    pub environment: String,
-    pub config: Environment,
+    pub harness: String,
+    pub config: HarnessConfig,
     pub title: String,
     pub session_id: Option<String>,
     pub busy: bool,
@@ -30,19 +30,19 @@ impl HarnessSessions {
             "harnesses.db",
         )?)?;
         db.busy_timeout(std::time::Duration::from_secs(5))?;
-        db.execute_batch("CREATE TABLE IF NOT EXISTS sessions_v3(scope TEXT PRIMARY KEY,principal TEXT NOT NULL,conversation TEXT NOT NULL,agent TEXT NOT NULL,environment TEXT NOT NULL,config TEXT NOT NULL,title TEXT NOT NULL DEFAULT '',thread TEXT,through_seq INTEGER NOT NULL DEFAULT 0,source_hash TEXT NOT NULL DEFAULT '',dirty INTEGER NOT NULL DEFAULT 0,cancel INTEGER NOT NULL DEFAULT 0);")?;
+        db.execute_batch("CREATE TABLE IF NOT EXISTS harness_sessions(scope TEXT PRIMARY KEY,principal TEXT NOT NULL,conversation TEXT NOT NULL,agent TEXT NOT NULL,harness TEXT NOT NULL,config TEXT NOT NULL,title TEXT NOT NULL DEFAULT '',thread TEXT,through_seq INTEGER NOT NULL DEFAULT 0,source_hash TEXT NOT NULL DEFAULT '',dirty INTEGER NOT NULL DEFAULT 0,cancel INTEGER NOT NULL DEFAULT 0);")?;
         Ok(Self { db })
     }
     pub(crate) fn ensure(
         &self,
         identity: (&str, &str, &str, i64),
         config: &agt_agent::AgentConfig,
-        default: &Environment,
+        default: &HarnessConfig,
         explicit: Option<&str>,
     ) -> Result<HarnessSession> {
         let (principal, conversation, agent, cutoff) = identity;
-        let environment = config
-            .environment
+        let harness = config
+            .harness
             .as_ref()
             .context("agent does not use a Harness")?
             .to_string();
@@ -56,7 +56,7 @@ impl HarnessSessions {
                 agent,
                 format!("{config:?}")
             ]))?));
-        self.db.execute("INSERT OR IGNORE INTO sessions_v3(scope,principal,conversation,agent,environment,config) VALUES(?1,?2,?3,?4,?5,?6)", params![id,principal,conversation,agent,environment,serde_json::to_string(default)?])?;
+        self.db.execute("INSERT OR IGNORE INTO harness_sessions(scope,principal,conversation,agent,harness,config) VALUES(?1,?2,?3,?4,?5,?6)", params![id,principal,conversation,agent,harness,serde_json::to_string(default)?])?;
         self.get(&id)
     }
     pub fn current(
@@ -81,10 +81,10 @@ impl HarnessSessions {
             .binding;
         let config = crate::harness::agent_config(home, &binding.agent)?;
         let reference = config
-            .environment
+            .harness
             .as_ref()
             .context("agent does not use a Harness")?;
-        let default = EnvironmentStore::new(home)
+        let default = HarnessStore::new(home)
             .read_in(reference.category(), reference.name().as_str())?
             .config;
         let cutoff = crate::ScheduleStore::open(home)?.context_cutoff(conversation)?;
@@ -96,13 +96,13 @@ impl HarnessSessions {
         )
     }
     pub fn get(&self, id: &str) -> Result<HarnessSession> {
-        let row = self.db.query_row("SELECT principal,conversation,agent,environment,config,title,thread,dirty FROM sessions_v3 WHERE scope=?1",[id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,r.get::<_,Option<String>>(6)?,r.get::<_,bool>(7)?)))?;
+        let row = self.db.query_row("SELECT principal,conversation,agent,harness,config,title,thread,dirty FROM harness_sessions WHERE scope=?1",[id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,r.get::<_,Option<String>>(6)?,r.get::<_,bool>(7)?)))?;
         Ok(HarnessSession {
             id: id.into(),
             principal: row.0,
             conversation: row.1,
             agent: row.2,
-            environment: row.3,
+            harness: row.3,
             config: serde_json::from_str(&row.4)?,
             title: row.5,
             session_id: row.6,
@@ -124,7 +124,7 @@ impl HarnessSessions {
             session.config.reasoning_effort = effort.map(str::to_owned);
         }
         self.db.execute(
-            "UPDATE sessions_v3 SET config=?2 WHERE scope=?1",
+            "UPDATE harness_sessions SET config=?2 WHERE scope=?1",
             params![id, serde_json::to_string(&session.config)?],
         )?;
         Ok(())
@@ -132,14 +132,14 @@ impl HarnessSessions {
     pub fn list(&self) -> Result<Vec<HarnessSession>> {
         let mut stmt = self
             .db
-            .prepare("SELECT scope FROM sessions_v3 ORDER BY rowid DESC")?;
+            .prepare("SELECT scope FROM harness_sessions ORDER BY rowid DESC")?;
         stmt.query_map([], |r| r.get::<_, String>(0))?
             .map(|id| self.get(&id?))
             .collect()
     }
     pub(crate) fn lock(&self, id: &str) -> Result<()> {
         if self.db.execute(
-            "UPDATE sessions_v3 SET dirty=1,cancel=0 WHERE scope=?1 AND dirty=0",
+            "UPDATE harness_sessions SET dirty=1,cancel=0 WHERE scope=?1 AND dirty=0",
             [id],
         )? != 1
         {
@@ -169,13 +169,13 @@ impl HarnessSessions {
             session.config.model = Some(model.into());
             session.config.reasoning_effort = effort.map(str::to_owned);
             self.db.execute(
-                "UPDATE sessions_v3 SET config=?2 WHERE scope=?1",
+                "UPDATE harness_sessions SET config=?2 WHERE scope=?1",
                 params![id, serde_json::to_string(&session.config)?],
             )?;
             Ok(())
         })();
         self.db
-            .execute("UPDATE sessions_v3 SET dirty=0 WHERE scope=?1", [id])?;
+            .execute("UPDATE harness_sessions SET dirty=0 WHERE scope=?1", [id])?;
         result?;
         self.get(id)
     }
@@ -191,19 +191,19 @@ impl HarnessSessions {
                 Codex::rename(&session.config, thread, title)?;
             }
             self.db.execute(
-                "UPDATE sessions_v3 SET title=?2 WHERE scope=?1",
+                "UPDATE harness_sessions SET title=?2 WHERE scope=?1",
                 params![id, title],
             )?;
             Ok(())
         })();
         self.db
-            .execute("UPDATE sessions_v3 SET dirty=0 WHERE scope=?1", [id])?;
+            .execute("UPDATE harness_sessions SET dirty=0 WHERE scope=?1", [id])?;
         result?;
         self.get(id)
     }
     pub fn cancel_conversation(&self, conversation: &str) -> Result<()> {
         self.db.execute(
-            "UPDATE sessions_v3 SET cancel=1 WHERE conversation=?1 AND dirty=1",
+            "UPDATE harness_sessions SET cancel=1 WHERE conversation=?1 AND dirty=1",
             [conversation],
         )?;
         Ok(())
@@ -211,17 +211,17 @@ impl HarnessSessions {
     pub fn cancel(&self, id: &str) -> Result<()> {
         self.get(id)?;
         self.db.execute(
-            "UPDATE sessions_v3 SET cancel=1 WHERE scope=?1 AND dirty=1",
+            "UPDATE harness_sessions SET cancel=1 WHERE scope=?1 AND dirty=1",
             [id],
         )?;
         Ok(())
     }
     pub(crate) fn canceled(&self, id: &str) -> Result<bool> {
-        Ok(self
-            .db
-            .query_row("SELECT cancel FROM sessions_v3 WHERE scope=?1", [id], |r| {
-                r.get(0)
-            })?)
+        Ok(self.db.query_row(
+            "SELECT cancel FROM harness_sessions WHERE scope=?1",
+            [id],
+            |r| r.get(0),
+        )?)
     }
     pub fn compact(&self, id: &str, token: &agt_core::CancellationToken) -> Result<()> {
         if self.get(id)?.session_id.is_none() {
@@ -238,7 +238,7 @@ impl HarnessSessions {
             Ok(())
         })?;
         self.db
-            .execute("UPDATE sessions_v3 SET dirty=0 WHERE scope=?1", [id])?;
+            .execute("UPDATE harness_sessions SET dirty=0 WHERE scope=?1", [id])?;
         Ok(())
     }
 }

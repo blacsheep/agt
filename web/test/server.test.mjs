@@ -493,8 +493,8 @@ test('chat model/status reads are membership scoped and expose only reported met
   const {request}=await fixture(t,async args=>{
     if(args.includes('member_list')) return [{principal_id:'operator',left_message_seq:null},{principal_id:'a',left_message_seq:null}];
     if(args.includes('binding_list')) return [{principal:'a',agent:'default/a',enabled:true},{principal:'other',agent:'default/other'}];
-    if(args.includes('resource_read')) {const q=JSON.parse(args.at(-1));return q.kind==='agent'?{environment:{category:'default',name:'local'}}:{engine:'codex',model:null};}
-    if(args[0]==='run')return [{id:'r',state:'completed',request:{agent:'default/a',trigger:{conversation_id:'chat',principal:'a'},input:'PRIVATE'},output:'PRIVATE',execution:{model:'reported-model',environment:'default/local',thread_id:'PRIVATE'}}];
+    if(args.includes('resource_read')) {const q=JSON.parse(args.at(-1));return q.kind==='agent'?{harness:{category:'default',name:'local'}}:{engine:'codex',model:null};}
+    if(args[0]==='run')return [{id:'r',state:'completed',request:{agent:'default/a',trigger:{conversation_id:'chat',principal:'a'},input:'PRIVATE'},output:'PRIVATE',execution:{model:'reported-model',harness:'default/local',thread_id:'PRIVATE'}}];
     throw new Error('unexpected operation');
   });
   const response=await request('/api/chat-status',{conversation:'chat'});assert.equal(response.status,200);

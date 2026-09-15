@@ -1070,11 +1070,11 @@ fn external_fixture() -> (tempfile::TempDir, ToolService, String) {
     )
     .unwrap();
     std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
-    agt_harness::EnvironmentStore::new(path)
+    agt_harness::HarnessStore::new(path)
         .write_in(
             &agt_core::CategoryName::default(),
             "local",
-            &agt_harness::Environment {
+            &agt_harness::HarnessConfig {
                 engine: "codex".into(),
                 executable: exe,
                 working_directory: path.into(),
@@ -1090,9 +1090,9 @@ fn external_fixture() -> (tempfile::TempDir, ToolService, String) {
     AgentStore::new(path)
         .update_in(&agt_core::CategoryName::default(), "a", |a| {
             a.model = None;
-            a.environment = Some(agt_core::QualifiedRef::in_default(agt_core::EnvId::new(
-                "local",
-            )));
+            a.harness = Some(agt_core::QualifiedRef::in_default(
+                agt_core::HarnessId::new("local"),
+            ));
             Ok(())
         })
         .unwrap();
@@ -1349,15 +1349,15 @@ fn harness_session_snapshots_models_names_and_compaction_are_isolated() {
     assert!(session.session_id.is_none());
     let other = store.current(path, "a", &group).unwrap();
     assert_ne!(session.id, other.id);
-    let environments = agt_harness::EnvironmentStore::new(path);
-    let mut changed = environments
+    let harnesses = agt_harness::HarnessStore::new(path);
+    let mut changed = harnesses
         .read_in(&agt_core::CategoryName::default(), "local")
         .unwrap()
         .config;
     changed.model = Some("changed-default".into());
     changed.working_directory = path.join("new-project");
     std::fs::create_dir(&changed.working_directory).unwrap();
-    environments
+    harnesses
         .write_in(&agt_core::CategoryName::default(), "local", &changed, false)
         .unwrap();
     assert_eq!(
@@ -1480,7 +1480,7 @@ fn harness_compaction_cancellation_keeps_the_unknown_outcome_fenced() {
     store
         .db
         .execute(
-            "UPDATE sessions_v3 SET thread='hang-compact' WHERE scope=?1",
+            "UPDATE harness_sessions SET thread='hang-compact' WHERE scope=?1",
             [&session.id],
         )
         .unwrap();

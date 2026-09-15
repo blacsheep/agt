@@ -37,20 +37,20 @@ try {
   const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   await wait('document.querySelector("#connection")?.textContent === "本地已连接"');
 
-  await evaluate('state.polling=true; switchPage("resources"); state.resourceKind="environment"; showResource();');
+  await evaluate('state.polling=true; switchPage("resources"); state.resourceKind="harness"; showResource();');
   await evaluate(`document.querySelector('[name=name]').value='local'; document.querySelector('[name=executable]').value=${JSON.stringify(executable)}; document.querySelector('[name=working_directory]').value=${JSON.stringify(home)};`);
   for (const width of [1280,390]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<761});
     assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
     assert.equal(await evaluate('document.querySelector("#modal").scrollWidth<=document.querySelector("#modal").clientWidth+1'),true);
-    if(process.env.AGT_DESIGN_CAPTURE){const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(`/tmp/agt-harness-environment-${width}.png`,Buffer.from(shot.data,'base64'));}
+    if(process.env.AGT_DESIGN_CAPTURE){const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(`/tmp/agt-harness-harness-${width}.png`,Buffer.from(shot.data,'base64'));}
   }
   await click('#modal-form button[type=submit]');
-  await wait('!state.modalBusy && !document.querySelector("#modal").open && items("environment").length===1');
+  await wait('!state.modalBusy && !document.querySelector("#modal").open && items("harness").length===1');
   await evaluate('showAgent()');
-  await evaluate(`document.querySelector('[name=name]').value='external'; document.querySelector('[name=prompt]').value='You review code.';document.querySelector('[name=execution]').value='external';document.querySelector('[name=execution]').dispatchEvent(new Event('change'));document.querySelector('[name=environment]').value='default/local';document.querySelector('[name=environment]').dispatchEvent(new Event('change'));`);
+  await evaluate(`document.querySelector('[name=name]').value='external'; document.querySelector('[name=prompt]').value='You review code.';document.querySelector('[name=execution]').value='external';document.querySelector('[name=execution]').dispatchEvent(new Event('change'));document.querySelector('[name=harness]').value='default/local';document.querySelector('[name=harness]').dispatchEvent(new Event('change'));`);
   assert.equal(await evaluate('document.querySelector("[name=model]").disabled'),true);
-  assert.equal(await evaluate('document.querySelector("[name=environment]").required'),true);
+  assert.equal(await evaluate('document.querySelector("[name=harness]").required'),true);
   assert.equal(await evaluate('document.querySelector("[name=cwd]").readOnly'),true);
   assert.equal(await evaluate('document.querySelector("[name=allow_mcp]").disabled'),true);
   await click('#modal-form button[type=submit]');
@@ -58,17 +58,17 @@ try {
   assert.equal(await evaluate('items("agent")[0].model'),null);
   assert.equal(await evaluate('state.boot.bindings.find(b=>b.agent==="default/external").enabled'),true);
   await evaluate('showAgentEdit("default/external")');
-  await wait('document.querySelector("#modal [name=environment]")?.value==="default/local"');
+  await wait('document.querySelector("#modal [name=harness]")?.value==="default/local"');
   await evaluate('document.querySelector("[name=description]").value="Review specialist"');
   await click('#modal-form button[type=submit]');
   await wait('!state.modalBusy && !document.querySelector("#modal").open');
   assert.equal(await evaluate('items("agent")[0].description'),'Review specialist');
-  await evaluate('showEnvironmentEdit("default/local")');
+  await evaluate('showHarnessEdit("default/local")');
   await wait('document.querySelector("[name=timeout_seconds]")');
   await evaluate('document.querySelector("[name=timeout_seconds]").value="120"');
   await click('#modal-form button[type=submit]');
   await wait('!state.modalBusy && !document.querySelector("#modal").open');
-  assert.equal(await evaluate('items("environment")[0].timeout_seconds'),120);
+  assert.equal(await evaluate('items("harness")[0].timeout_seconds'),120);
   const chat=await run(['tool','call','--principal','operator','--manager','direct_create','--args',JSON.stringify({principal:'external'})]);
   await evaluate('switchPage("chat");');
   await evaluate('conversations()');
@@ -89,7 +89,7 @@ try {
   const sessions=await run(['harness','session','list']);
   const session=sessions.find(s=>s.conversation===chat.id);
   assert.equal(session.config.model,'fixture-model');assert.equal(session.config.reasoning_effort,'xhigh');assert.equal(session.session_id,null);
-  assert.equal(await evaluate('items("environment")[0].model'),null);
+  assert.equal(await evaluate('items("harness")[0].model'),null);
   await evaluate('closeModal();showHarnessCommand("rename")');
   await wait('document.querySelector("#harness-rename-form [name=title]")');
   await evaluate('document.querySelector("#harness-rename-form [name=title]").value="Backend review";document.querySelector("#harness-rename-form").requestSubmit()');
@@ -123,7 +123,7 @@ try {
   assert.match(await evaluate('document.querySelector("#modal-title").textContent'),/上下文/);
   await evaluate('closeModal()');
   assert.deepEqual(errors,[]);
-  console.log('Harness browser passed: create/edit environment and external Agent without Model, enabled binding, execution controls, desktop/mobile overflow.');
+  console.log('Harness browser passed: create/edit harness and external Agent without Model, enabled binding, execution controls, desktop/mobile overflow.');
 } finally {
   socket?.close(); chrome?.kill('SIGTERM'); run.close(); server?.closeAllConnections(); server?.close();
   await new Promise(ok=>setTimeout(ok,500));

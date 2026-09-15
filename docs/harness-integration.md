@@ -1,16 +1,16 @@
-# 外部执行引擎与运行环境
+# Harness 资源与外部执行引擎
 
 ## 决策
 
-Harness 接入是框架能力；运行环境是可复用配置资源；Agent 是独立身份与角色。
-一个 Agent 选择内置 Model 或外部 environment，二者互斥。旧配置继续使用 Model。
-环境不是群成员，外部框架的内部子 Agent 不会自动成为 AGT 联系人。
+Harness 是正式的可复用配置资源；Codex 是执行引擎；Agent 是独立身份与角色。
+一个 Agent 选择内置 Model 或外部 harness，二者互斥。
+Harness 资源不是群成员，外部框架的内部子 Agent 不会自动成为 AGT 联系人。
 
 ## 模块与边界
 
-- `agt-harness`：运行环境配置和安全文件存储、Codex app-server 协议适配、进程生命周期。
-- `agt-agent`：model/environment 互斥引用、Prompt/Skill/内置工具挂载。
-- `agt-service`：环境 CRUD、删除引用检查、统一资源工具契约。
+- `agt-harness`：Harness 资源配置和安全文件存储、Codex app-server 协议适配、进程生命周期。
+- `agt-agent`：model/harness 互斥引用、Prompt/Skill/内置工具挂载。
+- `agt-service`：Harness CRUD、删除引用检查、统一资源工具契约。
 - `agt-runtime/harness.rs`：整项任务执行、Run、外部会话映射、历史增量、取消围栏。
 - `agt-runtime/scheduler.rs`：执行调度、群聊提及规则和唯一结果发布。
 - CLI/Web：资源与 Agent 配置入口、无推理连接检查和流式预览。
@@ -30,12 +30,12 @@ turn/completed 确认最终状态。错误与空最终回复不会自动重跑�
 的 `app-server generate-json-schema --experimental` 用于核实字段与枚举。
 动态工具属于实验接口，连接成功不等于所有版本兼容，也不等于模型认证可用。
 
-环境配置：engine=codex、服务器绝对 executable、working_directory、可选 model、
+Harness 配置：engine=codex、服务器绝对 executable、working_directory、可选 model、
 sandbox=read_only/workspace_write、timeout_seconds（默认 1800）。不保存 API Key，
 沿用运行账户的 Codex 认证与配置。工作区文件可能共享，协作开发应明确分配目录/worktree。
 权限策略固定 never：执行选定 sandbox 内允许的操作，不批准权限升级。
 目前遇到交互授权/用户输入请求会停止并说明原因；没有自动同意或伪造用户输入。
-环境写入仅供 Manager，资源管理 Agent 可以读取并引用管理员配置的环境。
+Harness 写入仅供 Manager，资源管理 Agent 可以读取并引用管理员配置的 Harness。
 AGT 工具权限不构成外部终端的文件隔离；实际文件边界由 Codex sandbox 与操作系统控制。
 本轮在 Linux 验证进程组清理及 SIGINT/SIGTERM 取消；Windows 的完整进程树终止尚未验收。
 
@@ -102,8 +102,8 @@ Claude Code、其他 Harness 以独立适配器实现相同的任务/事件/工�
 
 无真实模型调用的协议桩覆盖启动/恢复、动态工具、流式与最终消息分离、空输出、错误、
 取消、未知交互与进程退出；调度测试覆盖提及、私聊、增量历史、/new 及旧任务禁止发布。
-资源测试覆盖旧 Agent 配置、互斥引用、环境依赖删除、Manager 写权限。
-Web 验证创建/编辑环境与 Agent、缺少模型时选择外部环境、桌面和移动端布局。
+资源测试覆盖旧 Agent 配置、互斥引用、Harness 依赖删除、Manager 写权限。
+Web 验证创建/编辑Harness 与 Agent、缺少模型时选择外部 Harness、桌面和移动端布局。
 真实账户端到端执行需另行验收，不能以连接检查代替。
 
 ## 本轮验收（2026-09-15）
@@ -123,20 +123,22 @@ Web 验证创建/编辑环境与 Agent、缺少模型时选择外部环境、桌
 
 ## Harness 资源与执行会话（v3）
 
-资源继续使用 `environment` 文件及通用 CRUD，CLI 新增 `agt harness resource …` 入口，
-避免复制一套资源存储。资源包括项目目录、说明、默认模型和默认 reasoning_effort。
+资源使用 `harnesses/<category>/<name>/harness.yaml` 文件及通用 CRUD，CLI 入口为
+`agt harness resource …`，工具资源类型为 `harness`，Agent 通过 `harness` 字段引用。
+旧 environment/env 命令、environment 资源类型、Agent 字段和 environments 目录不再支持，
+不提供别名或自动迁移。资源包括项目目录、说明、默认模型和默认 reasoning_effort。
 引擎适配器封装 app-server；AGT 会话记录与 Codex session_id 分离，thread ID 只取自引擎响应。
 
-`sessions_v3` 按 Agent 配置、principal、conversation、reset cutoff 标识 AGT 会话记录。
-首次准备记录时保存 Environment 配置快照；首次执行时固定引擎返回的默认模型/档位。更新资源默认值不影响已有记录；/new 后
+`harness_sessions` 按 Agent 配置、principal、conversation、reset cutoff 标识 AGT 会话记录。
+首次准备记录时保存 Harness 配置快照；首次执行时固定引擎返回的默认模型/档位。更新资源默认值不影响已有记录；/new 后
 新记录采用新默认值。修改 Agent 的角色/工具配置会另建记录，避免旧线程保留失效权限。
-旧 sessions 表保留；首次升级到 v3 创建新线程并重建可见聊天背景，不迁移私有工具上下文。
+执行会话使用新表，不加载或迁移旧格式会话；引擎自行保存的线程不由资源重命名操作删除。
 同一目录中的文件与运行账户的 Codex 全局配置仍共享；快照不是文件系统或账户隔离。
 
 后端先提供结构化接口：
 
 - `agt harness capabilities`：声明已接入能力与明确未支持的功能。
-- `agt harness resource create/update/list/info/delete …`：兼容原 environment 命令。
+- `agt harness resource create/update/list/info/delete …`：Harness 资源 CRUD。
 - `agt harness models/skills/mcp <资源引用>`：查询该连接的真实能力，模型列表遍历分页。
 - `agt harness session current --principal <Agent> --conversation <聊天>`：准备/读取当前快照，不启动线程。
 - `agt harness session list/info/models/skills/mcp …`：管理 AGT 保存的会话、查询实例能力。

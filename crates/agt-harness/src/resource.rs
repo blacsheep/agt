@@ -22,7 +22,7 @@ impl Sandbox {
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-pub struct Environment {
+pub struct HarnessConfig {
     pub engine: String,
     pub executable: PathBuf,
     pub working_directory: PathBuf,
@@ -39,7 +39,7 @@ pub struct Environment {
 fn default_timeout() -> u64 {
     1800
 }
-impl Environment {
+impl HarnessConfig {
     pub fn validate(&self) -> Result<()> {
         if self.engine != "codex" {
             bail!("supported execution engine: codex");
@@ -70,39 +70,39 @@ impl Environment {
     }
 }
 #[derive(Clone, Debug, Serialize)]
-pub struct StoredEnvironment {
+pub struct StoredHarness {
     pub category: String,
     pub name: String,
     #[serde(flatten)]
-    pub config: Environment,
+    pub config: HarnessConfig,
 }
-pub struct EnvironmentStore {
+pub struct HarnessStore {
     paths: AgtPaths,
 }
-impl EnvironmentStore {
+impl HarnessStore {
     pub fn new(home: impl Into<PathBuf>) -> Self {
         Self {
             paths: AgtPaths::new(home),
         }
     }
     pub fn categories(&self) -> DefinitionCategories {
-        DefinitionCategories::new(self.paths.data_dir("environments"))
+        DefinitionCategories::new(self.paths.data_dir("harnesses"))
     }
     pub fn file(&self, category: &CategoryName, name: &str) -> Result<PathBuf> {
         CategoryName::new(name)?;
         let file = self
             .paths
-            .category_dir("environments", category)
+            .category_dir("harnesses", category)
             .join(name)
-            .join("environment.yaml");
+            .join("harness.yaml");
         check_no_symlinks_under(self.paths.home(), &file)?;
         Ok(file)
     }
-    pub fn read_in(&self, category: &CategoryName, name: &str) -> Result<StoredEnvironment> {
-        let config: Environment =
+    pub fn read_in(&self, category: &CategoryName, name: &str) -> Result<StoredHarness> {
+        let config: HarnessConfig =
             serde_yaml::from_str(&std::fs::read_to_string(self.file(category, name)?)?)?;
         // Machine paths can become unavailable; listing must still allow users to repair them.
-        Ok(StoredEnvironment {
+        Ok(StoredHarness {
             category: category.to_string(),
             name: name.into(),
             config,
@@ -112,22 +112,22 @@ impl EnvironmentStore {
         &self,
         category: &CategoryName,
         name: &str,
-        config: &Environment,
+        config: &HarnessConfig,
         create: bool,
     ) -> Result<()> {
         config.validate()?;
         let file = self.file(category, name)?;
         if create == file.exists() {
             bail!(if create {
-                "environment already exists"
+                "harness already exists"
             } else {
-                "environment not found"
+                "harness not found"
             });
         }
         if category.is_default() {
             ensure_dir_under(
                 self.paths.home(),
-                self.paths.category_dir("environments", category),
+                self.paths.category_dir("harnesses", category),
             )?;
         } else {
             self.categories().require(category)?;
@@ -140,8 +140,8 @@ impl EnvironmentStore {
         )?;
         Ok(())
     }
-    pub fn scan(&self) -> Result<Vec<StoredEnvironment>> {
-        let root = self.paths.data_dir("environments");
+    pub fn scan(&self) -> Result<Vec<StoredHarness>> {
+        let root = self.paths.data_dir("harnesses");
         check_no_symlinks_under(self.paths.home(), &root)?;
         if !root.exists() {
             return Ok(Vec::new());

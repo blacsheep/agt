@@ -369,7 +369,7 @@ impl AgentStore {
         self.ensure_model_exists(&model)?;
         self.update_in(agent_category, agent, |config| {
             config.model = Some(model);
-            config.environment = None;
+            config.harness = None;
             Ok(())
         })
     }
@@ -507,9 +507,9 @@ impl AgentStore {
         if let Some(model) = &config.model {
             self.ensure_model_exists(model)?;
         }
-        if let Some(environment) = &config.environment {
-            agt_harness::EnvironmentStore::new(self.paths.home())
-                .read_in(environment.category(), environment.name().as_str())
+        if let Some(harness) = &config.harness {
+            agt_harness::HarnessStore::new(self.paths.home())
+                .read_in(harness.category(), harness.name().as_str())
                 .map_err(|e| AgentError::InvalidConfig {
                     message: e.to_string(),
                 })?;
