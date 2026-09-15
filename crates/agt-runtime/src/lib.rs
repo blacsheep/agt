@@ -7,6 +7,8 @@ pub use context::ContextCheckpoint;
 mod engine;
 mod harness;
 mod harness_input;
+mod harness_sessions;
+pub use harness_sessions::{HarnessSession, HarnessSessions};
 mod model;
 mod model_stream;
 mod participation;

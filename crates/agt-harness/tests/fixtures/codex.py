@@ -17,6 +17,17 @@ for line in sys.stdin:
  method=v.get('method');p=v.get('params',{});id=v.get('id')
  if method=='initialize':reply(id,{'userAgent':'fixture/1'})
  elif method=='account/read':reply(id,{'account':None,'requiresOpenaiAuth':False})
+ elif method=='model/list':
+  models=[{'id':'fixture-model','model':'fixture-model','displayName':'Fixture model','description':'Local test model','defaultReasoningEffort':'high','supportedReasoningEfforts':[{'reasoningEffort':'high','description':'High'},{'reasoningEffort':'xhigh','description':'Extra high'}],'isDefault':True,'hidden':False}]
+  reply(id,{'data':models,'nextCursor':None})
+ elif method=='skills/list':reply(id,{'data':[{'cwd':str(root),'skills':[{'name':'fixture-skill','description':'Test skill'}],'errors':[]}]})
+ elif method=='mcpServerStatus/list':reply(id,{'data':[{'name':'fixture-mcp','authStatus':'notLoggedIn','tools':{}}],'nextCursor':None})
+ elif method=='thread/name/set':reply(id,{})
+ elif method=='thread/compact/start':
+  reply(id,{})
+  time.sleep(0.1)
+  note('item/completed',{'threadId':p['threadId'],'item':{'type':'contextCompaction','id':'compact'}})
+  note('turn/completed',{'threadId':p['threadId'],'turn':{'id':'compact-turn','status':'completed'}})
  elif method=='thread/start':
   thread='thread-'+str(time.time_ns());reply(id,{'thread':{'id':thread},'model':'fixture-effective-model'})
  elif method=='thread/resume':thread=p['threadId'];reply(id,{'thread':{'id':thread},'model':'fixture-effective-model'})

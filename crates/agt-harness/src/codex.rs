@@ -149,6 +149,97 @@ impl Codex {
             json!({"status":"connected","engine":"codex","authenticated":!account["account"].is_null(),"requires_openai_auth":account["requiresOpenaiAuth"],"inference":false}),
         )
     }
+    /// Operations implemented against app-server, not terminal slash-command text.
+    pub fn capabilities() -> Value {
+        json!({"engine":"codex","operations":["models","configure","rename","compact","skills","mcp","status"],"unsupported":["review","diff","fork","import","interactive_approval"]})
+    }
+    pub fn models(environment: &Environment) -> Result<Value> {
+        let mut event = |_: Event<'_>| Ok(());
+        let mut client = Self::connect(environment, &mut event)?;
+        client.catalog(
+            "model/list",
+            json!({"limit":100,"includeHidden":false}),
+            &mut event,
+        )
+    }
+    fn catalog(
+        &mut self,
+        method: &str,
+        mut params: Value,
+        event: &mut dyn FnMut(Event<'_>) -> Result<()>,
+    ) -> Result<Value> {
+        let mut data = Vec::new();
+        let mut cursors = std::collections::HashSet::new();
+        loop {
+            let page = self.request(method, params.clone(), event)?;
+            data.extend(
+                page["data"]
+                    .as_array()
+                    .context("missing catalog data")?
+                    .iter()
+                    .cloned(),
+            );
+            let Some(cursor) = page["nextCursor"].as_str() else {
+                break;
+            };
+            if !cursors.insert(cursor.to_owned()) || data.len() > 10000 {
+                bail!("invalid catalog pagination");
+            }
+            params["cursor"] = json!(cursor);
+        }
+        Ok(json!({"data":data}))
+    }
+    pub fn inspect(environment: &Environment, operation: &str) -> Result<Value> {
+        let mut event = |_: Event<'_>| Ok(());
+        let mut client = Self::connect(environment, &mut event)?;
+        match operation {
+            "skills" => client.request(
+                "skills/list",
+                json!({"cwds":[environment.working_directory],"forceReload":true}),
+                &mut event,
+            ),
+            "mcp" => client.catalog("mcpServerStatus/list", json!({"limit":100}), &mut event),
+            _ => bail!("unsupported inspection operation"),
+        }
+    }
+    pub fn rename(environment: &Environment, thread: &str, name: &str) -> Result<()> {
+        let mut event = |_: Event<'_>| Ok(());
+        let mut client = Self::connect(environment, &mut event)?;
+        client.request(
+            "thread/name/set",
+            json!({"threadId":thread,"name":name}),
+            &mut event,
+        )?;
+        Ok(())
+    }
+    /// The RPC acknowledgement is not completion. Keep the connection alive until the turn ends.
+    pub fn compact(
+        environment: &Environment,
+        thread: &str,
+        event: &mut dyn FnMut(Event<'_>) -> Result<()>,
+    ) -> Result<()> {
+        let mut client = Self::connect(environment, event)?;
+        client.request("thread/resume", json!({"threadId":thread,"cwd":environment.working_directory,"model":environment.model,"approvalPolicy":"never","sandbox":environment.sandbox.protocol(),"config":{"model_reasoning_effort":environment.reasoning_effort}}), event)?;
+        client.next_id += 1;
+        let id = client.next_id;
+        client
+            .send(json!({"id":id,"method":"thread/compact/start","params":{"threadId":thread}}))?;
+        loop {
+            let value = client.receive(event)?;
+            if value["id"] == id && value.get("error").is_some() {
+                bail!("Codex compaction rejected: {}", value["error"]["message"]);
+            }
+            if value["params"]["threadId"] == thread && value["method"] == "turn/completed" {
+                if value["params"]["turn"]["status"] == "completed" {
+                    return Ok(());
+                }
+                bail!("Codex compaction did not complete");
+            }
+            if value.get("method").is_some() && value.get("id").is_some() {
+                bail!("Codex compaction requested unsupported interaction");
+            }
+        }
+    }
     pub fn execute(
         &mut self,
         environment: &Environment,
@@ -159,6 +250,9 @@ impl Codex {
         let mut params = json!({"cwd":environment.working_directory,"approvalPolicy":"never","sandbox":environment.sandbox.protocol(),"developerInstructions":execution.instructions});
         if let Some(model) = &environment.model {
             params["model"] = json!(model);
+        }
+        if let Some(effort) = &environment.reasoning_effort {
+            params["config"] = json!({"model_reasoning_effort":effort});
         }
         let method = if let Some(thread) = execution.thread {
             params["threadId"] = json!(thread);
@@ -178,7 +272,7 @@ impl Codex {
         event(Event::Thread(&thread))?;
         self.next_id += 1;
         let start_id = self.next_id;
-        self.send(json!({"id":start_id,"method":"turn/start","params":{"threadId":thread,"input":[{"type":"text","text":execution.input}]}}))?;
+        self.send(json!({"id":start_id,"method":"turn/start","params":{"threadId":thread,"input":[{"type":"text","text":execution.input}],"model":environment.model,"effort":environment.reasoning_effort}}))?;
         let mut turn = None;
         let mut final_text = String::new();
         let result = (|| {

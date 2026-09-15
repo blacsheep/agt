@@ -28,6 +28,10 @@ pub struct Environment {
     pub working_directory: PathBuf,
     #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
     pub sandbox: Sandbox,
     #[serde(default = "default_timeout")]
     pub timeout_seconds: u64,
@@ -51,6 +55,16 @@ impl Environment {
         }
         if self.model.as_ref().is_some_and(|m| m.trim().is_empty()) {
             bail!("model must be non-empty or omitted");
+        }
+        if self.description.len() > 4096 {
+            bail!("description exceeds 4096 bytes");
+        }
+        if self
+            .reasoning_effort
+            .as_ref()
+            .is_some_and(|e| e.trim().is_empty())
+        {
+            bail!("reasoning_effort must be non-empty or omitted");
         }
         Ok(())
     }

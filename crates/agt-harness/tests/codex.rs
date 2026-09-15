@@ -12,6 +12,8 @@ fn fixture() -> (tempfile::TempDir, Environment) {
         executable: exe,
         working_directory: dir.path().into(),
         model: None,
+        description: String::new(),
+        reasoning_effort: None,
         sandbox: Sandbox::ReadOnly,
         timeout_seconds: 10,
     };
@@ -138,4 +140,27 @@ fn cancellation_during_silent_execution_reaps_process() {
         .parse::<i32>()
         .unwrap();
     assert_eq!(unsafe { libc::kill(pid, 0) }, -1);
+}
+
+#[test]
+fn control_operations_query_engine_without_sending_chat_messages() {
+    let (dir, config) = fixture();
+    let models = Codex::models(&config).unwrap();
+    assert_eq!(
+        models["data"][0]["supportedReasoningEfforts"][1]["reasoningEffort"],
+        "xhigh"
+    );
+    assert_eq!(
+        Codex::inspect(&config, "skills").unwrap()["data"][0]["skills"][0]["name"],
+        "fixture-skill"
+    );
+    assert_eq!(
+        Codex::inspect(&config, "mcp").unwrap()["data"][0]["name"],
+        "fixture-mcp"
+    );
+    Codex::rename(&config, "engine-id", "Project review").unwrap();
+    Codex::compact(&config, "engine-id", &mut |_| Ok(())).unwrap();
+    let log = std::fs::read_to_string(dir.path().join("protocol.jsonl")).unwrap();
+    assert!(!log.contains("turn/start"));
+    assert!(log.contains("thread/compact/start"));
 }

@@ -3,7 +3,7 @@ use crate::{Result, RunRecord, RunStore, RuntimeError, ScheduledTask};
 use agt_core::CancellationToken;
 use agt_harness::{Codex, EnvironmentStore, Event, Execution, Tool};
 use agt_service::{Actor, Role, ToolService};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -45,8 +45,7 @@ pub(crate) fn execute(
         .read_in(reference.category(), reference.name().as_str())
         .map_err(error)?
         .config;
-    environment.validate().map_err(error)?;
-    record.request.working_directory = environment.working_directory.clone();
+
     let mut instructions = agt_prompt::PromptStore::new(home)
         .read_in(agent.prompt.category(), agent.prompt.name().as_str())
         .map_err(error)?
@@ -149,42 +148,45 @@ pub(crate) fn execute(
             task,
         )?);
     }
-    let config_hash = crate::fingerprint(&serde_json::to_vec(
-        &json!({"agent":format!("{agent:?}"),"environment":environment,"input_format":2,"instructions":config_instructions,"tools":tools.iter().map(|t|json!([t.name,t.input_schema])).collect::<Vec<_>>()}),
-    )?);
-    record.config_fingerprint = Some(config_hash.clone());
-    let session_db = Connection::open(crate::store::database_path(
-        home,
-        "runtime",
-        "harnesses.db",
-    )?)?;
-    session_db.busy_timeout(std::time::Duration::from_secs(5))?;
-    session_db.execute_batch("CREATE TABLE IF NOT EXISTS sessions(scope TEXT PRIMARY KEY,thread TEXT,through_seq INTEGER NOT NULL,source_hash TEXT NOT NULL,dirty INTEGER NOT NULL);")?;
-    let scope = if let Some(t) = task {
-        crate::fingerprint(&serde_json::to_vec(&json!([
-            t.principal,
-            t.conversation,
-            cutoff,
-            config_hash
-        ]))?)
-    } else {
-        record.id.clone()
-    };
+    let sessions = crate::HarnessSessions::open(home).map_err(error)?;
+    let session = sessions
+        .ensure(
+            (
+                task.map(|t| t.principal.as_str()).unwrap_or(""),
+                task.map(|t| t.conversation.as_str()).unwrap_or(""),
+                &record.request.agent,
+                cutoff,
+            ),
+            &agent,
+            &environment,
+            if task.is_none() {
+                Some(record.id.as_str())
+            } else {
+                None
+            },
+        )
+        .map_err(error)?;
+    let scope = session.id;
+    sessions.lock(&scope).map_err(error)?;
+    // Read the snapshot after acquiring the same lock used by configuration commands.
+    let session = sessions.get(&scope).map_err(error)?;
+    let environment = session.config;
+    environment.validate().map_err(error)?;
+    record.request.working_directory = environment.working_directory.clone();
+    record.config_fingerprint = Some(crate::fingerprint(&serde_json::to_vec(
+        &json!({"agent":format!("{agent:?}"),"environment":environment,"input_format":3,"instructions":config_instructions,"tools":tools.iter().map(|t|json!([t.name,t.input_schema])).collect::<Vec<_>>()}),
+    )?));
+    let session_db = &sessions.db;
     let saved: Option<(Option<String>, i64, String, bool)> = session_db
         .query_row(
-            "SELECT thread,through_seq,source_hash,dirty FROM sessions WHERE scope=?1",
+            "SELECT thread,through_seq,source_hash,dirty FROM sessions_v3 WHERE scope=?1",
             [&scope],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
         .optional()?;
     let mut thread = None;
     let mut after = cutoff;
-    if let Some((saved_thread, through, source, dirty)) = saved {
-        if dirty {
-            return Err(error(
-                "previous external task was interrupted or failed; inspect its run and use /new before continuing",
-            ));
-        }
+    if let Some((saved_thread, through, source, _)) = saved {
         let prefix: Vec<_> = history
             .iter()
             .filter(|v| v["seq"].as_i64().unwrap_or(0) <= through)
@@ -212,7 +214,7 @@ pub(crate) fn execute(
         ));
     }
     let check = || -> Result<()> {
-        if token.is_canceled() {
+        if token.is_canceled() || sessions.canceled(&scope).map_err(error)? {
             return Err(RuntimeError::Canceled);
         }
         if let Some(task) = task {
@@ -221,12 +223,6 @@ pub(crate) fn execute(
         Ok(())
     };
     check()?;
-    let changed = session_db.execute("INSERT INTO sessions(scope,thread,through_seq,source_hash,dirty) VALUES(?1,NULL,0,'',1) ON CONFLICT(scope) DO UPDATE SET dirty=1 WHERE dirty=0",[&scope])?;
-    if changed == 0 {
-        return Err(error(
-            "external session already has an active or interrupted task",
-        ));
-    }
     crate::progress::stage(record, store, task, "preparing")?;
     let mut invocation =
         crate::CallRecord::new(record, None, json!({"engine":"codex","request_attempts":1}));
@@ -234,7 +230,8 @@ pub(crate) fn execute(
     let mut invocation = store.start_call(invocation)?;
     let audit_record = record.clone();
     let failures = std::cell::Cell::new(0u32);
-    record.execution = Some(json!({"engine":"codex","environment":reference.to_string()}));
+    record.execution =
+        Some(json!({"engine":"codex","environment":reference.to_string(),"session_record":scope}));
     let current_chat = record
         .request
         .trigger
@@ -251,7 +248,7 @@ pub(crate) fn execute(
                 record.execution.as_mut().unwrap()["thread_id"] = json!(id);
                 store.save(record)?;
                 session_db.execute(
-                    "UPDATE sessions SET thread=?2 WHERE scope=?1",
+                    "UPDATE sessions_v3 SET thread=?2 WHERE scope=?1",
                     params![scope, id],
                 )?;
             }
@@ -336,6 +333,12 @@ pub(crate) fn execute(
         &mut call,
     );
     drop(client);
+    if result.is_ok() && !session.title.is_empty() {
+        let saved = sessions.get(&scope).map_err(error)?;
+        if let Some(thread) = saved.session_id {
+            Codex::rename(&environment, &thread, &session.title).map_err(error)?;
+        }
+    }
     let result = check().and_then(|_| result.map_err(error));
     invocation.finish(
         if result.is_ok() {
@@ -352,7 +355,7 @@ pub(crate) fn execute(
     let output = result?;
     let save = || {
         session_db.execute(
-            "UPDATE sessions SET dirty=0,through_seq=?2,source_hash=?3 WHERE scope=?1",
+            "UPDATE sessions_v3 SET dirty=0,through_seq=?2,source_hash=?3 WHERE scope=?1",
             params![
                 scope,
                 task.map(|t| t.through_seq).unwrap_or(0),

@@ -1079,6 +1079,8 @@ fn external_fixture() -> (tempfile::TempDir, ToolService, String) {
                 executable: exe,
                 working_directory: path.into(),
                 model: None,
+                description: String::new(),
+                reasoning_effort: None,
                 sandbox: agt_harness::Sandbox::ReadOnly,
                 timeout_seconds: 10,
             },
@@ -1320,4 +1322,95 @@ fn native_scheduled_input_keeps_peer_identity_without_duplicate_trigger_body() {
     assert_eq!(input["history"][0]["sender"], "b");
     assert_eq!(input.to_string().matches("peer background").count(), 1);
     assert_eq!(input.to_string().matches("question").count(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn harness_session_snapshots_models_names_and_compaction_are_isolated() {
+    let (home, user, group) = external_fixture();
+    let path = home.path();
+    let chat = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let store = crate::HarnessSessions::open(path).unwrap();
+    let session = store.current(path, "a", &chat).unwrap();
+    assert!(session.session_id.is_none());
+    let other = store.current(path, "a", &group).unwrap();
+    assert_ne!(session.id, other.id);
+    let environments = agt_harness::EnvironmentStore::new(path);
+    let mut changed = environments
+        .read_in(&agt_core::CategoryName::default(), "local")
+        .unwrap()
+        .config;
+    changed.model = Some("changed-default".into());
+    changed.working_directory = path.join("new-project");
+    std::fs::create_dir(&changed.working_directory).unwrap();
+    environments
+        .write_in(&agt_core::CategoryName::default(), "local", &changed, false)
+        .unwrap();
+    assert_eq!(
+        store.current(path, "a", &chat).unwrap().config,
+        session.config
+    );
+    assert!(store.configure(&session.id, "invented", None).is_err());
+    assert!(!store.get(&session.id).unwrap().busy);
+    assert!(
+        store
+            .configure(&session.id, "fixture-model", Some("invented"))
+            .is_err()
+    );
+    let configured = store
+        .configure(&session.id, "fixture-model", Some("xhigh"))
+        .unwrap();
+    assert_eq!(configured.config.reasoning_effort.as_deref(), Some("xhigh"));
+    assert_eq!(store.get(&other.id).unwrap().config.model, None);
+    store.rename(&session.id, "Backend investigation").unwrap();
+    let mut scheduler = begin(path, &user, &chat);
+    let task = claim(&mut scheduler, "a");
+    execute(
+        path,
+        task.clone(),
+        &mut Answer(json!({})),
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+    let completed = store.get(&session.id).unwrap();
+    assert!(
+        completed
+            .session_id
+            .as_deref()
+            .unwrap()
+            .starts_with("thread-")
+    );
+    store.rename(&session.id, "Backend follow-up").unwrap();
+    store
+        .compact(&session.id, &CancellationToken::new())
+        .unwrap();
+    assert_eq!(
+        store.get(&session.id).unwrap().session_id,
+        completed.session_id
+    );
+    let protocol: Vec<Value> = std::fs::read_to_string(path.join("protocol.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let turn = protocol
+        .iter()
+        .find(|e| e["method"] == "turn/start")
+        .unwrap();
+    assert_eq!(turn["params"]["model"], "fixture-model");
+    assert_eq!(turn["params"]["effort"], "xhigh");
+    assert!(protocol.iter().any(|e|e["method"]=="thread/name/set" && e["params"]["name"]=="Backend follow-up"));
+    store.lock(&session.id).unwrap();
+    assert!(store.configure(&session.id, "fixture-model", None).is_err());
+    assert!(store.rename(&session.id, "busy").is_err());
+    reset_conversation_context(path, &chat, "user").unwrap();
+    let fresh = store.current(path, "a", &chat).unwrap();
+    assert_ne!(fresh.id, session.id);
+    assert_eq!(fresh.config, changed);
 }

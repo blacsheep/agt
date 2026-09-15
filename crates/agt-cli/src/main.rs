@@ -1,3 +1,4 @@
+mod harness;
 use std::fs;
 use std::io::{self, IsTerminal, Read};
 use std::path::{Path, PathBuf};
@@ -89,6 +90,9 @@ enum Command {
     /// manage reusable external execution environments
     #[command(subcommand, alias = "env")]
     Environment(EnvironmentCommand),
+    /// inspect and control external Harness sessions
+    #[command(subcommand)]
+    Harness(harness::HarnessCommand),
     /// inspect persisted agent executions
     #[command(subcommand)]
     Run(runtime::RunCommand),
@@ -729,6 +733,7 @@ fn dispatch(command: Command, home: &Path, output: OutputMode, yes: bool) -> Res
         Command::Prompt(command) => dispatch_prompt(command, home, output, yes),
         Command::Skill(command) => dispatch_skill(command, home, output, yes),
         Command::Mcp(command) => dispatch_mcp(command, home, output, yes),
+        Command::Harness(command) => harness::dispatch(command, home, output, yes),
         Command::Environment(command) => dispatch_environment(command, home, output, yes),
         Command::Agent(command) => dispatch_agent(command, home, output, yes),
         Command::Run(command) => runtime::inspect(command, home, output),

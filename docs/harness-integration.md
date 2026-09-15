@@ -119,3 +119,31 @@ Web 验证创建/编辑环境与 Agent、缺少模型时选择外部环境、桌
 - 全工作区 Rust 测试、Clippy（所有 target，禁止警告）、格式及 diff 检查通过。
 - Web 接口测试 20 项通过；Harness 与工作区浏览器回归通过，覆盖命令拦截、显式普通文本发送、模型状态与上下文重置。
 - 协议桩验证私聊原文、群聊发送者与顺序、已发布回复去重；本次未调用真实模型。
+
+## Harness 资源与执行会话（v3）
+
+资源继续使用 `environment` 文件及通用 CRUD，CLI 新增 `agt harness resource …` 入口，
+避免复制一套资源存储。资源包括项目目录、说明、默认模型和默认 reasoning_effort。
+引擎适配器封装 app-server；AGT 会话记录与 Codex session_id 分离，thread ID 只取自引擎响应。
+
+`sessions_v3` 按 Agent 配置、principal、conversation、reset cutoff 标识 AGT 会话记录。
+首次准备记录时保存 Environment 配置快照。更新资源默认值不影响已有记录；/new 后
+新记录采用新默认值。修改 Agent 的角色/工具配置会另建记录，避免旧线程保留失效权限。
+旧 sessions 表保留；首次升级到 v3 创建新线程并重建可见聊天背景，不迁移私有工具上下文。
+同一目录中的文件与运行账户的 Codex 全局配置仍共享；快照不是文件系统或账户隔离。
+
+后端先提供结构化接口：
+
+- `agt harness capabilities`：声明已接入能力与明确未支持的功能。
+- `agt harness resource create/update/list/info/delete …`：兼容原 environment 命令。
+- `agt harness models/skills/mcp <资源引用>`：查询该连接的真实能力，模型列表遍历分页。
+- `agt harness session current --principal <Agent> --conversation <聊天>`：准备/读取当前快照，不启动线程。
+- `agt harness session list/info/models/skills/mcp …`：管理 AGT 保存的会话、查询实例能力。
+- `agt harness session configure <记录ID> --model <模型> [--effort <档位>]`：实时校验目录支持，下一轮应用，保留 thread ID。
+- `agt harness session rename <记录ID> <标题>`：通过 thread/name/set 同步 Codex；未执行的会话在首次执行后应用。
+- `agt harness session compact <记录ID>`：恢复线程并等待压缩 turn/completed；失败保留 dirty 围栏。
+- `agt harness session cancel <记录ID>`：请求终止活跃执行/压缩；之后检查并重置上下文。
+
+修改模型、命名、执行和压缩共享数据库互斥围栏。执行中拒绝修改；取消不等于回滚文件操作。
+CLI 是本机管理员入口，Web 另行验证当前操作者及目标 Agent 的会话成员身份。
+`/review`、`/diff`、任意线程导入/恢复、fork 和交互审批本阶段明确不支持；不提供任意 RPC 透传。
