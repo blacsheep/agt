@@ -665,16 +665,48 @@ function showReplyControls() {
 }
 function showNewChat() {
   const people = state.boot.principals.filter(p => p.id !== state.boot.principal);
-  dialog('新建会话', `<form id="modal-form"><div class="form-note">以「${esc(nameOf(state.boot.principal))}」创建会话。Agent 启用后才能按响应策略自动回应。</div>${field('会话类型', '<select name="kind"><option value="group">群聊 · 多方讨论</option><option value="direct">私聊 · 一对一</option></select>')}${field('群聊名称', '<input name="title" placeholder="例如：产品方案讨论" maxlength="120">')}${field('参与者', checks(people.map(p => [p.id, p.name || p.id]), 'members'), '私聊请选择一人；群聊至少选择一人。')}<div class="form-actions"><button class="primary" type="submit">创建会话</button></div></form>`);
+  dialog('新建会话', `<form id="modal-form"><div class="form-note">以「${esc(nameOf(state.boot.principal))}」创建会话。Agent 启用后才能按响应策略自动回应。</div>${field('会话类型', '<select name="kind"><option value="group">群聊 · 多方讨论</option><option value="direct">私聊 · 一对一</option></select>')}${field('群聊名称', '<input name="title" placeholder="例如：产品方案讨论" maxlength="120">')}<section class="participant-picker" aria-label="选择参与者"><label class="field"><span>参与者</span><input id="participant-search" type="search" placeholder="搜索名称或 ID" autocomplete="off"></label><div id="participant-selected" class="participant-selected"></div><div id="participant-count" class="participant-count" aria-live="polite"></div><div id="participant-results" class="participant-results"></div><div class="participant-pages"><button id="participant-prev" type="button" class="secondary">上一页</button><small id="participant-page"></small><button id="participant-next" type="button" class="secondary">下一页</button></div></section><div class="form-actions"><button class="primary" type="submit">创建会话</button></div></form>`);
   const kindSelect = $('#modal-form [name=kind]'), title = $('#modal-form [name=title]');
+  const selected = new Set();
+  let page = 0;
+  const search = $('#participant-search');
+  const renderPeople = () => {
+    const query = search.value.trim().toLowerCase(), limit = query ? 10 : 8;
+    const matches = people.filter(p => `${p.name || ''} ${p.id}`.toLowerCase().includes(query));
+    const pages = Math.max(1, Math.ceil(matches.length / limit));
+    page = Math.min(page, pages - 1);
+    $('#participant-count').textContent = `${query ? '搜索结果' : '联系人'} · ${matches.length} 位 · 已选 ${selected.size} 位`;
+    $('#participant-selected').innerHTML = [...selected].map(id => `<button type="button" class="participant-chip" data-remove-person="${esc(id)}" aria-label="移除 ${esc(nameOf(id))}">${esc(nameOf(id))}<span aria-hidden="true">×</span></button>`).join('');
+    $('#participant-results').innerHTML = matches.slice(page * limit, (page + 1) * limit).map(p => `<label class="participant-row"><span class="participant-avatar" aria-hidden="true">${esc((p.name || p.id).slice(0, 1))}</span><span class="participant-identity"><strong>${esc(p.name || p.id)}</strong><small>${esc(p.id)}</small></span><input type="${kindSelect.value === 'direct' ? 'radio' : 'checkbox'}" name="candidate" value="${esc(p.id)}" ${selected.has(p.id) ? 'checked' : ''}></label>`).join('') || '<p class="participant-empty">没有匹配的联系人，试试其他名称或 ID。</p>';
+    $('#participant-prev').disabled = page === 0;
+    $('#participant-next').disabled = page + 1 >= pages;
+    $('#participant-page').textContent = `${page + 1} / ${pages}`;
+    $('.participant-pages').hidden = pages === 1;
+  };
+  search.oninput = () => { page = 0; renderPeople(); };
+  $('#participant-prev').onclick = () => { page--; renderPeople(); };
+  $('#participant-next').onclick = () => { page++; renderPeople(); };
+  $('#participant-results').onchange = event => {
+    const input = event.target;
+    if (kindSelect.value === 'direct') selected.clear();
+    if (input.checked) selected.add(input.value); else selected.delete(input.value);
+    renderPeople();
+    [...$('#participant-results').querySelectorAll('input')].find(item => item.value === input.value)?.focus();
+  };
+  $('#participant-selected').onclick = event => {
+    const button = event.target.closest('[data-remove-person]');
+    if (button) { selected.delete(button.dataset.removePerson); renderPeople(); search.focus(); }
+  };
   const updateKind = () => {
     const group = kindSelect.value === 'group';
+    if (!group && selected.size > 1) { const first = selected.values().next().value; selected.clear(); selected.add(first); }
+    renderPeople();
     title.closest('.field').classList.toggle('hidden', !group);
     title.disabled = !group; title.required = group;
   };
   kindSelect.onchange = updateKind; updateKind();
   formHandler(async data => {
-    const members = data.getAll('members'); const kind = data.get('kind');
+    const members = [...selected]; const kind = data.get('kind');
     if (!members.length || (kind === 'direct' && members.length !== 1)) throw new Error('请选择参与者；私聊只能选择一人。');
     if (kind === 'group' && !data.get('title').trim()) throw new Error('请填写群聊名称。');
     const c = await tool(kind === 'group' ? 'group_create' : 'direct_create', kind === 'group' ? { title: data.get('title').trim(), members } : { principal: members[0] });

@@ -143,7 +143,28 @@ try {
   assert.equal(await evaluate('state.boot.bindings.find(b=>b.principal==="lead").enabled'), true);
   assert.equal(await evaluate('state.boot.bindings.find(b=>b.principal==="developer").enabled'), false);
   assert.equal(await evaluate('selectedAgents.size'), 1);
-  await evaluate(`closeModal(); showNewChat();`);
+  await evaluate(`closeModal(); state.boot.principals.push(...Array.from({length:25},(_,i)=>({id:'picker-'+i,name:'Picker '+i,kind:'agent'}))); showNewChat();`);
+  assert.equal(await evaluate('document.querySelectorAll(".participant-row").length'),8);
+  await click('[name=candidate]');
+  const chosen = await evaluate('document.querySelector("[name=candidate]:checked").value');
+  await evaluate(`document.querySelector('#participant-search').value='picker-'; document.querySelector('#participant-search').dispatchEvent(new Event('input'));`);
+  assert.equal(await evaluate('document.querySelectorAll(".participant-row").length'),10);
+  await click('#participant-next');
+  await click('[name=candidate]');
+  assert.equal(await evaluate('document.querySelectorAll(".participant-chip").length'),2);
+  await evaluate(`document.querySelector('#participant-search').value='picker-24'; document.querySelector('#participant-search').dispatchEvent(new Event('input'));`);
+  assert.equal(await evaluate('document.querySelectorAll(".participant-row").length'),1);
+  await click('[name=candidate]');
+  assert.equal(await evaluate('document.querySelectorAll(".participant-chip").length'),3);
+  await evaluate(`document.querySelector('#participant-search').value='missing-person'; document.querySelector('#participant-search').dispatchEvent(new Event('input'));`);
+  assert.equal(await evaluate('document.querySelectorAll(".participant-row").length'),0);
+  await evaluate(`document.querySelector('[name=kind]').value='direct'; document.querySelector('[name=kind]').dispatchEvent(new Event('change'));`);
+  assert.equal(await evaluate('document.querySelectorAll(".participant-chip").length'),1);
+  assert.equal(await evaluate('document.querySelector(".participant-chip").dataset.removePerson'),chosen);
+  await cdp('Emulation.setDeviceMetricsOverride', {width:390,height:844,deviceScaleFactor:1,mobile:true});
+  assert.equal(await evaluate('document.querySelector("#modal").scrollWidth <= document.querySelector("#modal").clientWidth'),true);
+  await cdp('Emulation.setDeviceMetricsOverride', {width:1280,height:900,deviceScaleFactor:1,mobile:false});
+  await evaluate(`state.boot.principals=state.boot.principals.filter(p=>!p.id.startsWith('picker-')); closeModal(); showNewChat();`);
   assert.equal(await evaluate('document.querySelector("[name=title]").required'),true);
   await evaluate(`document.querySelector('[name=kind]').value='direct'; document.querySelector('[name=kind]').dispatchEvent(new Event('change'));`);
   assert.equal(await evaluate('document.querySelector("[name=title]").closest(".field").classList.contains("hidden")'),true);
@@ -152,7 +173,7 @@ try {
   assert.equal(await evaluate('document.querySelector("[name=title]").required'),true);
   assert.equal(await evaluate('document.querySelector("[name=title]").disabled'),false);
   await evaluate(`document.querySelector('[name=kind]').value='direct'; document.querySelector('[name=kind]').dispatchEvent(new Event('change'));
-    document.querySelector('[name=members]').checked=true;
+    document.querySelector('[name=candidate]').click();
     window.createdDirect=null;
     api = async (path,data) => {
       if(path === 'tool') {window.createdDirect=data; return {id:'new-direct',kind:'direct',state:'active'};}
