@@ -302,6 +302,27 @@ fn add_edge(graph: &mut ResourceGraph, dependency: ResourceKey, dependent: Resou
 }
 
 fn delete_selected(home: &Path, selected: &[ResourceKey]) -> Result<Vec<ResourceKey>> {
+    let agents = selected
+        .iter()
+        .filter(|key| key.kind == ResourceKind::Agent)
+        .map(|key| format!("{}/{}", key.category, key.name))
+        .collect::<Vec<_>>();
+    let im = agt_im::ImStore::open(crate::database_path(home, "im", "im.db")?)?;
+    let origins = crate::BindingStore::open(home)?.origins()?;
+    let retired = im
+        .list_principals()?
+        .into_iter()
+        .filter(|p| {
+            let source = origins.get(p.id.as_str()).map(String::as_str).or_else(|| {
+                p.metadata
+                    .get("agent_ref")
+                    .and_then(serde_json::Value::as_str)
+            });
+            p.kind == agt_im::PrincipalKind::Agent
+                && source.is_some_and(|source| agents.iter().any(|a| a == source))
+        })
+        .map(|p| p.id)
+        .collect::<Vec<_>>();
     let trash = create_trash_dir(home)?;
     let mut moved = Vec::new();
     let mut scope_parents = std::collections::BTreeSet::new();
@@ -349,6 +370,7 @@ fn delete_selected(home: &Path, selected: &[ResourceKey]) -> Result<Vec<Resource
             }),
         };
     }
+    im.delete_agent_principals(&retired)?;
     for parent in scope_parents {
         remove_empty_scope_dir(&parent);
     }

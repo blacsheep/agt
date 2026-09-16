@@ -46,7 +46,9 @@ const tool = (name, args = {}) => api('tool', { name, args });
 const read = (name, args = {}, viewer = state.viewer) => api('read', { name, args, viewer });
 const items = kind => { const resource = state.boot?.resources[kind]; return Array.isArray(resource) ? resource : resource?.items || []; };
 const ref = item => `${item.category || 'default'}/${item.skill || item.name || item.package || ''}`;
-const nameOf = id => state.boot?.principals.find(p => p.id === id)?.name || id;
+const principalOf = id => state.boot?.principals.find(p => p.id === id);
+const nameOf = id => { const p = principalOf(id); return `${p?.name || id}${p?.deleted ? '（已删除）' : ''}`; };
+const canContact = p => !p.deleted && (p.kind !== 'agent' || state.boot.bindings.some(b => b.principal === p.id && items('agent').some(a => ref(a) === b.agent)));
 const dateTime = value => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const empty = (title, description) => `<div class="empty compact"><h2>${esc(title)}</h2><p>${esc(description)}</p></div>`;
 function notify(message, error = false) { $('#notice').textContent = message; $('#notice').className = `notice${error ? ' error' : ''}`; }
@@ -80,8 +82,8 @@ function setupReadOnly() {
   renderReplyStatus();
 }
 async function bootstrap() {
-  const boot = await api('bootstrap'); state.boot = boot;
-  if (!state.viewer || !boot.principals.some(p => p.id === state.viewer)) state.viewer = boot.principal;
+  const boot = await api('bootstrap'); state.boot = boot; directNames.clear();
+  if (!state.viewer || !boot.principals.some(p => p.id === state.viewer && !p.deleted)) state.viewer = boot.principal;
   renderIdentities();
   $('#home-path').textContent = boot.home; $('#home-path').title = boot.home;
   $('#operator-name').textContent = nameOf(boot.principal);
@@ -97,7 +99,7 @@ function renderIdentities() {
   $('#new-chat').classList.toggle('hidden', observing);
   $('#observer-caption').textContent = choosingIdentity ? '选择 Agent，只读查看它有权访问的对话。' : `当前身份：${nameOf(state.viewer)} · 只读，不代替 Agent 发言`;
   const query = $('#agent-search').value.toLowerCase();
-  $('#identities').innerHTML = state.boot.principals.filter(p => p.kind === 'agent' && `${p.name} ${p.id}`.toLowerCase().includes(query)).map(p => `<button class="identity-button" data-identity="${esc(p.id)}" ${state.sending ? 'disabled' : ''}><span class="avatar">${esc((p.name || p.id).slice(0, 1))}</span><span><strong>${esc(p.name || p.id)}</strong><small>${esc(p.id)} · 查看会话 ↗</small></span></button>`).join('') || empty('暂无匹配的 Agent', '在 Agent 团队中创建角色并配置聊天身份。');
+  $('#identities').innerHTML = state.boot.principals.filter(p => !p.deleted && p.kind === 'agent' && `${p.name} ${p.id}`.toLowerCase().includes(query)).map(p => `<button class="identity-button" data-identity="${esc(p.id)}" ${state.sending ? 'disabled' : ''}><span class="avatar">${esc((p.name || p.id).slice(0, 1))}</span><span><strong>${esc(p.name || p.id)}</strong><small>${esc(p.id)} · ${canContact(p) ? '查看会话 ↗' : '未绑定 · 查看历史 ↗'}</small></span></button>`).join('') || empty('暂无匹配的 Agent', '在 Agent 团队中创建角色并配置聊天身份。');
   $('#selected-identity').innerHTML = `<strong>${esc(nameOf(state.viewer))}</strong><small>${observing ? 'Agent 会话 · 只读' : '我的会话'}</small>`;
   $$('[data-identity]').forEach(button => button.onclick = async () => {
     if (state.sending) return;
@@ -181,7 +183,7 @@ function renderConversations() {
   $('#select-entries').indeterminate = entryOrganizer.selected.size > 0 && !$('#select-entries').checked;
   $('#hide-entries').disabled = !entryOrganizer.selected.size;
   $('#restore-entries').disabled = !entryOrganizer.selected.size;
-  const people = query && !isObserver() ? state.boot.principals.filter(p => p.id !== state.boot.principal && `${p.name || ''} ${p.id}`.toLowerCase().includes(query)) : [];
+  const people = query && !isObserver() ? state.boot.principals.filter(p => p.id !== state.boot.principal && canContact(p) && `${p.name || ''} ${p.id}`.toLowerCase().includes(query)) : [];
   const contacts = people.length ? `<div class="search-section">联系人 · ${people.length}</div>${people.map(p => `<button class="contact-result" data-contact="${esc(p.id)}" ${state.sending ? 'disabled' : ''}><span class="avatar contact-avatar">${esc([...(p.name || p.id)][0])}</span><span><strong>${esc(p.name || p.id)}</strong><small>${p.kind === 'agent' ? 'Agent' : '用户'} · ${esc(p.id)}</small></span><span class="contact-action">私聊 ↗</span></button>`).join('')}` : '';
   $('#conversations').innerHTML = contacts + (query && list.length ? '<div class="search-section">当前列表的会话</div>' : '') + (list.map(({ conversation: c, member_count, left_message_seq, dissolved, hidden }) => `<div class="conversation-row">${organizing ? `<input class="entry-check" type="checkbox" data-entry="${esc(c.id)}" aria-label="选择 ${esc(conversationName(c))}" ${entryOrganizer.selected.has(c.id) ? 'checked' : ''}>` : ''}<button class="conversation-item ${state.conversation?.id === c.id ? 'selected' : ''}" data-conv="${esc(c.id)}"><span class="avatar">${c.kind === 'group' ? '▧' : '↗'}</span><span><strong>${esc(conversationName(c))}</strong><small>${c.kind === 'group' ? '群聊' : '私聊'} · ${member_count} 位参与者${dissolved ? ' · 已解散' : left_message_seq != null ? ' · 已退出' : c.state !== 'active' ? ' · 已归档' : hidden ? ' · 已移除入口' : ''}</small></span></button><button class="conversation-menu-button" data-menu="${esc(c.id)}" aria-label="${esc(conversationName(c))} 的会话操作" aria-haspopup="menu" ${state.sending ? 'disabled' : ''}>⋯</button></div>`).join('') || (contacts ? '' : empty(query ? '没有匹配结果' : '暂无会话', query ? '搜索用户、Agent 名称或会话名称' : '搜索联系人，开始一次对话')));
   $$('[data-conv]').forEach(button => button.onclick = () => selectConversation(button.dataset.conv).catch(e => notify(errorText(e), true)));
@@ -477,7 +479,7 @@ function renderReplyStatus() {
 }
 let mentionOptions = [], mentionIndex = 0;
 function mentionMembers() {
-  return state.members.filter(m => m.principal_id !== state.boot?.principal && m.left_message_seq == null);
+  return state.members.filter(m => m.principal_id !== state.boot?.principal && !principalOf(m.principal_id)?.deleted && m.left_message_seq == null);
 }
 function mentionToken(id) {
   return id !== 'all' && /^[\p{L}\p{N}_-]+$/u.test(id) ? `@${id}` : `@[${JSON.stringify(id)}]`;
@@ -664,8 +666,8 @@ function showReplyControls() {
   formHandler(async data => { await api('reply', { conversation, action: 'start', allow_mcp: data.has('mcp'), confirm: true }); $('#modal').close(); await activity(); });
 }
 function showNewChat() {
-  const people = state.boot.principals.filter(p => p.id !== state.boot.principal);
-  dialog('新建会话', `<form id="modal-form"><div class="form-note">以「${esc(nameOf(state.boot.principal))}」创建会话。Agent 启用后才能按响应策略自动回应。</div>${field('会话类型', '<select name="kind"><option value="group">群聊 · 多方讨论</option><option value="direct">私聊 · 一对一</option></select>')}${field('群聊名称', '<input name="title" placeholder="例如：产品方案讨论" maxlength="120">')}<section class="participant-picker" aria-label="选择参与者"><label class="field"><span>参与者</span><input id="participant-search" type="search" placeholder="搜索名称或 ID" autocomplete="off"></label><div id="participant-selected" class="participant-selected"></div><div id="participant-count" class="participant-count" aria-live="polite"></div><div id="participant-results" class="participant-results"></div><div class="participant-pages"><button id="participant-prev" type="button" class="secondary">上一页</button><small id="participant-page"></small><button id="participant-next" type="button" class="secondary">下一页</button></div></section><div class="form-actions"><button class="primary" type="submit">创建会话</button></div></form>`);
+  const people = state.boot.principals.filter(p => p.id !== state.boot.principal && canContact(p));
+  dialog('新建会话', `<form id="modal-form"><div class="form-note">以「${esc(nameOf(state.boot.principal))}」创建会话。仅列出已绑定现有资源的 Agent；已删除或未绑定身份不参与新会话。停用的 Agent 需启用后才能自动回应。</div>${field('会话类型', '<select name="kind"><option value="group">群聊 · 多方讨论</option><option value="direct">私聊 · 一对一</option></select>')}${field('群聊名称', '<input name="title" placeholder="例如：产品方案讨论" maxlength="120">')}<section class="participant-picker" aria-label="选择参与者"><label class="field"><span>参与者</span><input id="participant-search" type="search" placeholder="搜索名称或 ID" autocomplete="off"></label><div id="participant-selected" class="participant-selected"></div><div id="participant-count" class="participant-count" aria-live="polite"></div><div id="participant-results" class="participant-results"></div><div class="participant-pages"><button id="participant-prev" type="button" class="secondary">上一页</button><small id="participant-page"></small><button id="participant-next" type="button" class="secondary">下一页</button></div></section><div class="form-actions"><button class="primary" type="submit">创建会话</button></div></form>`);
   const kindSelect = $('#modal-form [name=kind]'), title = $('#modal-form [name=title]');
   const selected = new Set();
   let page = 0;
@@ -812,6 +814,7 @@ function showBinding(agent) {
 }
 async function ensurePrincipal(id, name) {
   const exists = state.boot.principals.find(p => p.id === id);
+  if (exists?.deleted) throw new Error('这个身份已删除，ID 保留用于历史记录。请使用新的身份 ID。');
   if (exists && exists.kind !== 'agent') throw new Error('这个身份已被非 Agent 参与者占用，请换一个 ID。');
   if (!exists) { await tool('principal_create', { id, name, kind: 'agent' }); state.boot.principals.push({ id, name, kind: 'agent' }); }
 }

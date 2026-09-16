@@ -52,11 +52,16 @@ impl BindingStore {
         match version {
             0 => tx.execute_batch("CREATE TABLE bindings(principal TEXT PRIMARY KEY, agent TEXT NOT NULL, definition TEXT NOT NULL);
                 CREATE TABLE response_policies(conversation TEXT NOT NULL,principal TEXT NOT NULL,policy TEXT NOT NULL,PRIMARY KEY(conversation,principal)); PRAGMA user_version=1;")?,
-            1 | 2 => {},
+            1 | 2 | 3 => {},
             _ => bail!("unsupported bindings database version"),
         }
         if version < 2 {
             tx.execute_batch("ALTER TABLE bindings ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1; PRAGMA user_version=2;")?;
+        }
+        if version < 3 {
+            tx.execute_batch("CREATE TABLE IF NOT EXISTS binding_origins(principal TEXT PRIMARY KEY, agent TEXT NOT NULL);
+                INSERT OR REPLACE INTO binding_origins SELECT principal,agent FROM bindings;
+                PRAGMA user_version=3;")?;
         }
         tx.commit()?;
         Ok(Self {
@@ -90,10 +95,27 @@ impl BindingStore {
         if !binding.working_directory.is_dir() {
             bail!("invalid binding working directory");
         }
-        self.connection.execute("INSERT INTO bindings(principal,agent,definition) VALUES(?1,?2,?3)
+        let tx = self.connection.unchecked_transaction()?;
+        tx.execute("INSERT INTO bindings(principal,agent,definition) VALUES(?1,?2,?3)
             ON CONFLICT(principal) DO UPDATE SET agent=excluded.agent,definition=excluded.definition",
             params![binding.principal.as_str(),binding.agent,serde_json::to_string(&binding)?])?;
+        tx.execute(
+            "INSERT INTO binding_origins(principal,agent) VALUES(?1,?2)
+            ON CONFLICT(principal) DO UPDATE SET agent=excluded.agent",
+            params![binding.principal.as_str(), binding.agent],
+        )?;
+        tx.commit()?;
         Ok(binding)
+    }
+
+    /// Last binding survives unbind so deleting the resource can retire its identity.
+    pub fn origins(&self) -> Result<std::collections::BTreeMap<String, String>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT principal,agent FROM binding_origins")?;
+        Ok(statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<std::result::Result<_, _>>()?)
     }
 
     pub fn get(&self, principal: &PrincipalId) -> Result<Option<Binding>> {

@@ -12,6 +12,12 @@ try {
   await run(['im', 'principal', 'create', 'operator']);
   await run(['im', 'principal', 'create', 'tech-lead', '--kind', 'agent']);
   await run(['im', 'principal', 'create', 'designer']);
+  for (const [name,args] of [
+    ['resource_write',{kind:'provider',reference:'fixture',create:true,data:{base_url:'http://127.0.0.1:1/v1',api_key:'fixture'}}],
+    ['resource_write',{kind:'model',reference:'fixture',create:true,data:{provider:'fixture',model:'fixture'}}],
+    ['resource_write',{kind:'agent',reference:'tech-lead',create:true,data:{model:'fixture'}}],
+    ['agent_bind',{principal:'tech-lead',agent:'tech-lead',policy:'manual',working_directory:home}],
+  ]) await run(['tool','call','--principal','operator','--manager',name,'--args',JSON.stringify(args)]);
   ({ server } = createConsole({ run, home, principal: 'operator', token: 'browser-test-token' }));
   await new Promise(ok => server.listen(0, '127.0.0.1', ok));
   const url = `http://127.0.0.1:${server.address().port}`;
@@ -134,7 +140,7 @@ try {
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'),true);
   await cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:960,deviceScaleFactor:1,mobile:false});
   // Error paths keep the search in place, and user-controlled names stay text.
-  await evaluate(`closeConversationMenu(); window.realApi=api; api=async()=>{throw new Error('fixture unavailable');}; state.boot.principals.push({id:'unsafe',name:'<img src=x onerror="window.injected=1">',kind:'agent'}); document.querySelector('#search').value='unsafe'; renderConversations();`);
+  await evaluate(`closeConversationMenu(); window.realApi=api; api=async()=>{throw new Error('fixture unavailable');}; state.boot.principals.push({id:'unsafe',name:'<img src=x onerror="window.injected=1">',kind:'user'}); document.querySelector('#search').value='unsafe'; renderConversations();`);
   assert.equal(await evaluate('document.querySelector(".contact-result img")'),null);
   await click('[data-contact=unsafe]');
   await wait('!state.sending');
@@ -164,6 +170,15 @@ try {
   assert.equal(await evaluate('document.querySelectorAll("[data-entry]").length'),2);
   const kept=await run(['tool','call','--principal','tech-lead','message_history','--args',JSON.stringify({conversation:group.id})]);
   assert.equal(kept.messages.length,3);
+  await run(['tool','call','--principal','operator','--manager','agent_unbind','--args',JSON.stringify({principal:'tech-lead'})]);
+  await run(['tool','call','--principal','operator','--manager','resource_delete','--args',JSON.stringify({kind:'agent',reference:'tech-lead',confirm:['agent/default/tech-lead']})]);
+  await evaluate(`(async()=>{ state.page='chat'; state.viewer='operator'; choosingIdentity=false; await bootstrap(); await conversations(); await selectConversation('${group.id}'); })()`);
+  assert.match(await evaluate('document.querySelector("#messages").textContent'),/tech-lead（已删除）/);
+  await evaluate(`document.querySelector('#search').value='tech-lead'; renderConversations();`);
+  assert.equal(await evaluate('document.querySelectorAll("[data-contact]").length'),0);
+  await evaluate('showNewChat()');
+  assert.equal(await evaluate('document.querySelector("[name=candidate][value=tech-lead]")'),null);
+  await evaluate('closeModal()');
   assert.deepEqual(errors,[]);
   console.log('Collaboration browser passed: real direct create/reuse/hidden restore/archive restore, group menu, keyboard/focus, observer restrictions, escaped search, failure recovery, 6 widths.');
 } finally {

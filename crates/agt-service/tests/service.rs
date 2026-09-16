@@ -355,7 +355,7 @@ fn deleting_hosted_agent_requires_explicit_unbinding() {
         .unwrap();
     // Existing v1 bindings migrate as enabled; disabling survives reopen and keeps settings.
     let db = rusqlite::Connection::open(home.path().join("runtime/bindings.db")).unwrap();
-    db.execute_batch("ALTER TABLE bindings DROP COLUMN enabled; PRAGMA user_version=1;")
+    db.execute_batch("ALTER TABLE bindings DROP COLUMN enabled; DROP TABLE binding_origins; PRAGMA user_version=1;")
         .unwrap();
     drop(db);
     let principal = PrincipalId::new("a");
@@ -417,13 +417,29 @@ fn deleting_hosted_agent_requires_explicit_unbinding() {
     manager
         .call("agent_unbind", json!({"principal":"a"}))
         .unwrap();
-    assert!(
-        manager
-            .call(
-                "resource_delete",
-                json!({"kind":"provider","reference":"p","recursive":true})
-            )
-            .is_ok()
+    let plan = manager
+        .call(
+            "resource_delete",
+            json!({"kind":"provider","reference":"p","recursive":true}),
+        )
+        .unwrap();
+    manager
+        .call(
+            "resource_delete",
+            json!({"kind":"provider","reference":"p","recursive":true,"confirm":plan["items"]}),
+        )
+        .unwrap();
+    let directory = manager
+        .call("principal_list", json!({"include_deleted":true}))
+        .unwrap();
+    assert_eq!(
+        directory
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["id"] == "a")
+            .unwrap()["deleted"],
+        true
     );
 }
 
@@ -893,5 +909,135 @@ fn resource_agents_can_reference_but_cannot_write_execution_harnesses() {
                 json!({"kind":"harness","reference":"local"})
             )
             .is_err()
+    );
+}
+
+#[test]
+fn deleted_agent_identity_keeps_history_but_cannot_join_new_conversations() {
+    let home = home();
+    let manager = service(home.path(), "owner", true);
+    manager.call("resource_write", json!({"kind":"provider","reference":"p","create":true,"data":{"base_url":"http://127.0.0.1:1/v1","api_key":"fixture"}})).unwrap();
+    manager.call("resource_write", json!({"kind":"model","reference":"m","create":true,"data":{"provider":"p","model":"fixture"}})).unwrap();
+    for agent in ["first", "second"] {
+        manager
+            .call(
+                "resource_write",
+                json!({"kind":"agent","reference":agent,"create":true,"data":{"model":"m"}}),
+            )
+            .unwrap();
+        manager
+            .call(
+                "agent_bind",
+                json!({"principal":"a","agent":agent,"working_directory":home.path()}),
+            )
+            .unwrap();
+    }
+    let group = manager
+        .call(
+            "group_create",
+            json!({"title":"history","members":["a","b"]}),
+        )
+        .unwrap();
+    let direct = manager
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    let agent = service(home.path(), "a", false);
+    agent
+        .call(
+            "message_send",
+            json!({"conversation":group["id"],"body":"Keep this history","request_key":"old"}),
+        )
+        .unwrap();
+    manager
+        .call("agent_unbind", json!({"principal":"a"}))
+        .unwrap();
+    let delete = |reference: &str| {
+        let plan = manager
+            .call(
+                "resource_delete",
+                json!({"kind":"agent","reference":reference}),
+            )
+            .unwrap();
+        manager
+            .call(
+                "resource_delete",
+                json!({"kind":"agent","reference":reference,"confirm":plan["items"]}),
+            )
+            .unwrap();
+    };
+    delete("first"); // Rebinding changed the source; deleting the old resource must not retire a.
+    assert!(
+        manager
+            .call("principal_list", json!({}))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["id"] == "a")
+    );
+    delete("second");
+    let reopened = service(home.path(), "owner", true);
+    let available = reopened.call("principal_list", json!({})).unwrap();
+    assert!(!available.as_array().unwrap().iter().any(|p| p["id"] == "a"));
+    assert!(available.as_array().unwrap().iter().any(|p| p["id"] == "b")); // Never bound.
+    let directory = reopened
+        .call("principal_list", json!({"include_deleted":true}))
+        .unwrap();
+    let tombstone = directory
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["id"] == "a")
+        .unwrap();
+    assert_eq!(tombstone["deleted"], true);
+    assert_eq!(tombstone["name"], "a");
+    assert!(
+        reopened
+            .call("direct_create", json!({"principal":"a"}))
+            .is_err()
+    ); // Even existing pair.
+    assert!(
+        reopened
+            .call("group_create", json!({"title":"no","members":["a"]}))
+            .is_err()
+    );
+    assert!(
+        reopened
+            .call(
+                "member_add",
+                json!({"conversation":group["id"],"principal":"a"})
+            )
+            .is_err()
+    );
+    assert!(
+        agent
+            .call(
+                "message_send",
+                json!({"conversation":group["id"],"body":"stale sender","request_key":"stale"})
+            )
+            .is_err()
+    );
+    let history = reopened
+        .call("message_history", json!({"conversation":group["id"]}))
+        .unwrap();
+    assert!(history.to_string().contains("Keep this history"));
+    assert!(
+        reopened
+            .call("member_list", json!({"conversation":direct["id"]}))
+            .is_ok()
+    );
+    let sent = reopened
+        .call(
+            "message_send",
+            json!({"conversation":group["id"],"body":"still active","request_key":"new"}),
+        )
+        .unwrap();
+    let im = ImStore::open(home.path().join("im/im.db")).unwrap();
+    let message = agt_im::MessageId::new(sent["message"]["id"].as_str().unwrap());
+    assert!(
+        !im.delivery_status(&message)
+            .unwrap()
+            .iter()
+            .any(|d| d.principal_id.as_str() == "a")
     );
 }

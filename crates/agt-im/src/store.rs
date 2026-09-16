@@ -92,6 +92,7 @@ impl ImStore {
             metadata: input.metadata,
             created_at: now,
             updated_at: now,
+            deleted_at: None,
         })
     }
 
@@ -103,12 +104,46 @@ impl ImStore {
     pub fn list_principals(&self) -> Result<Vec<Principal>> {
         let connection = self.lock()?;
         let mut statement = connection.prepare(
-            "SELECT id, kind, display_name, metadata_json, created_at, updated_at
+            "SELECT id, kind, display_name, metadata_json, created_at, updated_at, deleted_at
              FROM principals WHERE deleted_at IS NULL ORDER BY id ASC",
         )?;
         let rows = statement.query_map([], principal_from_row)?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(ImError::from)
+    }
+
+    /// Historical directory entries retain names after identity deletion.
+    pub fn list_principals_including_deleted(&self) -> Result<Vec<Principal>> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT id, kind, display_name, metadata_json, created_at, updated_at, deleted_at
+             FROM principals ORDER BY id ASC",
+        )?;
+        statement
+            .query_map([], principal_from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(ImError::from)
+    }
+
+    /// Retire Agent identities without removing memberships or historical messages.
+    pub fn delete_agent_principals(&self, principals: &[PrincipalId]) -> Result<()> {
+        let mut connection = self.lock()?;
+        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        for id in principals {
+            tx.execute(
+                "UPDATE principals SET deleted_at=?2, updated_at=?2
+                WHERE id=?1 AND kind='agent' AND deleted_at IS NULL",
+                params![id.as_str(), now_millis()],
+            )?;
+            tx.execute(
+                "UPDATE message_deliveries SET state='skipped', error='Agent deleted'
+                WHERE principal_id=?1 AND state IN ('pending','processing')
+                AND EXISTS(SELECT 1 FROM principals WHERE id=?1 AND deleted_at IS NOT NULL)",
+                [id.as_str()],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn create_direct(&self, first: &PrincipalId, second: &PrincipalId) -> Result<Conversation> {
@@ -539,6 +574,7 @@ impl ImStore {
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let (_, state, _) = conversation_state_tx(&transaction, &conversation_id)?;
         ensure_active_state(&state)?;
+        ensure_principal_tx(&transaction, &request.sender_id)?;
         ensure_active_member_tx(&transaction, &conversation_id, &request.sender_id)?;
 
         let scope = format!("conversation:{conversation_id}:send");
@@ -675,7 +711,8 @@ impl ImStore {
         transaction.execute(
             "INSERT INTO message_deliveries (message_id,principal_id)
              SELECT ?1, principal_id FROM conversation_members
-             WHERE conversation_id = ?2 AND left_message_seq IS NULL AND principal_id != ?3",
+             WHERE conversation_id = ?2 AND left_message_seq IS NULL AND principal_id != ?3
+               AND principal_id IN (SELECT id FROM principals WHERE deleted_at IS NULL)",
             params![
                 message.id.as_str(),
                 conversation_id.as_str(),
@@ -1332,6 +1369,7 @@ fn principal_from_row(row: &Row<'_>) -> rusqlite::Result<Principal> {
         metadata: parse_json(metadata, "principal metadata").map_err(to_sql_error)?,
         created_at: row.get(4)?,
         updated_at: row.get(5)?,
+        deleted_at: row.get(6)?,
     })
 }
 
@@ -1394,7 +1432,7 @@ fn event_from_row(row: &Row<'_>) -> rusqlite::Result<ImEvent> {
 fn get_principal_from_connection(connection: &Connection, id: &PrincipalId) -> Result<Principal> {
     connection
         .query_row(
-            "SELECT id, kind, display_name, metadata_json, created_at, updated_at
+            "SELECT id, kind, display_name, metadata_json, created_at, updated_at, deleted_at
              FROM principals WHERE id = ?1 AND deleted_at IS NULL",
             params![id.as_str()],
             principal_from_row,

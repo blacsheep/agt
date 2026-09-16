@@ -249,6 +249,9 @@ test('real CLI: all six Web resources create, readable details, protected deleti
     assert.deepEqual((await resource('delete', kind, reference, { confirm: plan.items })).deleted, plan.items);
     await resource('read', kind, reference, {}, 400);
   }
+  const boot = await checked('/api/bootstrap');
+  assert.equal(boot.principals.find(p => p.id === 'reviewer').deleted, true);
+  await checked('/api/tool', { name: 'direct_create', args: { principal: 'reviewer' } }, 400);
   await resource('read', 'prompt', 'default/default');
 });
 

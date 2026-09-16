@@ -141,11 +141,21 @@ impl ToolService {
                 })?)?
             }
             "principal_list" => {
-                let _: Empty = serde_json::from_value(args)?;
-                json!(
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Directory {
+                    #[serde(default)]
+                    include_deleted: bool,
+                }
+                let d: Directory = serde_json::from_value(args)?;
+                let principals = if d.include_deleted {
+                    m.im.list_principals_including_deleted()?
+                } else {
                     m.im.list_principals()?
-                        .into_iter()
-                        .map(|p| json!({"id":p.id,"name":p.display_name,"kind":p.kind}))
+                };
+                json!(
+                    principals.into_iter()
+                        .map(|p| json!({"id":p.id,"name":p.display_name,"kind":p.kind,"deleted":p.deleted_at.is_some()}))
                         .collect::<Vec<_>>()
                 )
             }
@@ -316,8 +326,8 @@ fn schemas(role: Role, resource_management: bool) -> Vec<Value> {
         ),
         schema(
             "principal_list",
-            "List available participant identities.",
-            json!({}),
+            "List available participant identities. Set include_deleted to resolve historical names; deleted identities cannot join new conversations.",
+            json!({"include_deleted":{"type":"boolean"}}),
             &[],
         ),
         schema(
@@ -429,7 +439,7 @@ fn schemas(role: Role, resource_management: bool) -> Vec<Value> {
             schema("principal_create","Register a new identity (resource-managed Agents may create only kind=agent). Does not enable execution: create the Agent resource, register its identity, then agent_bind. Use principal_list before creating; never reuse another Agent identity accidentally.",json!({"id":string,"name":string,"kind":principal_kinds}),&["id","name","kind"]),
             schema("agent_bind","Configure an Agent identity to run an existing Agent definition. New bindings start enabled; updating an existing disabled binding preserves disabled state, so call agent_set_enabled(true) to resume. Defaults: workspace home directory, unlimited model steps, mentioned policy, MCP disabled. May trigger pending authorized messages. Check binding_list first: reusing a principal updates its existing binding. allow_mcp still requires discussion authorization.",json!({"principal":string,"agent":string,"working_directory":string,"policy":{"enum":["all","mentioned","manual"]},"max_steps":{"type":"integer","description":"Deprecated compatibility field; ignored. Model steps are unlimited."},"allow_mcp":{"type":"boolean","default":false}}),&["principal","agent"]),
             schema("agent_set_enabled","Enable or disable an existing binding across all conversations while preserving identity, history and running settings. Needs agent_bind first. Enabling may process pending authorized messages; disabling cancels further work, but cannot undo external requests. Disabling yourself stops your current hosted task.",json!({"principal":string,"enabled":{"type":"boolean"}}),&["principal","enabled"]),
-            schema("agent_unbind","Remove an Agent identity’s running settings and disable execution; identity and messages remain. For ordinary stopping use agent_set_enabled(false) instead. Unbind before deleting a bound Agent resource.",json!({"principal":string}),&["principal"]),
+            schema("agent_unbind","Remove an Agent identity’s running settings and disable execution; identity and messages remain. For ordinary stopping use agent_set_enabled(false) instead. Unbind before deleting a bound Agent resource. Deleting that resource then retires its last-bound identities; historical names/messages remain, but retired identities cannot be reused.",json!({"principal":string}),&["principal"]),
             schema("binding_list","List saved agent bindings, including their enabled state.",json!({}),&[]),
         ]);
     }

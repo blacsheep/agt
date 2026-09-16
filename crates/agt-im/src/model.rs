@@ -81,6 +81,8 @@ pub struct Principal {
     pub metadata: Value,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(default)]
+    pub deleted_at: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

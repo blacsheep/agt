@@ -41,3 +41,17 @@ CLI 对应 `agt im conversation hide|unhide`、`agt im group dissolve`；Web 用
 IM schema v4 新增个人成员行的 `last_viewed_at`，v2/v3 自动升级。Web 成功打开已解散历史后，
 调用 `agt im conversation visit <id> --actor <principal>` 记录本机持久的查看时间；
 普通消息读取和后台轮询不更新它。只读观察其他 Agent 不修改对方最近查看顺序。
+
+## Agent 资源删除与身份历史
+
+解除运行配置只删除 binding，不删除身份。bindings schema v3 保存最后绑定来源，
+改绑时更新来源，解绑后仍保留。删除 Agent 资源（含级联删除）会软删除该来源的
+Agent 身份；现有 runtime 身份的 agent_ref metadata 也参与匹配。
+已删除身份保留名称、成员关系和消息，不能重新绑定、新建私聊、入群或发送新消息；
+旧投递终止为 skipped，后续群消息不再向它投递。身份 ID 不复用。
+
+principal_list 默认只返回活动身份；include_deleted=true 返回历史名称及 deleted 标志。
+Web 历史消息和成员显示“（已删除）”，联系人搜索、新建对话和 @ 候选排除已删除身份。
+Web 新建对话仅展示仍绑定有效资源的 Agent，停用不等于删除，仍可选择。
+升级前已经解绑且无来源记录的旧身份无法可靠判断为删除，标为“未绑定”并排除新建
+对话候选；其历史仍可从 Agent 会话入口查看，不按名称猜测资源关系。

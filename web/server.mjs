@@ -99,7 +99,7 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
       if (req.headers['x-agt-token'] !== token) throw new ApiError(401, 'unauthorized', '请使用启动终端提供的完整链接打开控制台。');
       if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
         const [principals, bindings, ...resources] = await Promise.all([
-          tool('principal_list'), tool('binding_list'), ...kinds.map(kind => tool('resource_list', { kind })),
+          tool('principal_list', { include_deleted: true }), tool('binding_list'), ...kinds.map(kind => tool('resource_list', { kind })),
         ]);
         send(200, { home, principal, principals, bindings, resources: Object.fromEntries(kinds.map((k, i) => [k, resources[i]])) });
       } else if (req.method === 'GET' && url.pathname === '/api/activity') {
