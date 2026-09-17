@@ -13,13 +13,14 @@ mod actions;
 mod control;
 mod dispatch;
 pub(crate) mod queue;
+pub(crate) mod triage;
 pub(crate) mod wait;
 pub use control::TaskControl;
 pub(crate) use dispatch::*;
 
 pub(crate) fn migrate(c: &Connection) -> Result<()> {
     let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version == 10 {
+    if version == 11 {
         return Ok(());
     }
     if version < 5 {
@@ -51,7 +52,8 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
     if version < 8 {
         c.execute_batch("CREATE TABLE work_waits(run_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, dependency TEXT NOT NULL, deadline INTEGER NOT NULL, outcome TEXT); CREATE INDEX work_wait_dependency ON work_waits(dependency); PRAGMA user_version=8;")?;
     }
-    c.execute_batch("ALTER TABLE work_waits RENAME TO work_waits_old;
+    if version < 10 {
+        c.execute_batch("ALTER TABLE work_waits RENAME TO work_waits_old;
       CREATE TABLE work_waits(run_id TEXT NOT NULL,work_id TEXT NOT NULL,dependency TEXT NOT NULL,deadline INTEGER NOT NULL,outcome TEXT, PRIMARY KEY(run_id,dependency));
       INSERT INTO work_waits SELECT * FROM work_waits_old; DROP TABLE work_waits_old;
       CREATE INDEX work_wait_dependency ON work_waits(dependency);
@@ -59,6 +61,8 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
       CREATE TABLE work_dependencies(work_id TEXT NOT NULL,depends_on TEXT NOT NULL,PRIMARY KEY(work_id,depends_on));
       INSERT INTO work_dependencies SELECT * FROM work_dependencies_old; DROP TABLE work_dependencies_old;
       CREATE INDEX work_dependency_target ON work_dependencies(depends_on); PRAGMA user_version=10;")?;
+    }
+    c.execute_batch("CREATE TABLE work_fairness(principal TEXT PRIMARY KEY,notices INTEGER NOT NULL); PRAGMA user_version=11;")?;
     Ok(())
 }
 
@@ -163,6 +167,15 @@ pub struct WorkItem {
     pub cancellation_requested: Option<String>,
     #[serde(default)]
     pub resolution: Option<Resolution>,
+    #[serde(default)]
+    pub triage: Option<Triage>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Triage {
+    pub at: i64,
+    pub source: String,
+    pub reason: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -257,6 +270,7 @@ impl WorkLedger {
             resume_from: None,
             cancellation_requested: None,
             resolution: None,
+            triage: None,
             request,
             revision: 1,
             state: WorkState::Queued,

@@ -217,7 +217,7 @@ fn migration_preserves_scheduler_data_and_rejects_future_schema() {
     let store = ScheduleStore::open(home.path()).unwrap();
     store.start("existing", "chat", false, 0).unwrap();
     // Reconstruct the previous v4 shape, preserving its actual scheduler tables.
-    store.connection.execute_batch("DROP TABLE work_waits; DROP TABLE work_dependencies; DROP TABLE work_publications; DROP TABLE work_inbox; DROP TABLE work_outbox; DROP TABLE work_items; PRAGMA user_version=4;").unwrap();
+    store.connection.execute_batch("DROP TABLE work_fairness; DROP TABLE work_waits; DROP TABLE work_dependencies; DROP TABLE work_publications; DROP TABLE work_inbox; DROP TABLE work_outbox; DROP TABLE work_items; PRAGMA user_version=4;").unwrap();
     drop(store);
     let ledger = WorkLedger::open(home.path()).unwrap();
     assert_eq!(
@@ -230,7 +230,7 @@ fn migration_preserves_scheduler_data_and_rejects_future_schema() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        10
+        11
     );
     ledger
         .store
@@ -269,7 +269,7 @@ fn version_five_upgrade_preserves_existing_work() {
     let home = tempfile::tempdir().unwrap();
     let mut ledger = WorkLedger::open(home.path()).unwrap();
     let item = ledger.enqueue(request("existing-v5")).unwrap();
-    ledger.store.connection.execute_batch("DROP TABLE work_waits; DROP TABLE work_dependencies; ALTER TABLE work_publications DROP COLUMN error; DROP INDEX work_execution_state; PRAGMA user_version=5;").unwrap();
+    ledger.store.connection.execute_batch("DROP TABLE work_fairness; DROP TABLE work_waits; DROP TABLE work_dependencies; ALTER TABLE work_publications DROP COLUMN error; DROP INDEX work_execution_state; PRAGMA user_version=5;").unwrap();
     drop(ledger);
     let ledger = WorkLedger::open(home.path()).unwrap();
     assert_eq!(ledger.get(&item.id).unwrap(), item);
@@ -281,7 +281,7 @@ fn version_five_upgrade_preserves_existing_work() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        10
+        11
     );
 }
 
@@ -290,7 +290,7 @@ fn version_six_requests_without_priority_replay_after_upgrade() {
     let home = tempfile::tempdir().unwrap();
     let mut ledger = WorkLedger::open(home.path()).unwrap();
     let item = ledger.enqueue(request("old-v6")).unwrap();
-    ledger.store.connection.execute_batch("DROP TABLE work_waits; DROP TABLE work_dependencies; PRAGMA user_version=6; UPDATE work_items SET request_json=json_remove(request_json,'$.priority'), record=json_remove(record,'$.request.priority','$.priority','$.priority_reason','$.deferred');").unwrap();
+    ledger.store.connection.execute_batch("DROP TABLE work_fairness; DROP TABLE work_waits; DROP TABLE work_dependencies; PRAGMA user_version=6; UPDATE work_items SET request_json=json_remove(request_json,'$.priority'), record=json_remove(record,'$.request.priority','$.priority','$.priority_reason','$.deferred');").unwrap();
     drop(ledger);
     let mut ledger = WorkLedger::open(home.path()).unwrap();
     assert_eq!(ledger.enqueue(request("old-v6")).unwrap(), item);
@@ -303,7 +303,7 @@ fn version_seven_upgrade_preserves_barriers_and_replay() {
     let item = ledger.enqueue(request("v7-wait")).unwrap();
     let other = ledger.enqueue(request("v7-target")).unwrap();
     queue::set_dependency(&ledger.store.connection, &item.id, &other.id).unwrap();
-    ledger.store.connection.execute_batch("DROP TABLE work_waits; PRAGMA user_version=7; UPDATE work_items SET record=json_remove(record,'$.resume_from');").unwrap();
+    ledger.store.connection.execute_batch("DROP TABLE work_fairness; DROP TABLE work_waits; PRAGMA user_version=7; UPDATE work_items SET record=json_remove(record,'$.resume_from');").unwrap();
     drop(ledger);
     let mut ledger = WorkLedger::open(home.path()).unwrap();
     assert_eq!(ledger.enqueue(request("v7-wait")).unwrap(), item);

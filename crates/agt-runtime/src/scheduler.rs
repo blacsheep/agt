@@ -781,6 +781,15 @@ pub(crate) fn execute(
         task: task.clone(),
         token: token.clone(),
     };
+    if let Some(agent) = &agent
+        && crate::work::triage::run(home, &task, agent, &mut scheduled_model)?
+    {
+        task.state = "queued".into();
+        task.reason = Some("queue triage committed; awaiting priority admission".into());
+        task.due_at = now_ms();
+        store.update(&task, now_ms())?;
+        return Ok(());
+    }
     let context = if external {
         let cutoff = store.context_cutoff(&task.conversation)?;
         json!({"history":crate::conversation_context::visible_history(&messaging.im,&task,cutoff)?,"summary":"","reset_through_seq":cutoff})

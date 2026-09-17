@@ -989,7 +989,7 @@ fn reset_schema_upgrade_preserves_existing_discussions() {
     store.start("existing", "chat", false, now_ms()).unwrap();
     store
         .connection
-        .execute_batch("DROP TABLE context_resets; DROP TABLE work_waits; DROP TABLE work_dependencies; DROP TABLE work_publications; DROP TABLE work_inbox; DROP TABLE work_outbox; DROP TABLE work_items; PRAGMA user_version=3;")
+        .execute_batch("DROP TABLE context_resets; DROP TABLE work_fairness; DROP TABLE work_waits; DROP TABLE work_dependencies; DROP TABLE work_publications; DROP TABLE work_inbox; DROP TABLE work_outbox; DROP TABLE work_items; PRAGMA user_version=3;")
         .unwrap();
     drop(store);
     let migrated = ScheduleStore::open(home.path()).unwrap();
@@ -1000,7 +1000,7 @@ fn reset_schema_upgrade_preserves_existing_discussions() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        10
+        11
     );
 }
 
@@ -1513,3 +1513,6 @@ mod wait_tests;
 
 #[path = "scheduler_action_tests.rs"]
 mod action_tests;
+
+#[path = "scheduler_triage_tests.rs"]
+mod triage_tests;

@@ -3,7 +3,7 @@
 普通消息仍是聊天；需要可靠排队、完成/失败回报时使用显式任务。
 需要运行 `agt schedule run --watch`；Web 服务原有的 scheduler 子进程也会处理任务。
 本版没有新增任务页面，查询通过 CLI/MCP 或已挂载的内置工具完成。
-更新并构建后需要重启服务，让 CLI 与 scheduler 使用相同版本；旧二进制不能读取 v10 调度库和 v4 Run 库。
+更新并构建后需要重启服务，让 CLI 与 scheduler 使用相同版本；旧二进制不能读取 v11 调度库和 v4 Run 库。
 
 ## 给 lead 挂载能力
 
@@ -118,8 +118,10 @@ B 成功、失败或取消均可解除屏障，结果不确定则继续阻塞。
 需要重新决定等待时间或条件；不会直接忽略 B。人工停止和 /new 仍优先于等待条件。
 
 请求者和 lead 查询 A 会看到相同的 `deferred`（原因、时间、目标任务）及 `waiting_for_task`。
-这只控制 A 的排队，不会冻结请求者 Agent。本版没有自动入站分诊，也不在每次排队更新时
-触发额外模型回复；要让 lead 先判断队列，可以在与它的正常对话中明确要求它读取待办并排序。
+这只控制 A 的排队，不会冻结请求者 Agent。挂载任务协作的 Native lead 有至少两个同讨论的新待办时，会先自动分诊，最多读取 20 条摘要，
+只允许提交队列决定，不开放项目工具。每批只调用一次；失败保留原优先级/FIFO，记录 framework_fallback。
+Codex 不运行这类 Native 模型分诊，可通过 task_list/排序工具管理队列。队列更新不会逐条触发额外模型回复。
+同身份连续处理四次结果通知后，会优先给可运行工作一次 admission 机会。
 
 ## 查询与排错
 
@@ -137,6 +139,7 @@ CLI 和 stdio MCP 固定其启动身份，只允许查询本人发出或收到�
 | --- | --- |
 | state | queued / running / waiting_dependency / succeeded / failed / canceled / outcome_unknown |
 | blocked_reason | 停用、manual、授权变化、deferred_until、waiting_for_task、dependency_outcome_unknown 或 dependency_deadline_exceeded |
+| triage | 分诊时间、来源（model/framework_fallback）及公开理由 |
 | priority / priority_reason | 明确设置的优先级与原因（不含自动老化） |
 | deferred / waiting_for_task | 双方共享的排队等待条件 |
 | run_id / resume_from | 当前 Run / 恢复所依据的前段 Run；可使用 `agt run info <ID>` 检查 |

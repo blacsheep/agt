@@ -118,5 +118,41 @@ pub(crate) fn order(c: &Connection, tasks: &mut [ScheduledTask], now: i64) -> Re
     for (index, (_, _, _, task)) in slots.into_iter().zip(work) {
         tasks[index] = task;
     }
+    // After four notifications, admit available work before another notification for
+    // the same identity. Other principals keep their relative opportunities.
+    let principals = tasks
+        .iter()
+        .map(|t| t.principal.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    for principal in principals {
+        let streak: i64 = c
+            .query_row(
+                "SELECT notices FROM work_fairness WHERE principal=?1",
+                [&principal],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(0);
+        if streak < 4 {
+            continue;
+        }
+        let notification = tasks
+            .iter()
+            .position(|t| t.principal == principal && t.work_notification);
+        let work = tasks.iter().position(|t| {
+            t.principal == principal
+                && !t.work_notification
+                && t.work_id.as_ref().is_some_and(|id| {
+                    read(c, id)
+                        .and_then(|i| blocker(c, &i, now))
+                        .is_ok_and(|b| b.is_none())
+                })
+        });
+        if let (Some(n), Some(w)) = (notification, work)
+            && n < w
+        {
+            tasks.swap(n, w);
+        }
+    }
     Ok(())
 }

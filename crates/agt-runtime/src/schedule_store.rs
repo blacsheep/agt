@@ -125,7 +125,7 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3..=10 => {},
+            3..=11 => {},
             _ => bail!("unsupported scheduler database version"),
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
@@ -507,6 +507,9 @@ impl ScheduleStore {
         }
         task.state = if replying { "responding" } else { "evaluating" }.into();
         task.usage_epoch = round.2;
+        if task.work_id.is_some() {
+            tx.execute("INSERT INTO work_fairness VALUES(?1,?2) ON CONFLICT(principal) DO UPDATE SET notices=CASE WHEN ?2=0 THEN 0 ELSE MIN(4,notices+1) END",params![task.principal,if task.work_notification {1}else{0}])?;
+        }
         task.owner = Some(owner.into());
         task.version += 1;
         if replying {
