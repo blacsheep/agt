@@ -882,3 +882,99 @@ fn http_stream_preview_is_visible_before_completion_for_both_protocols() {
         assert_eq!(server.join().unwrap()[0]["stream"], true);
     }
 }
+
+#[test]
+fn cli_and_stdio_mcp_share_durable_task_queries_and_authorization() {
+    use agt_mcp::{DefaultMcpClientFactory, McpClientFactory, McpDocument, McpLimits};
+    let home = tempfile::tempdir().unwrap();
+    setup(home.path(), "http://127.0.0.1:1/v1");
+    success(run(
+        home.path(),
+        &["im", "principal", "create", "owner", "--name", "Owner"],
+    ));
+    let call = |name: &str, args: Value| {
+        success(run(
+            home.path(),
+            &[
+                "tool",
+                "call",
+                "--principal",
+                "owner",
+                "--manager",
+                name,
+                "--args",
+                &args.to_string(),
+            ],
+        ))
+    };
+    call(
+        "principal_create",
+        json!({"id":"a","name":"A","kind":"agent"}),
+    );
+    call("agent_bind", json!({"principal":"a","agent":"a"}));
+    let chat = call("direct_create", json!({"principal":"a"}))["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let sent = call(
+        "message_send",
+        json!({"conversation":chat,"body":"authorize task","request_key":"source"}),
+    );
+    let source = sent["message"]["id"].as_str().unwrap();
+    let args = json!({"assignee":"a","conversation":chat,"input":"explicit task","request_key":"task-1","source_message":source});
+    assert!(
+        !run(
+            home.path(),
+            &[
+                "tool",
+                "call",
+                "--principal",
+                "owner",
+                "--manager",
+                "task_request",
+                "--args",
+                &args.to_string()
+            ]
+        )
+        .status
+        .success()
+    );
+    success(run(
+        home.path(),
+        &["schedule", "start", &chat, "--message", source],
+    ));
+    let item = call("task_request", args.clone());
+    assert_eq!(item["state"], "queued");
+    assert_eq!(call("task_request", args)["id"], item["id"]);
+    let document = McpDocument::stdio(
+        "tasks",
+        env!("CARGO_BIN_EXE_agt"),
+        vec![
+            "--home".into(),
+            home.path().to_string_lossy().into_owned(),
+            "serve".into(),
+            "--principal".into(),
+            "a".into(),
+        ],
+        vec![],
+    )
+    .unwrap();
+    let mut client = DefaultMcpClientFactory
+        .connect(&document, home.path(), McpLimits::default())
+        .unwrap();
+    assert!(
+        client
+            .list_tools()
+            .unwrap()
+            .iter()
+            .any(|t| t.name == "task_get")
+    );
+    let read = client
+        .call_tool("task_get", json!({"task_id":item["id"]}))
+        .unwrap();
+    assert!(!read.is_error);
+    let result: Value = serde_json::from_str(read.content[0].text.as_deref().unwrap()).unwrap();
+    assert_eq!(result["id"], item["id"]);
+    assert_eq!(result["request"]["requester"], "owner");
+    assert!(client.call_tool("task_request",json!({"assignee":"owner","conversation":chat,"input":"untrusted","request_key":"denied"})).unwrap().is_error);
+}

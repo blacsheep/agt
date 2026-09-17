@@ -1000,7 +1000,7 @@ fn reset_schema_upgrade_preserves_existing_discussions() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        5
+        6
     );
 }
 
@@ -1501,3 +1501,6 @@ fn harness_compaction_cancellation_keeps_the_unknown_outcome_fenced() {
     assert!(store.get(&session.id).unwrap().busy);
     assert!(store.configure(&session.id, "fixture-model", None).is_err());
 }
+
+#[path = "scheduler_work_tests.rs"]
+mod work_tests;

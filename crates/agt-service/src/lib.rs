@@ -22,3 +22,9 @@ pub fn named_ref(raw: &str) -> Result<(CategoryName, String)> {
 }
 
 pub use agt_storage::database_path;
+
+/// Runtime-owned task operations; implementations hold their fixed actor and execution context.
+/// The service layer deliberately does not depend on the runtime crate.
+pub trait WorkControl {
+    fn call(&self, name: &str, args: serde_json::Value) -> anyhow::Result<serde_json::Value>;
+}

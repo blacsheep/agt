@@ -31,18 +31,17 @@ pub(crate) enum ToolCommand {
     },
 }
 fn service(home: &Path, identity: ServeArgs) -> Result<ToolService> {
-    ToolService::open(
-        home,
-        Actor {
-            principal: PrincipalId::new(identity.principal),
-            role: if identity.manager {
-                Role::Manager
-            } else {
-                Role::Participant
-            },
-            automated_depth: None,
+    let actor = Actor {
+        principal: PrincipalId::new(identity.principal),
+        role: if identity.manager {
+            Role::Manager
+        } else {
+            Role::Participant
         },
-    )
+        automated_depth: None,
+    };
+    Ok(ToolService::open(home, actor.clone())?
+        .with_work_control(Box::new(agt_runtime::work::TaskControl::local(home, actor))))
 }
 pub(crate) fn serve(args: ServeArgs, home: &Path) -> Result<()> {
     let service = service(home, args)?;

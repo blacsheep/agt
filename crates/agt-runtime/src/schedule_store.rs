@@ -48,6 +48,10 @@ pub struct ScheduledTask {
     pub reason: Option<String>,
     #[serde(default)]
     pub last_decision: Option<RecordedDecision>,
+    #[serde(default)]
+    pub work_id: Option<String>,
+    #[serde(default)]
+    pub work_notification: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -121,7 +125,7 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3..=5 => {},
+            3..=6 => {},
             _ => bail!("unsupported scheduler database version"),
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
@@ -342,7 +346,11 @@ impl ScheduleStore {
         {
             return Ok(());
         }
-        let existing: Option<String> = tx.query_row("SELECT record FROM tasks WHERE discussion=?1 AND principal=?2 AND conversation=?3 AND state IN ('queued','waiting','ready_to_reply') ORDER BY rowid LIMIT 1",params![task.discussion,task.principal,task.conversation],|r|r.get(0)).optional()?;
+        let existing: Option<String> = if task.work_id.is_some() {
+            None
+        } else {
+            tx.query_row("SELECT record FROM tasks WHERE discussion=?1 AND principal=?2 AND conversation=?3 AND json_extract(record,'$.work_id') IS NULL AND state IN ('queued','waiting','ready_to_reply') ORDER BY rowid LIMIT 1",params![task.discussion,task.principal,task.conversation],|r|r.get(0)).optional()?
+        };
         let delivery = task.deliveries[0];
         if let Some(record) = existing {
             let mut merged: ScheduledTask = serde_json::from_str(&record)?;
@@ -516,13 +524,16 @@ impl ScheduleStore {
             )?;
             }
         }
-        if matches!(task.state.as_str(), "queued" | "waiting" | "ready_to_reply") {
+        if task.work_id.is_none()
+            && matches!(task.state.as_str(), "queued" | "waiting" | "ready_to_reply")
+        {
             let pending = query_tasks(
                 &tx,
                 "SELECT record FROM tasks WHERE state IN ('queued','waiting')",
             )?;
             for mut other in pending {
-                if other.id == task.id
+                if other.work_id.is_some()
+                    || other.id == task.id
                     || other.discussion != task.discussion
                     || other.principal != task.principal
                     || other.conversation != task.conversation
@@ -723,6 +734,8 @@ mod tests {
             run_id: None,
             reason: None,
             last_decision: None,
+            work_id: None,
+            work_notification: false,
         }
     }
     fn fixture() -> (tempfile::TempDir, ScheduleStore) {

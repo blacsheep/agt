@@ -8,6 +8,7 @@ fn request(key: &str) -> WorkRequest {
         report_to: "report".into(),
         discussion: "discussion".into(),
         context_epoch: 0,
+        delivery_epoch: 0,
         input: "Implement the requested fix".into(),
         request_key: key.into(),
     }
@@ -226,12 +227,12 @@ fn migration_preserves_scheduler_data_and_rejects_future_schema() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        5
+        6
     );
     ledger
         .store
         .connection
-        .pragma_update(None, "user_version", 6)
+        .pragma_update(None, "user_version", 7)
         .unwrap();
     assert!(ScheduleStore::open(home.path()).is_err());
     assert_eq!(
@@ -240,7 +241,7 @@ fn migration_preserves_scheduler_data_and_rejects_future_schema() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        6
+        7
     );
 }
 
@@ -258,4 +259,25 @@ fn publication_key_fits_messaging_limit_for_long_destination() {
     let publication = ledger.pending_publications(1).unwrap().remove(0);
     assert!(publication.request_key.len() <= 256);
     assert_eq!(publication.destination, "x".repeat(256));
+}
+
+#[test]
+fn version_five_upgrade_preserves_existing_work() {
+    let home = tempfile::tempdir().unwrap();
+    let mut ledger = WorkLedger::open(home.path()).unwrap();
+    let item = ledger.enqueue(request("existing-v5")).unwrap();
+    ledger.store.connection.execute_batch("ALTER TABLE work_publications DROP COLUMN error; DROP INDEX work_execution_state; PRAGMA user_version=5;").unwrap();
+    drop(ledger);
+    let ledger = WorkLedger::open(home.path()).unwrap();
+    assert_eq!(ledger.get(&item.id).unwrap(), item);
+    assert_eq!(ledger.inbox("codex", 0, 10).unwrap().len(), 1);
+    assert_eq!(ledger.pending_execution().unwrap().len(), 1);
+    assert_eq!(
+        ledger
+            .store
+            .connection
+            .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
+            .unwrap(),
+        6
+    );
 }

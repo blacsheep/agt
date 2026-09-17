@@ -78,6 +78,20 @@ impl RunStore {
         Ok(Self { connection })
     }
 
+    pub(crate) fn by_request_key(&self, key: &str) -> Result<Option<RunRecord>> {
+        let value: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT record_json FROM runs WHERE request_key=?1",
+                [format!("root:{key}")],
+                |r| r.get(0),
+            )
+            .optional()?;
+        value
+            .map(|v| serde_json::from_str(&v).map_err(Into::into))
+            .transpose()
+    }
+
     pub fn get(&self, id: &str) -> Result<RunRecord> {
         let json: String = self
             .connection

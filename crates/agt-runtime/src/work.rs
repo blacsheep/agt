@@ -2,21 +2,26 @@
 //!
 //! This is a trusted persistence API, not an authorization or execution API.
 //! Callers must enforce actor visibility and scheduler admission before mutations.
-//! No CLI/model tools are exposed until that integration is complete.
+//! Model/CLI access is mediated by TaskControl and the scheduler.
 use anyhow::{Result, bail};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::ScheduleStore;
+mod control;
+mod dispatch;
+pub use control::TaskControl;
+pub(crate) use dispatch::*;
 
 pub(crate) fn migrate(c: &Connection) -> Result<()> {
     let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version == 5 {
+    if version == 6 {
         return Ok(());
     }
-    c.execute_batch(
-        "CREATE TABLE work_items(
+    if version < 5 {
+        c.execute_batch(
+            "CREATE TABLE work_items(
             id TEXT PRIMARY KEY, requester TEXT NOT NULL, request_key TEXT NOT NULL,
             request_json TEXT NOT NULL, revision INTEGER NOT NULL, record TEXT NOT NULL,
             UNIQUE(requester,request_key));
@@ -32,7 +37,9 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
             event_seq INTEGER PRIMARY KEY, request_key TEXT NOT NULL UNIQUE,
             destination TEXT NOT NULL, message_id TEXT);
         PRAGMA user_version=5;",
-    )?;
+        )?;
+    }
+    c.execute_batch("ALTER TABLE work_publications ADD COLUMN error TEXT; CREATE INDEX work_execution_state ON work_items(json_extract(record,'$.state')); PRAGMA user_version=6;")?;
     Ok(())
 }
 
@@ -47,6 +54,8 @@ pub struct WorkRequest {
     pub discussion: String,
     /// Context boundary captured by the caller; never grants authorization itself.
     pub context_epoch: i64,
+    #[serde(default)]
+    pub delivery_epoch: i64,
     pub input: String,
     pub request_key: String,
 }
@@ -55,6 +64,7 @@ pub struct WorkRequest {
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum WorkState {
     Queued,
+    Canceled { reason: String },
     Running { run_id: String },
     Succeeded { run_id: String, output: String },
     Failed { run_id: String, error: String },
@@ -112,6 +122,16 @@ impl WorkLedger {
     /// Persist a validated request and its assignee inbox item atomically.
     /// Replaying the same key returns the original task; different input conflicts.
     pub fn enqueue(&mut self, request: WorkRequest) -> Result<WorkItem> {
+        let tx = self
+            .store
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let item = Self::enqueue_on(&tx, request)?;
+        tx.commit()?;
+        Ok(item)
+    }
+
+    pub(crate) fn enqueue_on(tx: &Connection, request: WorkRequest) -> Result<WorkItem> {
         for value in [
             &request.requester,
             &request.assignee,
@@ -125,15 +145,12 @@ impl WorkLedger {
             }
         }
         if request.input.trim().is_empty()
-            || request.input.len() > 256 * 1024
+            || serde_json::to_string(&request.input)?.len() > 120 * 1024
             || request.context_epoch < 0
+            || request.delivery_epoch < 0
         {
             bail!("invalid work input or context epoch");
         }
-        let tx = self
-            .store
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let encoded = serde_json::to_string(&request)?;
         let previous: Option<(String, String)> = tx
             .query_row(
@@ -168,11 +185,30 @@ impl WorkLedger {
                 serde_json::to_string(&item)?
             ],
         )?;
-        append_event(&tx, &item, "requested", Some(&item.request.assignee), false)?;
-        tx.commit()?;
+        append_event(tx, &item, "requested", Some(&item.request.assignee), false)?;
         Ok(item)
     }
 
+    pub(crate) fn pending_execution(&self) -> Result<Vec<WorkItem>> {
+        let mut stmt = self
+            .store
+            .connection
+            .prepare("SELECT record FROM work_items WHERE json_extract(record,'$.state') IN ('queued','running') ORDER BY rowid")?;
+        stmt.query_map([], |r| r.get::<_, String>(0))?
+            .map(|r| Ok(serde_json::from_str(&r?)?))
+            .collect()
+    }
+    pub(crate) fn cancel_queued(&mut self, item: &WorkItem, reason: &str) -> Result<WorkItem> {
+        self.change(&item.id, item.revision, |item| {
+            if item.state != WorkState::Queued {
+                bail!("work is not queued");
+            }
+            item.state = WorkState::Canceled {
+                reason: reason.into(),
+            };
+            Ok(("canceled", true))
+        })
+    }
     pub fn get(&self, id: &str) -> Result<WorkItem> {
         read(&self.store.connection, id)
     }
@@ -250,6 +286,9 @@ impl WorkLedger {
             bail!("stale work revision");
         }
         let (kind, notify) = apply(&mut item)?;
+        if kind == "running" {
+            tx.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?2 AND kind='requested')",params![item.request.assignee,item.id])?;
+        }
         item.revision += 1;
         item.updated_at = crate::schedule_store::now_ms();
         tx.execute(
@@ -286,10 +325,17 @@ impl WorkLedger {
     }
 
     pub fn pending_publications(&self, limit: u32) -> Result<Vec<WorkPublication>> {
+        self.publications_after(0, limit)
+    }
+    pub(crate) fn publications_after(
+        &self,
+        after: i64,
+        limit: u32,
+    ) -> Result<Vec<WorkPublication>> {
         let mut statement = self.store.connection.prepare(
-            "SELECT p.event_seq,e.work_id,e.revision,p.request_key,p.destination FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE p.message_id IS NULL ORDER BY p.event_seq LIMIT ?1")?;
+            "SELECT p.event_seq,e.work_id,e.revision,p.request_key,p.destination FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE p.message_id IS NULL AND p.event_seq>?2 ORDER BY p.event_seq LIMIT ?1")?;
         Ok(statement
-            .query_map([limit.clamp(1, 500)], |r| {
+            .query_map(params![limit.clamp(1, 500), after], |r| {
                 Ok(WorkPublication {
                     event_seq: r.get(0)?,
                     work_id: r.get(1)?,
@@ -308,7 +354,7 @@ impl WorkLedger {
             bail!("publication requires a message id");
         }
         let updated = self.store.connection.execute(
-            "UPDATE work_publications SET message_id=?2 WHERE event_seq=?1 AND (message_id IS NULL OR message_id=?2)",params![seq,message_id])?;
+            "UPDATE work_publications SET message_id=?2,error=NULL WHERE event_seq=?1 AND (message_id IS NULL OR message_id=?2)",params![seq,message_id])?;
         if updated != 1 {
             bail!("publication missing or already confirmed with another message");
         }
@@ -359,7 +405,7 @@ fn append_event(
             crate::fingerprint(item.request.report_to.as_bytes())
         );
         c.execute(
-            "INSERT INTO work_publications VALUES(?1,?2,?3,NULL)",
+            "INSERT INTO work_publications(event_seq,request_key,destination,message_id) VALUES(?1,?2,?3,NULL)",
             params![seq, key, item.request.report_to],
         )?;
     }

@@ -52,6 +52,10 @@ impl<'a> Runtime<'a> {
     ) -> Result<RunRecord> {
         let request = request.normalize()?;
         let (mut record, claimed) = self.store.claim(&request, None)?;
+        if let Some(task) = &self.scheduled_task {
+            crate::work::bind_run(&self.home, task, &record)
+                .map_err(|_| RuntimeError::Configuration("cannot bind work Run"))?;
+        }
         if !claimed {
             return Ok(record);
         }
@@ -170,8 +174,26 @@ impl<'a> Runtime<'a> {
         };
         let communication = actor
             .map(|actor| {
-                agt_service::ToolService::open(&self.home, actor)
+                agt_service::ToolService::open(&self.home, actor.clone())
                     .map(|service| {
+                        let service = if agent
+                            .builtin_tools
+                            .contains(&agt_agent::BuiltinTool::TaskCollaboration)
+                        {
+                            if let Some(task) = &self.scheduled_task {
+                                service.with_work_control(Box::new(
+                                    crate::work::TaskControl::hosted(
+                                        &self.home,
+                                        actor,
+                                        task.clone(),
+                                    ),
+                                ))
+                            } else {
+                                service
+                            }
+                        } else {
+                            service
+                        };
                         service
                             .with_discussion(self.discussion.clone())
                             .with_resource_management(resource_management)
@@ -458,6 +480,16 @@ impl<'a> Runtime<'a> {
                         {
                             arguments["request_key"] = json!(key);
                         }
+                        if publishes_here
+                            && self
+                                .scheduled_task
+                                .as_ref()
+                                .is_some_and(|t| t.work_id.is_some())
+                        {
+                            return Err(RuntimeError::Tool(
+                                "Return your task result as the final answer; do not message_send to the current conversation",
+                            ));
+                        }
                         let operation = || {
                             Ok(communication.as_ref().expect("communication service").call(
                                 call.function
@@ -467,7 +499,13 @@ impl<'a> Runtime<'a> {
                                 arguments,
                             ))
                         };
-                        let result = if let Some(task) = &self.scheduled_task {
+                        let task_tool = matches!(
+                            call.function.name.as_str(),
+                            "framework_task_request" | "framework_task_get" | "framework_task_list"
+                        );
+                        let result = if let Some(task) = &self.scheduled_task
+                            && !task_tool
+                        {
                             crate::scheduler::guarded(&self.home, task, operation)?
                         } else {
                             operation()?

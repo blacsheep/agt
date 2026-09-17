@@ -13,10 +13,14 @@ pub const AGENT_FILE: &str = "agent.yaml";
 #[serde(rename_all = "snake_case")]
 pub enum BuiltinTool {
     ResourceManagement,
+    TaskCollaboration,
 }
 impl std::fmt::Display for BuiltinTool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("resource_management")
+        f.write_str(match self {
+            Self::ResourceManagement => "resource_management",
+            Self::TaskCollaboration => "task_collaboration",
+        })
     }
 }
 impl std::str::FromStr for BuiltinTool {
@@ -24,8 +28,9 @@ impl std::str::FromStr for BuiltinTool {
     fn from_str(value: &str) -> Result<Self> {
         match value {
             "resource_management" => Ok(Self::ResourceManagement),
+            "task_collaboration" => Ok(Self::TaskCollaboration),
             _ => Err(AgentError::InvalidConfig {
-                message: "内置工具组无效，可选值为 resource_management".into(),
+                message: "内置工具组无效，可选值为 resource_management、task_collaboration".into(),
             }),
         }
     }
@@ -250,6 +255,7 @@ mod tests {
             AgentConfig::try_from(serde_yaml::from_str::<AgentConfigYaml>(yaml).unwrap()).unwrap();
         assert!(config.builtin_tools.is_empty());
         config.builtin_tools.push(BuiltinTool::ResourceManagement);
+        config.builtin_tools.push(BuiltinTool::TaskCollaboration);
         let encoded = serde_yaml::to_string(&AgentConfigYaml::from(&config)).unwrap();
         assert_eq!(
             AgentConfig::try_from(serde_yaml::from_str::<AgentConfigYaml>(&encoded).unwrap())
