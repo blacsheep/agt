@@ -76,6 +76,7 @@ function currentEntry() { return state.conversations.find(x => x.conversation.id
 function isObserver() { return state.page === 'observer' || state.viewer !== state.boot?.principal; }
 function canParticipate() { return !isObserver() && state.conversation?.state === 'active' && currentEntry()?.left_message_seq == null; }
 function setupReadOnly() {
+  $('#chat-commands').disabled = !canParticipate();
   const observing = isObserver(), left = currentEntry()?.left_message_seq != null, dissolved = currentEntry()?.dissolved;
   $('#observe-banner').textContent = observing ? `只读查看 · ${nameOf(state.viewer)}${left ? ' · 已退出群聊，仅显示可见历史' : ''}` : dissolved ? '群聊已解散 · 历史记录只读' : left ? '你已退出群聊 · 仅可查看退出前有权访问的历史' : '会话已归档 · 历史记录只读';
   $('#observe-banner').classList.toggle('hidden', !state.conversation || !observing && !left && state.conversation.state === 'active');

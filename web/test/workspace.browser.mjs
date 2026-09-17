@@ -48,6 +48,21 @@ try {
     renderIdentities(); renderConversations(); renderChatHead(); renderMentions(); renderMessages(); renderActivity(); renderAgents(); renderResources(); setupReadOnly();
   }`);
   await seed();
+  await new Promise(resolve=>setTimeout(resolve,250)); // Let enabled-control color transitions settle.
+  const contrast = async (selector, property = 'color') => evaluate(`(() => {
+    const element=document.querySelector(${JSON.stringify(selector)});
+    const rgb=value=>value.match(/[0-9.]+/g).map(Number);
+    const luminance=color=>rgb(color).slice(0,3).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+    let parent=element, background;
+    while(parent){background=getComputedStyle(parent).backgroundColor;if(rgb(background).length===3||rgb(background)[3]===1)break;parent=parent.parentElement;}
+    const a=luminance(getComputedStyle(element)[${JSON.stringify(property)}]),b=luminance(background);
+    return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+  })()`);
+  for(const selector of ['#new-chat','#chat-commands','#group-info','#refresh','.nav.active','.nav:not(.active)','#connection','.binding-indicator.bound']){
+    assert.ok(await contrast(selector)>=4.5,selector+' text contrast');
+  }
+  assert.ok(await contrast('#group-info','borderTopColor')>=3,'secondary button boundary contrast');
+  assert.equal(await evaluate('document.querySelector("#chat-commands").closest(".chat-head") !== null'),true);
   await cdp('Emulation.setDeviceMetricsOverride', {width: 1440, height: 960, deviceScaleFactor: 1, mobile: false});
   const initialWidth = await evaluate('document.querySelector(".message-pane").getBoundingClientRect().width');
   await click('#toggle-conversations'); await click('#toggle-activity');
@@ -82,10 +97,17 @@ try {
   assert.equal(await evaluate('document.querySelector(".card-options").open'), true);
   assert.equal(await evaluate('document.querySelector(".card-options [data-bind]").getClientRects().length > 0'), true);
   await cdp('Emulation.setDeviceMetricsOverride', {width: 1440, height: 960, deviceScaleFactor: 1, mobile: false});
+  await evaluate('conversations = async () => {}; activity = async () => {};');
   if (process.env.AGT_DESIGN_CAPTURE) {
     await click('[data-page=chat]');
+    await seed();
     const shot = await cdp('Page.captureScreenshot', {format: 'png'});
     await writeFile('/tmp/agt-workspace-design.png', Buffer.from(shot.data, 'base64'));
+    await cdp('Emulation.setDeviceMetricsOverride', {width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await evaluate('document.body.classList.add("mobile-chat-open")');
+    const mobileShot = await cdp('Page.captureScreenshot', {format:'png'});
+    await writeFile('/tmp/agt-workspace-mobile.png',Buffer.from(mobileShot.data,'base64'));
+    await cdp('Emulation.setDeviceMetricsOverride', {width:1440,height:960,deviceScaleFactor:1,mobile:false});
     await click('[data-page=agents]');
     const agentsShot = await cdp('Page.captureScreenshot', {format: 'png'});
     await writeFile('/tmp/agt-agents-design.png', Buffer.from(agentsShot.data, 'base64'));
