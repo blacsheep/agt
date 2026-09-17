@@ -17,12 +17,20 @@ pub(super) fn ensure_queued(c: &Connection, item: &WorkItem, revision: i64) -> R
 }
 
 pub(super) fn set_dependency(c: &Connection, id: &str, target: &str) -> Result<()> {
+    c.execute("DELETE FROM work_dependencies WHERE work_id=?1", [id])?;
+    add_dependency(c, id, target)
+}
+
+pub(super) fn add_dependency(c: &Connection, id: &str, target: &str) -> Result<()> {
     let cycle: bool = c.query_row(
         "WITH RECURSIVE reachable(id) AS (SELECT ?1 UNION SELECT d.depends_on FROM work_dependencies d JOIN reachable r ON d.work_id=r.id) SELECT EXISTS(SELECT 1 FROM reachable WHERE id=?2)",params![target,id],|r|r.get(0))?;
     if cycle {
         bail!("task dependency cycle rejected");
     }
-    c.execute("INSERT INTO work_dependencies VALUES(?1,?2) ON CONFLICT(work_id) DO UPDATE SET depends_on=excluded.depends_on",params![id,target])?;
+    c.execute(
+        "INSERT OR IGNORE INTO work_dependencies VALUES(?1,?2)",
+        params![id, target],
+    )?;
     Ok(())
 }
 

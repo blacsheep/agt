@@ -277,7 +277,7 @@ fn end_and_context_reset_do_not_resume_suspended_work() {
     }
 }
 #[test]
-fn await_is_not_exposed_to_local_or_harness_hosts() {
+fn await_is_not_exposed_without_resumable_execution_host() {
     let (home, mut s, _, parent) = setup();
     let actor = Actor {
         principal: PrincipalId::new("a"),
@@ -535,7 +535,7 @@ fn checkpoint_crash_gap_recovers_but_uncheckpointed_intent_is_unknown() {
             runs.save(&record).unwrap();
             rusqlite::Connection::open(home.path().join("runtime/runs.db"))
                 .unwrap()
-                .execute("DELETE FROM native_checkpoints", [])
+                .execute("DELETE FROM run_checkpoints", [])
                 .unwrap();
         }
         drop(s);
@@ -554,6 +554,226 @@ fn checkpoint_crash_gap_recovers_but_uncheckpointed_intent_is_unknown() {
                 .list(20)
                 .unwrap()
                 .len(),
+            1
+        );
+    }
+}
+
+#[test]
+fn multiple_dependencies_wait_for_all_and_unknown_wakes_early() {
+    struct Many {
+        step: usize,
+        chat: String,
+        ids: Vec<String>,
+    }
+    impl ModelClient for Many {
+        fn complete(
+            &mut self,
+            _: &ResolvedAgent,
+            m: &[Value],
+            _: &[Value],
+        ) -> crate::Result<Value> {
+            self.step += 1;
+            if self.step == 1 {
+                let mut a = tool(
+                    "task_request",
+                    json!({"assignee":"b","conversation":self.chat,"input":"first","request_key":"first"}),
+                );
+                let mut b = tool(
+                    "task_request",
+                    json!({"assignee":"b","conversation":self.chat,"input":"second","request_key":"second"}),
+                );
+                a["tool_calls"][0]["id"] = json!("first");
+                b["tool_calls"][0]["id"] = json!("second");
+                return Ok(
+                    json!({"role":"assistant","tool_calls":[a["tool_calls"][0],b["tool_calls"][0]]}),
+                );
+            }
+            assert_eq!(self.step, 2);
+            self.ids = m
+                .iter()
+                .filter(|x| x["role"] == "tool")
+                .map(|x| {
+                    serde_json::from_str::<Value>(x["content"].as_str().unwrap()).unwrap()["id"]
+                        .as_str()
+                        .unwrap()
+                        .into()
+                })
+                .collect();
+            Ok(tool(
+                "task_await",
+                json!({"task_ids":self.ids,"deadline":now_ms()+60000}),
+            ))
+        }
+    }
+    for unknown in [false, true] {
+        let (home, mut s, chat, parent) = setup();
+        let task = claim_work(&mut s, &parent);
+        let mut model = Many {
+            step: 0,
+            chat,
+            ids: vec![],
+        };
+        execute(home.path(), task, &mut model, &CancellationToken::new()).unwrap();
+        crate::work::reconcile(home.path()).unwrap();
+        let mut ledger = WorkLedger::open(home.path()).unwrap();
+        let first = &model.ids[0];
+        let c = ledger.get(first).unwrap();
+        let c = ledger
+            .record_running(first, c.revision, "first-run")
+            .unwrap();
+        ledger
+            .record_outcome(
+                first,
+                c.revision,
+                "first-run",
+                if unknown {
+                    crate::work::WorkOutcome::Unknown("lost".into())
+                } else {
+                    crate::work::WorkOutcome::Succeeded("done".into())
+                },
+            )
+            .unwrap();
+        crate::work::reconcile(home.path()).unwrap();
+        if unknown {
+            let parent = ledger.get(&parent).unwrap();
+            assert_eq!(parent.state, WorkState::Queued);
+            assert_eq!(
+                crate::work::wait::outcome(home.path(), parent.resume_from.as_deref().unwrap())
+                    .unwrap()["kind"],
+                "attention"
+            );
+            assert!(
+                !crate::work::wait::consumes_notice(&s.store.connection, &model.ids[1]).unwrap()
+            );
+        } else {
+            assert!(matches!(
+                ledger.get(&parent).unwrap().state,
+                WorkState::WaitingDependency { .. }
+            ));
+            let second = &model.ids[1];
+            let c = ledger.get(second).unwrap();
+            let c = ledger
+                .record_running(second, c.revision, "second-run")
+                .unwrap();
+            ledger
+                .record_outcome(
+                    second,
+                    c.revision,
+                    "second-run",
+                    crate::work::WorkOutcome::Failed("failed".into()),
+                )
+                .unwrap();
+            crate::work::reconcile(home.path()).unwrap();
+            assert_eq!(ledger.get(&parent).unwrap().state, WorkState::Queued);
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn codex_wait_handoffs_only_completed_turn_and_resumes_same_thread() {
+    for failed in [false, true] {
+        let (home, user, chat) = external_fixture();
+        AgentStore::new(home.path())
+            .update_in(&agt_core::CategoryName::default(), "a", |c| {
+                c.builtin_tools
+                    .push(agt_agent::BuiltinTool::TaskCollaboration);
+                Ok(())
+            })
+            .unwrap();
+        let executable = home.path().join("codex-fixture");
+        let script=std::fs::read_to_string(&executable).unwrap()
+            .replace("if 'TOOL' in text:","if 'AGT task continuation.' not in text:")
+            .replace("'tool':'framework_resource_list','arguments':{'kind':'agent'}",&format!("'tool':'framework_task_request','arguments':{}",json!({"assignee":"b","conversation":chat,"input":"child work","request_key":"codex-child"})))
+            .replace(" elif id=='tool':finish(thread,turn,'tool completed')",&format!(" elif id=='tool':\n  child=json.loads(v['result']['contentItems'][0]['text'])['id']\n  emit({{'id':'await','method':'item/tool/call','params':{{'threadId':thread,'turnId':turn,'tool':'framework_task_await','arguments':{{'task_id':child,'deadline':int(time.time()*1000)+60000}}}}}})\n elif id=='await':\n  assert v['result']['success'], v\n  note('turn/completed',{{'threadId':thread,'turn':{{'id':turn,'status':'{}'}}}})",if failed {"failed"} else {"completed"}));
+        std::fs::write(&executable, script).unwrap();
+        let mut s = begin(home.path(), &user, &chat);
+        let source = s.store.tasks().unwrap()[0].message.clone();
+        let control = TaskControl::local(
+            home.path(),
+            Actor {
+                principal: PrincipalId::new("user"),
+                role: Role::Manager,
+                automated_depth: None,
+            },
+        );
+        let item=control.call("task_request",json!({"assignee":"a","conversation":chat,"input":"coordinate work","request_key":"codex-parent","source_message":source})).unwrap();
+        let parent = item["id"].as_str().unwrap();
+        crate::work::reconcile(home.path()).unwrap();
+        s.scan().unwrap();
+        let task = claim_work(&mut s, parent);
+        execute(
+            home.path(),
+            task,
+            &mut Answer(json!({})),
+            &CancellationToken::new(),
+        )
+        .unwrap();
+        crate::work::reconcile(home.path()).unwrap();
+        let ledger = WorkLedger::open(home.path()).unwrap();
+        if failed {
+            assert!(matches!(
+                ledger.get(parent).unwrap().state,
+                WorkState::Failed { .. }
+            ));
+            continue;
+        }
+        assert!(matches!(
+            ledger.get(parent).unwrap().state,
+            WorkState::WaitingDependency { .. }
+        ));
+        let child = ledger
+            .pending_execution()
+            .unwrap()
+            .into_iter()
+            .find(|i| i.request.assignee == "b")
+            .unwrap();
+        s.scan().unwrap();
+        let task = claim_work(&mut s, &child.id);
+        execute(
+            home.path(),
+            task,
+            &mut Answer(json!({"role":"assistant","content":"child complete"})),
+            &CancellationToken::new(),
+        )
+        .unwrap();
+        crate::work::reconcile(home.path()).unwrap();
+        crate::work::reconcile(home.path()).unwrap();
+        let task = claim_work(&mut s, parent);
+        execute(
+            home.path(),
+            task,
+            &mut Answer(json!({})),
+            &CancellationToken::new(),
+        )
+        .unwrap();
+        crate::work::reconcile(home.path()).unwrap();
+        assert!(
+            matches!(
+                ledger.get(parent).unwrap().state,
+                WorkState::Succeeded { .. }
+            ),
+            "{:?}",
+            ledger.get(parent).unwrap()
+        );
+        let log = std::fs::read_to_string(home.path().join("protocol.jsonl")).unwrap();
+        let frames: Vec<Value> = log
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert_eq!(
+            frames
+                .iter()
+                .filter(|f| f["method"] == "thread/start")
+                .count(),
+            1
+        );
+        assert_eq!(
+            frames
+                .iter()
+                .filter(|f| f["method"] == "thread/resume")
+                .count(),
             1
         );
     }

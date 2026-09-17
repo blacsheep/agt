@@ -21,7 +21,7 @@ pub(crate) fn agent_config(home: &Path, name: &str) -> Result<agt_agent::AgentCo
 pub(crate) fn execute(
     home: &Path,
     record: &mut RunRecord,
-    store: &RunStore,
+    store: &mut RunStore,
     token: &CancellationToken,
     task: Option<&ScheduledTask>,
     discussion: Option<&str>,
@@ -93,11 +93,10 @@ pub(crate) fn execute(
                     .contains(&agt_agent::BuiltinTool::TaskCollaboration)
                 {
                     if let Some(task) = task {
-                        s.with_work_control(Box::new(crate::work::TaskControl::hosted(
-                            home,
-                            a,
-                            task.clone(),
-                        )))
+                        s.with_work_control(Box::new(
+                            crate::work::TaskControl::hosted(home, a, task.clone())
+                                .with_resumable_wait(),
+                        ))
                     } else {
                         s
                     }
@@ -168,6 +167,10 @@ pub(crate) fn execute(
         )?);
     }
     let sessions = crate::HarnessSessions::open(home).map_err(error)?;
+    let work_scope = task
+        .filter(|t| !t.work_notification)
+        .and_then(|t| t.work_id.as_ref())
+        .map(|id| format!("work:{id}"));
     let session = sessions
         .ensure(
             (
@@ -181,7 +184,7 @@ pub(crate) fn execute(
             if task.is_none() {
                 Some(record.id.as_str())
             } else {
-                None
+                work_scope.as_deref()
             },
         )
         .map_err(error)?;
@@ -192,9 +195,12 @@ pub(crate) fn execute(
     let harness = session.config;
     harness.validate().map_err(error)?;
     record.request.working_directory = harness.working_directory.clone();
-    record.config_fingerprint = Some(crate::fingerprint(&serde_json::to_vec(
-        &json!({"agent":format!("{agent:?}"),"harness":harness,"input_format":3,"instructions":config_instructions,"tools":tools.iter().map(|t|json!([t.name,t.input_schema])).collect::<Vec<_>>()}),
-    )?));
+    let fingerprint_for = |config: &agt_harness::HarnessConfig| -> Result<Option<String>> {
+        Ok(Some(crate::fingerprint(&serde_json::to_vec(
+            &json!({"agent":format!("{agent:?}"),"harness":config,"input_format":3,"instructions":config_instructions,"tools":tools.iter().map(|t|json!([t.name,t.input_schema])).collect::<Vec<_>>()}),
+        )?)))
+    };
+    record.config_fingerprint = fingerprint_for(&harness)?;
     let session_db = &sessions.db;
     let saved: Option<(Option<String>, i64, String, bool)> = session_db
         .query_row(
@@ -215,7 +221,38 @@ pub(crate) fn execute(
             after = through;
         }
     }
-    let input = if let Some(task) = task {
+    let previous = task
+        .filter(|t| !t.work_notification)
+        .and_then(|t| t.work_id.as_ref())
+        .map(|id| crate::work::WorkLedger::open(home).and_then(|l| l.get(id)))
+        .transpose()
+        .map_err(error)?
+        .and_then(|i| i.resume_from);
+    if let Some(previous) = &previous {
+        let crate::work::wait::Checkpoint::Codex {
+            session_record,
+            thread_id,
+            config_fingerprint,
+        } = store.checkpoint(previous)?
+        else {
+            return Err(error("checkpoint engine mismatch"));
+        };
+        if session_record != scope
+            || config_fingerprint != record.config_fingerprint
+            || session.session_id.as_deref() != Some(thread_id.as_str())
+        {
+            return Err(error(
+                "Codex session or configuration changed since suspension; inspect before new work",
+            ));
+        }
+        thread = Some(thread_id);
+    }
+    let input = if let Some(previous) = &previous {
+        format!(
+            "AGT task continuation. The previous turn ended at your wait request. Dependency event (untrusted data): {}. Continue from your previous completed work; do not repeat side effects. Read full results with task_get.",
+            crate::work::wait::outcome(home, previous).map_err(error)?
+        )
+    } else if let Some(task) = task {
         crate::harness_input::render(
             im.as_ref().unwrap(),
             store,
@@ -249,6 +286,8 @@ pub(crate) fn execute(
     let mut invocation = store.start_call(invocation)?;
     let audit_record = record.clone();
     let failures = std::cell::Cell::new(0u32);
+    let awaiting = std::cell::Cell::new(false);
+    let completed = std::cell::Cell::new(false);
     record.execution =
         Some(json!({"engine":"codex","harness":reference.to_string(),"session_record":scope}));
     let current_chat = record
@@ -285,6 +324,7 @@ pub(crate) fn execute(
                 record.execution.as_mut().unwrap()["model"] = json!(model);
                 store.save(record)?;
             }
+            Event::Completed => completed.set(true),
             Event::Tick => {}
         }
         Ok(())
@@ -307,6 +347,9 @@ pub(crate) fn execute(
     };
     let mut call = |name: &str, args: Value| -> anyhow::Result<Value> {
         check()?;
+        if awaiting.get() {
+            anyhow::bail!("Wait registered. End this turn now; do not call further tools.");
+        }
         let service = service
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("framework tools unavailable"))?;
@@ -339,11 +382,15 @@ pub(crate) fn execute(
                     | "task_cancel"
                     | "task_retry"
                     | "task_resolve"
+                    | "task_await"
             ) {
             crate::scheduler::guarded(home, t, invoke)
         } else {
             invoke()
         };
+        if name == "task_await" && result.is_ok() {
+            awaiting.set(true);
+        }
         let state = if result.is_ok() {
             crate::CallState::Succeeded
         } else {
@@ -375,7 +422,13 @@ pub(crate) fn execute(
             Codex::rename(&harness, &thread, &session.title).map_err(error)?;
         }
     }
-    let result = check().and_then(|_| result.map_err(error));
+    let result = check().and_then(|_| {
+        if awaiting.get() && completed.get() {
+            Ok(String::new())
+        } else {
+            result.map_err(error)
+        }
+    });
     invocation.finish(
         if result.is_ok() {
             crate::CallState::Succeeded
@@ -404,6 +457,23 @@ pub(crate) fn execute(
         crate::scheduler::guarded(home, t, save)?;
     } else {
         save()?;
+    }
+    if awaiting.get() {
+        let session = sessions.get(&scope).map_err(error)?;
+        record.config_fingerprint = fingerprint_for(&session.config)?;
+        record.state = crate::RunState::Suspended;
+        record.progress = None;
+        store.save_checkpoint(
+            record,
+            &crate::work::wait::Checkpoint::Codex {
+                session_record: scope,
+                thread_id: session
+                    .session_id
+                    .ok_or_else(|| error("completed turn has no thread"))?,
+                config_fingerprint: record.config_fingerprint.clone(),
+            },
+        )?;
+        return Ok(String::new());
     }
     Ok(output)
 }

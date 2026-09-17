@@ -3,7 +3,7 @@
 普通消息仍是聊天；需要可靠排队、完成/失败回报时使用显式任务。
 需要运行 `agt schedule run --watch`；Web 服务原有的 scheduler 子进程也会处理任务。
 本版没有新增任务页面，查询通过 CLI/MCP 或已挂载的内置工具完成。
-更新并构建后需要重启服务，让 CLI 与 scheduler 使用相同版本；旧二进制不能读取 v9 调度库和 v3 Run 库。
+更新并构建后需要重启服务，让 CLI 与 scheduler 使用相同版本；旧二进制不能读取 v10 调度库和 v4 Run 库。
 
 ## 给 lead 挂载能力
 
@@ -44,18 +44,20 @@ Native 模型需开启 tool_call；Codex 使用框架注入的 dynamicTools。
 不调用 await 时，lead 当前 Run 正常结束后释放执行槽，结果到达会创建后续通知 Run。
 若 lead 正在执行一项显式任务，也可使用下面的检查点等待。
 
-## 运行中的 Native 任务等待依赖
+## 运行中的任务等待依赖
 
-仅内置执行器（model 类型 Agent）的显式 WorkItem 提供 `task_await`。
-普通聊天、结果通知 Run、CLI/外部 MCP 与 Codex 均不暴露此工具；Codex 作为子任务执行者不受影响。
+内置执行器与 Codex 的显式 WorkItem 均提供 `task_await`。
+普通聊天、结果通知 Run、CLI/外部 MCP 不暴露此工具。Codex 登记等待后必须结束当前 turn，
+只有协议确认正常完成才保存检查点；下一段使用同一 thread，任务 session 与普通聊天独立。
 例如：人类先委派显式任务给 lead，lead 用 task_request 委派给 Codex，然后单独调用：
 
 ```json
 {"task_id":"刚创建的子任务 ID","deadline":1893456000000}
 ```
 
-deadline 使用实际的未来 Unix 毫秒时间。首版一次等待一个本人发出、同一 discussion 内的请求；
-同一依赖只允许一个父任务等待。需要多个结果可逐个等待，已完成的结果不会漏掉。
+deadline 使用实际的未来 Unix 毫秒时间。可用 task_id 等待一个请求，或 task_ids 数组一次等待 1..20 个本人发出、同一 discussion 的请求。
+两者不能同时填写；默认 all_terminal，同一依赖只允许一个父任务等待。结果不确定会提前唤醒处理异常，
+剩余任务仍继续执行并可通知。已完成的结果不会漏掉。
 `task_await` 必须是该轮唯一工具调用，不能与文件写入等工具放进并行批次。
 
 Runtime 保存模型上下文、已完成工具结果和发送去重信息，然后结束本段 Run 为 `suspended`。

@@ -10,7 +10,7 @@ pub struct TaskControl {
     pub(super) home: PathBuf,
     pub(super) actor: Actor,
     pub(super) task: Option<crate::ScheduledTask>,
-    native_wait: bool,
+    resumable_wait: bool,
 }
 impl TaskControl {
     pub fn local(home: &Path, actor: Actor) -> Self {
@@ -18,7 +18,7 @@ impl TaskControl {
             home: home.into(),
             actor,
             task: None,
-            native_wait: false,
+            resumable_wait: false,
         }
     }
     pub(crate) fn hosted(home: &Path, actor: Actor, task: crate::ScheduledTask) -> Self {
@@ -26,11 +26,11 @@ impl TaskControl {
             home: home.into(),
             actor,
             task: Some(task),
-            native_wait: false,
+            resumable_wait: false,
         }
     }
-    pub(crate) fn with_native_wait(mut self) -> Self {
-        self.native_wait = true;
+    pub(crate) fn with_resumable_wait(mut self) -> Self {
+        self.resumable_wait = true;
         self
     }
     pub(super) fn human_manager(&self, im: &ImStore) -> Result<bool> {
@@ -280,7 +280,7 @@ impl TaskControl {
 }
 impl WorkControl for TaskControl {
     fn supports_await(&self) -> bool {
-        self.native_wait
+        self.resumable_wait
             && self
                 .task
                 .as_ref()

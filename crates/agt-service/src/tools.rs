@@ -37,7 +37,7 @@ impl ToolService {
             ]);
         }
         if self.work.as_ref().is_some_and(|w| w.supports_await()) {
-            result.push(schema("task_await", "Suspend this explicit native work task until a task you requested in this discussion resolves, or deadline (Unix milliseconds). Call alone, never in a parallel tool batch. Runtime saves completed tool results and releases the execution slot; continuation receives the outcome, including failure, unknown outcome or timeout. Other tasks for this Agent can run while waiting. Does not cancel the dependency on timeout.", json!({"task_id":{"type":"string"},"deadline":{"type":"integer"}}), &["task_id","deadline"]));
+            result.push(schema("task_await", "Suspend this explicit work task until all 1..20 requested dependencies resolve, or deadline (Unix milliseconds). Call alone, never in a parallel tool batch. Runtime saves completed tool results and releases the execution slot; continuation receives the outcome, including failure, unknown outcome or timeout. Other tasks for this Agent can run while waiting. Does not cancel the dependency on timeout.", json!({"task_id":{"type":"string"},"task_ids":{"type":"array","items":{"type":"string"}},"deadline":{"type":"integer"}}), &["deadline"]));
         }
         result
     }

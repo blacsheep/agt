@@ -19,6 +19,7 @@ pub struct Execution<'a> {
 }
 pub enum Event<'a> {
     Tick,
+    Completed,
     Text(&'a str),
     Tool,
     Thread(&'a str),
@@ -351,11 +352,14 @@ impl Codex {
                         continue;
                     }
                     match p["turn"]["status"].as_str() {
-                        Some("completed") if !final_text.trim().is_empty() => {
-                            return Ok(final_text);
-                        }
                         Some("completed") => {
-                            bail!("Codex completed without a final response; task was not replayed")
+                            event(Event::Completed)?;
+                            if final_text.trim().is_empty() {
+                                bail!(
+                                    "Codex completed without a final response; task was not replayed"
+                                );
+                            }
+                            return Ok(final_text);
                         }
                         Some("interrupted") => bail!("Codex turn interrupted"),
                         _ => bail!(

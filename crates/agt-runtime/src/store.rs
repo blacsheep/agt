@@ -67,7 +67,7 @@ impl RunStore {
                  PRAGMA user_version = 2;",
             )?,
             2 => {}
-            3 => {}
+            3 | 4 => {}
             _ => {
                 return Err(RuntimeError::Configuration(
                     "unsupported runtime database version",
@@ -76,6 +76,9 @@ impl RunStore {
         }
         if version < 3 {
             tx.execute_batch("CREATE TABLE native_checkpoints(run_id TEXT PRIMARY KEY, checkpoint TEXT NOT NULL); PRAGMA user_version=3;")?;
+        }
+        if version < 4 {
+            tx.execute_batch("UPDATE native_checkpoints SET checkpoint=json_set(checkpoint,'$.engine','native'); ALTER TABLE native_checkpoints RENAME TO run_checkpoints; PRAGMA user_version=4;")?;
         }
         tx.commit()?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
@@ -194,7 +197,7 @@ impl RunStore {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         tx.execute(
-            "INSERT INTO native_checkpoints VALUES(?1,?2)",
+            "INSERT INTO run_checkpoints VALUES(?1,?2)",
             params![record.id, serde_json::to_string(checkpoint)?],
         )?;
         tx.execute(
@@ -206,7 +209,7 @@ impl RunStore {
     }
     pub(crate) fn checkpoint(&self, id: &str) -> Result<crate::work::wait::Checkpoint> {
         let value: String = self.connection.query_row(
-            "SELECT checkpoint FROM native_checkpoints WHERE run_id=?1",
+            "SELECT checkpoint FROM run_checkpoints WHERE run_id=?1",
             [id],
             |r| r.get(0),
         )?;
@@ -281,7 +284,7 @@ mod checkpoint_migration_tests {
         let (record, _) = store.claim(&request, None).unwrap();
         store
             .connection
-            .execute_batch("DROP TABLE native_checkpoints; PRAGMA user_version=2;")
+            .execute_batch("DROP TABLE run_checkpoints; PRAGMA user_version=2;")
             .unwrap();
         drop(store);
         let mut store = RunStore::open(home.path()).unwrap();
@@ -291,12 +294,12 @@ mod checkpoint_migration_tests {
         assert_eq!(replayed.state, RunState::Running);
         let count: i64 = store
             .connection
-            .query_row("SELECT count(*) FROM native_checkpoints", [], |r| r.get(0))
+            .query_row("SELECT count(*) FROM run_checkpoints", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 0);
         store
             .connection
-            .pragma_update(None, "user_version", 4)
+            .pragma_update(None, "user_version", 99)
             .unwrap();
         drop(store);
         assert!(RunStore::open(home.path()).is_err());

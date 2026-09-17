@@ -19,7 +19,7 @@ pub(crate) use dispatch::*;
 
 pub(crate) fn migrate(c: &Connection) -> Result<()> {
     let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version == 9 {
+    if version == 10 {
         return Ok(());
     }
     if version < 5 {
@@ -51,7 +51,14 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
     if version < 8 {
         c.execute_batch("CREATE TABLE work_waits(run_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, dependency TEXT NOT NULL, deadline INTEGER NOT NULL, outcome TEXT); CREATE INDEX work_wait_dependency ON work_waits(dependency); PRAGMA user_version=8;")?;
     }
-    c.pragma_update(None, "user_version", 9)?;
+    c.execute_batch("ALTER TABLE work_waits RENAME TO work_waits_old;
+      CREATE TABLE work_waits(run_id TEXT NOT NULL,work_id TEXT NOT NULL,dependency TEXT NOT NULL,deadline INTEGER NOT NULL,outcome TEXT, PRIMARY KEY(run_id,dependency));
+      INSERT INTO work_waits SELECT * FROM work_waits_old; DROP TABLE work_waits_old;
+      CREATE INDEX work_wait_dependency ON work_waits(dependency);
+      ALTER TABLE work_dependencies RENAME TO work_dependencies_old;
+      CREATE TABLE work_dependencies(work_id TEXT NOT NULL,depends_on TEXT NOT NULL,PRIMARY KEY(work_id,depends_on));
+      INSERT INTO work_dependencies SELECT * FROM work_dependencies_old; DROP TABLE work_dependencies_old;
+      CREATE INDEX work_dependency_target ON work_dependencies(depends_on); PRAGMA user_version=10;")?;
     Ok(())
 }
 
@@ -109,6 +116,8 @@ pub enum WorkState {
     WaitingDependency {
         run_id: String,
         dependency: String,
+        #[serde(default)]
+        dependencies: Vec<String>,
         deadline: i64,
     },
     Succeeded {
