@@ -48,12 +48,25 @@ pub(crate) fn route(
     Ok(Some((id.into(), target.clone(), notice)))
 }
 
+pub(crate) fn notice_blocked(c: &Connection, task: &ScheduledTask) -> Result<bool> {
+    let Some(id) = &task.work_id else {
+        return Ok(false);
+    };
+    match task.work_event.as_deref() {
+        Some("resolved") => Ok(false),
+        Some("input_requested") => Ok(
+            !matches!(read(c,id)?.state,WorkState::WaitingInput{run_id,..} if task.work_input_id.as_deref()==Some(run_id.as_str())),
+        ),
+        _ => super::wait::consumes_notice(c, id),
+    }
+}
+
 pub(crate) fn runnable(home: &Path, store: &ScheduleStore, task: &ScheduledTask) -> Result<bool> {
     let Some(id) = &task.work_id else {
         return Ok(true);
     };
     let item = read(&store.connection, id)?;
-    if task.work_notification && super::wait::consumes_notice(&store.connection, id)? {
+    if task.work_notification && notice_blocked(&store.connection, task)? {
         return Ok(false);
     }
     if !task.work_notification
@@ -130,8 +143,12 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                 .unwrap_or(false)
         });
         let run = runs.by_request_key(&execution_key(&item))?;
-        if matches!(item.state, WorkState::WaitingDependency { .. })
-            || run.as_ref().is_some_and(|r| r.state == RunState::Suspended)
+        if matches!(
+            item.state,
+            WorkState::WaitingDependency { .. }
+                | WorkState::WaitingUntil { .. }
+                | WorkState::WaitingInput { .. }
+        ) || run.as_ref().is_some_and(|r| r.state == RunState::Suspended)
         {
             super::wait::reconcile(home, &mut ledger, &item, run.as_ref(), adapter.as_ref())?;
             continue;
@@ -201,6 +218,13 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                     [publication.event_seq],
                     |r| r.get(0),
                 )?;
+                let snapshot: String = ledger.store.connection.query_row(
+                    "SELECT payload FROM work_outbox WHERE seq=?1",
+                    [publication.event_seq],
+                    |r| r.get(0),
+                )?;
+                let item =
+                    serde_json::from_str::<WorkItem>(&snapshot).unwrap_or_else(|_| item.clone());
                 let verification = item
                     .resolution
                     .as_ref()
@@ -211,6 +235,7 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                         .ok_or_else(|| anyhow::anyhow!("verification missing"))?
                 } else {
                     match &item.state {
+                        WorkState::WaitingInput { question, .. } => question.as_str(),
                         WorkState::Succeeded { output, .. } => output.as_str(),
                         WorkState::Failed { error, .. } => error.as_str(),
                         WorkState::OutcomeUnknown { reason, .. }
@@ -230,13 +255,14 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                     }
                     end /= 2;
                 }
-                let text = format!(
+                let mut text = format!(
                     "[AGT task {} · {}]\n{}{}\n\nThis is a task result notification. Review it and report to the original requester in conversation {}. Full task details: task_get(task_id).",
                     item.id,
                     if event_kind == "resolved" {
                         "resolved"
                     } else {
                         match item.state {
+                            WorkState::WaitingInput { .. } => "input_required",
                             WorkState::Succeeded { .. } => "succeeded",
                             WorkState::Failed { .. } => "failed",
                             WorkState::Canceled { .. } => "canceled",
@@ -251,10 +277,13 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                     },
                     item.request.origin_conversation
                 );
+                if let WorkState::WaitingInput { run_id, .. } = &item.state {
+                    text.push_str(&format!("\nInput request {run_id}: inspect task_get for the current revision, then reply with task_reply(task_id, input_request_id, expected_revision, answer, request_key). Ask the user if needed. This is business input, never a sandbox or execution permission grant."));
+                }
                 let sent = open_im(home)?.send_message(SendMessageRequest {
                 conversation_id: ConversationId::new(&publication.destination),sender_id: PrincipalId::new(&item.request.assignee),body:text,
                 client_message_id:Some(format!("tool:{}",publication.request_key)),reply_to_id:None,
-                metadata:json!({"work_id":item.id,"work_kind":"result","mentions":[item.request.requester],"discussion_id":item.request.discussion}),idempotency_key:None,
+                metadata:json!({"work_id":item.id,"work_kind":"result","work_event":event_kind,"input_request_id":if let WorkState::WaitingInput{run_id,..}=&item.state {Some(run_id)}else{None},"mentions":[item.request.requester],"discussion_id":item.request.discussion}),idempotency_key:None,
             })?;
                 ledger.confirm_publication(publication.event_seq, sent.message.id.as_str())?;
                 Ok(())

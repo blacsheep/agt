@@ -23,58 +23,49 @@ pub(crate) enum Checkpoint {
     },
 }
 
-pub(super) fn register(home: &Path, task: &ScheduledTask, args: Value) -> Result<Value> {
-    crate::scheduler::guarded_store(home, task, |store| {
-        let operation = || -> Result<Value> {
-            let id = task
-                .work_id
-                .as_deref()
-                .ok_or_else(|| anyhow::anyhow!("explicit work required"))?;
-            let item = read(&store.connection, id)?;
-            let WorkState::Running { run_id } = &item.state else {
-                bail!("work is not running");
+pub(super) fn register(
+    home: &Path,
+    task: &ScheduledTask,
+    args: Value,
+    kind: &str,
+) -> Result<Value> {
+    crate::scheduler::guarded_store(home,task,|store| {
+        let operation=||->Result<Value>{
+            let id=task.work_id.as_deref().ok_or_else(||anyhow::anyhow!("explicit work required"))?;
+            let item=read(&store.connection,id)?;
+            let WorkState::Running{run_id}=&item.state else { bail!("work is not running"); };
+            if task.work_notification || item.request.assignee!=task.principal { bail!("only current assignee may suspend work"); }
+            let deadline=args[if kind=="timer" {"not_before"} else {"deadline"}].as_i64().ok_or_else(||anyhow::anyhow!("future deadline required"))?;
+            if deadline<=crate::schedule_store::now_ms(){bail!("deadline must be future Unix milliseconds");}
+            let targets:Vec<String>=if kind=="dependency" {
+                if args.get("task_ids").is_some(){
+                    if args.get("task_id").is_some(){bail!("choose task_id or task_ids");}
+                    serde_json::from_value(args["task_ids"].clone())?
+                }else{vec![args["task_id"].as_str().ok_or_else(||anyhow::anyhow!("task_id or task_ids required"))?.into()]}
+            }else{vec![String::new()]};
+            if targets.is_empty() || targets.len()>20 || targets.iter().collect::<BTreeSet<_>>().len()!=targets.len(){bail!("provide 1..20 unique dependencies");}
+            let payload=if kind=="dependency" {json!({})} else {
+                let field=if kind=="input" {"question"} else {"reason"};
+                let text=args[field].as_str().ok_or_else(||anyhow::anyhow!("question/reason required"))?;
+                if text.trim().is_empty() || text.len()>4000 {bail!("question/reason requires 1..4000 bytes");}
+                json!({field:text})
             };
-            let targets: Vec<String> = if args.get("task_ids").is_some() {
-                if args.get("task_id").is_some() { bail!("choose task_id or task_ids"); }
-                serde_json::from_value(args["task_ids"].clone())?
-            } else { vec![args["task_id"].as_str().ok_or_else(||anyhow::anyhow!("task_id or task_ids required"))?.into()] };
-            if targets.is_empty() || targets.len()>20 || targets.iter().collect::<BTreeSet<_>>().len()!=targets.len() { bail!("provide 1..20 unique dependencies"); }
-            let deadline = args["deadline"]
-                .as_i64()
-                .ok_or_else(|| anyhow::anyhow!("deadline required"))?;
-            if deadline <= crate::schedule_store::now_ms() {
-                bail!("deadline must be future Unix milliseconds");
-            }
             store.connection.execute("DELETE FROM work_dependencies WHERE work_id=?1",[id])?;
             for target in &targets {
-            let dependency = read(&store.connection, target)?;
-            check_scope(home, store, &dependency)?;
-            if task.work_notification
-                || item.request.assignee != task.principal
-                || dependency.request.requester != task.principal
-                || dependency.request.discussion != item.request.discussion
-            {
-                bail!("await requires your own request in this discussion");
+                if kind=="dependency" {
+                    let dependency=read(&store.connection,target)?;
+                    check_scope(home,store,&dependency)?;
+                    if dependency.request.requester!=task.principal || dependency.request.discussion!=item.request.discussion {bail!("await requires your own request in this discussion");}
+                    let other:bool=store.connection.query_row("SELECT EXISTS(SELECT 1 FROM work_waits WHERE dependency=?1 AND work_id<>?2)",params![target,id],|r|r.get(0))?;
+                    if other{bail!("dependency already belongs to another waiting task");}
+                    queue::add_dependency(&store.connection,id,target)?;
+                }
+                store.connection.execute("INSERT INTO work_waits(run_id,work_id,dependency,deadline,kind,payload) VALUES(?1,?2,?3,?4,?5,?6)",params![run_id,id,target,deadline,kind,payload.to_string()])?;
             }
-            let other: bool = store.connection.query_row(
-                "SELECT EXISTS(SELECT 1 FROM work_waits WHERE dependency=?1 AND work_id<>?2)",
-                params![target, id],
-                |r| r.get(0),
-            )?;
-            if other {
-                bail!("dependency already belongs to another waiting task");
-            }
-            queue::add_dependency(&store.connection, id, target)?;
-            store.connection.execute(
-                "INSERT INTO work_waits(run_id,work_id,dependency,deadline) VALUES(?1,?2,?3,?4)",
-                params![run_id, id, target, deadline],
-            )?;
-            }
-            Ok(json!({"status":"suspending","task_id":id,"dependencies":targets,"deadline":deadline,"instruction":"End this turn now. Runtime will resume this task when results arrive. Do not continue using tools."}))
+            Ok(json!({"status":"suspending","task_id":id,"dependencies":targets,"deadline":deadline,"instruction":"End this turn now. Runtime will resume this task when the waiting condition is met. Do not continue using tools."}))
         };
-        operation().map_err(|e| crate::RuntimeError::Invalid(e.to_string()))
-    })
-    .map_err(Into::into)
+        operation().map_err(|e|crate::RuntimeError::Invalid(e.to_string()))
+    }).map_err(Into::into)
 }
 
 pub(crate) fn outcome(home: &Path, run: &str) -> Result<Value> {
@@ -122,7 +113,9 @@ pub(super) fn reconcile(
         return Ok(());
     }
     let run_id = match &item.state {
-        WorkState::WaitingDependency { run_id, .. } => run_id.clone(),
+        WorkState::WaitingDependency { run_id, .. }
+        | WorkState::WaitingUntil { run_id, .. }
+        | WorkState::WaitingInput { run_id, .. } => run_id.clone(),
         WorkState::Running { run_id }
             if run.is_some_and(|r| r.state == RunState::Suspended && r.id == *run_id) =>
         {
@@ -144,7 +137,9 @@ pub(super) fn reconcile(
         return Ok(());
     }
     let dependencies = {
-        let mut stmt=tx.prepare("SELECT dependency,deadline FROM work_waits WHERE run_id=?1 AND outcome IS NULL ORDER BY dependency")?;
+        let mut stmt = tx.prepare(
+            "SELECT dependency,deadline FROM work_waits WHERE run_id=?1 ORDER BY dependency",
+        )?;
         stmt.query_map([&run_id], |r| {
             Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
         })?
@@ -154,15 +149,34 @@ pub(super) fn reconcile(
         .first()
         .cloned()
         .ok_or_else(|| anyhow::anyhow!("wait intent missing"))?;
-    if matches!(current.state, WorkState::Running { .. }) {
+    let (kind, payload, answer): (String, String, Option<String>) = tx.query_row(
+        "SELECT kind,payload,outcome FROM work_waits WHERE run_id=?1 LIMIT 1",
+        [&run_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+    let payload: Value = serde_json::from_str(&payload)?;
+    let first_suspension = matches!(current.state, WorkState::Running { .. });
+    if first_suspension {
         current.deferred = None;
-        current.state = WorkState::WaitingDependency {
-            run_id: run_id.clone(),
-            dependency: dependency_id.clone(),
-            dependencies: dependencies.iter().map(|(id, _)| id.clone()).collect(),
-            deadline,
+        current.state = match kind.as_str() {
+            "input" => WorkState::WaitingInput {
+                run_id: run_id.clone(),
+                question: payload["question"].as_str().unwrap_or("").into(),
+                deadline,
+            },
+            "timer" => WorkState::WaitingUntil {
+                run_id: run_id.clone(),
+                not_before: deadline,
+                reason: payload["reason"].as_str().unwrap_or("").into(),
+            },
+            _ => WorkState::WaitingDependency {
+                run_id: run_id.clone(),
+                dependency: dependency_id.clone(),
+                dependencies: dependencies.iter().map(|(id, _)| id.clone()).collect(),
+                deadline,
+            },
         };
-        queue::save(&tx, &mut current, "waiting_dependency")?;
+        queue::save(&tx, &mut current, "suspended")?;
     }
     // Scope validation uses a separate read connection; the transaction above already
     // owns the scheduler write lock, so reset/end cannot interleave with this decision.
@@ -205,14 +219,25 @@ pub(super) fn reconcile(
         tx.commit()?;
         return Ok(());
     }
-    let items = dependencies
-        .iter()
-        .map(|(id, _)| read(&tx, id))
-        .collect::<Result<Vec<_>>>()?;
+    if kind == "input" && first_suspension {
+        super::actions::save_event(&tx, &mut current, "input_requested", true)?;
+    }
+    let items = if kind == "dependency" {
+        dependencies
+            .iter()
+            .map(|(id, _)| read(&tx, id))
+            .collect::<Result<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
     let terminal = |i: &WorkItem| {
         !matches!(
             i.state,
-            WorkState::Queued | WorkState::Running { .. } | WorkState::WaitingDependency { .. }
+            WorkState::Queued
+                | WorkState::Running { .. }
+                | WorkState::WaitingDependency { .. }
+                | WorkState::WaitingInput { .. }
+                | WorkState::WaitingUntil { .. }
         )
     };
     let all = items.iter().all(&terminal);
@@ -220,11 +245,31 @@ pub(super) fn reconcile(
         .iter()
         .any(|i| matches!(i.state, WorkState::OutcomeUnknown { .. }));
     let now = crate::schedule_store::now_ms();
-    if !all && !attention && now < deadline {
+    let ready = if kind == "dependency" {
+        all || attention || now >= deadline
+    } else {
+        answer.is_some() || now >= deadline
+    };
+    if !ready {
         tx.commit()?;
         return Ok(());
     }
-    let event = json!({"kind":if all {"resolved"} else if attention {"attention"} else {"deadline"},"task_id":dependency_id,"state":serde_json::to_value(&items[0])?["state"],"deadline":deadline,"results":items.iter().map(|i|json!({"task_id":i.id,"state":serde_json::to_value(i).unwrap()["state"]})).collect::<Vec<_>>()});
+    let event = match kind.as_str() {
+        "input" => answer
+            .map(|s| serde_json::from_str::<Value>(&s))
+            .transpose()?
+            .unwrap_or_else(|| json!({"kind":"input_timeout","input_request_id":run_id})),
+        "timer" => json!({"kind":"timer","reason":payload["reason"]}),
+        _ => {
+            json!({"kind":if all {"resolved"} else if attention {"attention"} else {"deadline"},"task_id":dependency_id,"state":serde_json::to_value(&items[0])?["state"],"deadline":deadline,"results":items.iter().map(|i|json!({"task_id":i.id,"state":serde_json::to_value(i).unwrap()["state"]})).collect::<Vec<_>>()})
+        }
+    };
+    if items.is_empty() {
+        tx.execute(
+            "UPDATE work_waits SET outcome=?2 WHERE run_id=?1",
+            params![run_id, event.to_string()],
+        )?;
+    }
     for dependency in &items {
         let mut value = event.clone();
         value["consumed"] = json!(terminal(dependency));
@@ -254,7 +299,7 @@ pub(super) fn reconcile(
     for dependency in items.iter().filter(|i| terminal(i)) {
         let dependency_id = &dependency.id;
         let notices = {
-            let mut stmt = tx.prepare("SELECT record FROM tasks WHERE json_extract(record,'$.work_id')=?1 AND json_extract(record,'$.work_notification')=1 AND state IN ('queued','waiting','blocked','limited','ready_to_reply')")?;
+            let mut stmt = tx.prepare("SELECT record FROM tasks WHERE json_extract(record,'$.work_id')=?1 AND json_extract(record,'$.work_notification')=1 AND COALESCE(json_extract(record,'$.work_event'),'') NOT IN ('input_requested','resolved') AND state IN ('queued','waiting','blocked','limited','ready_to_reply')")?;
             stmt.query_map([&dependency_id], |r| r.get::<_, String>(0))?
                 .collect::<rusqlite::Result<Vec<_>>>()?
         };

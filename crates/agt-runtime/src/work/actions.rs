@@ -114,7 +114,12 @@ impl TaskControl {
     }
 }
 
-fn save_event(c: &Connection, item: &mut WorkItem, kind: &str, notify: bool) -> Result<()> {
+pub(super) fn save_event(
+    c: &Connection,
+    item: &mut WorkItem,
+    kind: &str,
+    notify: bool,
+) -> Result<()> {
     item.revision += 1;
     item.updated_at = crate::schedule_store::now_ms();
     c.execute(
@@ -139,7 +144,11 @@ fn cancel_tree(c: &Connection, id: &str, reason: &str) -> Result<()> {
         let mut item = read(c, &id)?;
         if !matches!(
             item.state,
-            WorkState::Queued | WorkState::Running { .. } | WorkState::WaitingDependency { .. }
+            WorkState::Queued
+                | WorkState::Running { .. }
+                | WorkState::WaitingDependency { .. }
+                | WorkState::WaitingUntil { .. }
+                | WorkState::WaitingInput { .. }
         ) {
             continue;
         }
@@ -179,4 +188,82 @@ fn cancel_tree(c: &Connection, id: &str, reason: &str) -> Result<()> {
         }
     }
     Ok(())
+}
+
+impl TaskControl {
+    pub(super) fn reply(&self, args: Value) -> Result<Value> {
+        let operation = |store: &ScheduleStore| -> Result<Value> {
+            let id = args["task_id"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("task_id required"))?;
+            let mut item = read(&store.connection, id)?;
+            let im = open_im(&self.home)?;
+            member(&im, &item.request.report_to, self.actor.principal.as_str())?;
+            let human = self.human_manager(&im)?;
+            if (!human && self.task.is_none())
+                || (!human && item.request.requester != self.actor.principal.as_str())
+            {
+                bail!("only hosted requester or human Manager may answer");
+            }
+            if let Some(task) = &self.task
+                && task.discussion != item.request.discussion
+            {
+                bail!("input belongs to another discussion");
+            }
+            check_scope(&self.home, store, &item)?;
+            let input = args["input_request_id"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("input_request_id required"))?;
+            let answer = args["answer"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("answer required"))?;
+            let key = args["request_key"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("request_key required"))?;
+            if answer.trim().is_empty()
+                || answer.len() > 16000
+                || key.trim().is_empty()
+                || key.len() > 256
+            {
+                bail!("invalid answer or request key");
+            }
+            let previous: Option<String> = store.connection.query_row(
+                "SELECT outcome FROM work_waits WHERE run_id=?1 AND work_id=?2 AND kind='input'",
+                params![input, id],
+                |r| r.get(0),
+            )?;
+            if let Some(previous) = previous {
+                let value: Value = serde_json::from_str(&previous)?;
+                if value["request_key"] == key && value["answer"] == answer {
+                    return view(&self.home, store, &item);
+                }
+                bail!("input was already answered or expired");
+            }
+            if args["expected_revision"].as_i64() != Some(item.revision)
+                || !matches!(&item.state,WorkState::WaitingInput{run_id,deadline,..} if run_id==input && *deadline>crate::schedule_store::now_ms())
+            {
+                bail!("input is not current; inspect task_get");
+            }
+            let outcome = serde_json::json!({"kind":"input_answer","input_request_id":input,"answer":answer,"request_key":key,"actor":self.actor.principal});
+            store.connection.execute(
+                "UPDATE work_waits SET outcome=?2 WHERE run_id=?1",
+                params![input, outcome.to_string()],
+            )?;
+            save_event(&store.connection, &mut item, "input_replied", false)?;
+            store.connection.execute("UPDATE work_inbox SET state='handled' WHERE event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?1 AND kind='input_requested')",[id])?;
+            view(&self.home, store, &item)
+        };
+        if let Some(task) = &self.task {
+            crate::scheduler::guarded_store(&self.home, task, |s| {
+                operation(s).map_err(|e| crate::RuntimeError::Invalid(e.to_string()))
+            })
+            .map_err(Into::into)
+        } else {
+            let store = ScheduleStore::open(&self.home)?;
+            store.connection.execute_batch("BEGIN IMMEDIATE")?;
+            let result = operation(&store)?;
+            store.connection.execute_batch("COMMIT")?;
+            Ok(result)
+        }
+    }
 }

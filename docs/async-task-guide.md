@@ -3,7 +3,7 @@
 普通消息仍是聊天；需要可靠排队、完成/失败回报时使用显式任务。
 需要运行 `agt schedule run --watch`；Web 服务原有的 scheduler 子进程也会处理任务。
 本版没有新增任务页面，查询通过 CLI/MCP 或已挂载的内置工具完成。
-更新并构建后需要重启服务，让 CLI 与 scheduler 使用相同版本；旧二进制不能读取 v11 调度库和 v4 Run 库。
+更新并构建后需要重启服务，让 CLI 与 scheduler 使用相同版本；旧二进制不能读取 v12 调度库和 v4 Run 库。
 
 ## 给 lead 挂载能力
 
@@ -137,7 +137,7 @@ CLI 和 stdio MCP 固定其启动身份，只允许查询本人发出或收到�
 
 | 字段 | 含义 |
 | --- | --- |
-| state | queued / running / waiting_dependency / succeeded / failed / canceled / outcome_unknown |
+| state | queued / running / waiting_dependency / waiting_until / waiting_input / succeeded / failed / canceled / outcome_unknown |
 | blocked_reason | 停用、manual、授权变化、deferred_until、waiting_for_task、dependency_outcome_unknown 或 dependency_deadline_exceeded |
 | triage | 分诊时间、来源（model/framework_fallback）及公开理由 |
 | priority / priority_reason | 明确设置的优先级与原因（不含自动老化） |
@@ -169,3 +169,21 @@ outcome_unknown 表示需要检查实际执行与副作用，本版不会自动�
 
 调用前使用 task_get 获取最新 revision。托管请求者/执行者可取消；重试只限请求者或人类 Manager。
 本地未托管 Agent 不可通过 CLI/MCP 绕过执行授权。人类 Manager 只能管理自己当前仍为成员的共享会话任务。
+
+## 主动让出与业务答复
+
+显式任务可单独调用 `task_yield({not_before, reason})`，保存检查点并释放执行槽，
+到达指定的未来 Unix 毫秒时间后恢复；其他任务可在等待期间执行。
+
+需要上游补充业务信息时，单独调用 `task_input({question, deadline})`。
+任务进入 waiting_input 后，问题定向通知请求者；即使请求者正在等待该子任务，也不会吞掉问题通知。
+请求者的托管运行或当前共享会话的人类 Manager 可使用：
+
+```json
+{"task_id":"任务 ID","input_request_id":"waiting_input 中的 run_id","expected_revision":4,"answer":"使用 feature/login 分支","request_key":"answer-login-1"}
+```
+
+以上为 `task_reply` 参数，调用前用 task_get 读取最新状态。相同 key 和答复可幂等重放；
+过期、冲突或旧版本答复被拒绝。答复到达后从原检查点恢复；超时则携带 input_timeout 恢复，
+由执行者决定后续处理，不伪造答复。这是业务信息交换，不授予工具、沙箱或系统权限。
+Native 与 Codex 均支持；Codex 仍须正常结束当前 turn 才能安全挂起。

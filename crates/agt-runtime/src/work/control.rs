@@ -290,11 +290,23 @@ impl WorkControl for TaskControl {
         if matches!(name, "task_cancel" | "task_retry" | "task_resolve") {
             return self.lifecycle(name, args);
         }
-        if name == "task_await" {
+        if name == "task_reply" {
+            return self.reply(args);
+        }
+        if matches!(name, "task_await" | "task_yield" | "task_input") {
             if !self.supports_await() {
                 bail!("this execution host cannot suspend work");
             }
-            return super::wait::register(&self.home, self.task.as_ref().unwrap(), args);
+            return super::wait::register(
+                &self.home,
+                self.task.as_ref().unwrap(),
+                args,
+                match name {
+                    "task_yield" => "timer",
+                    "task_input" => "input",
+                    _ => "dependency",
+                },
+            );
         }
         if matches!(name, "task_reprioritize" | "task_defer") {
             return self.edit_queue(name, args);

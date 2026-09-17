@@ -412,12 +412,17 @@ impl<'a> Runtime<'a> {
                     return Err(RuntimeError::Model("empty final response"));
                 }
                 if calls.len() > 1
-                    && calls
-                        .iter()
-                        .any(|c| c.function.name == "framework_task_await")
+                    && calls.iter().any(|c| {
+                        matches!(
+                            c.function.name.as_str(),
+                            "framework_task_await"
+                                | "framework_task_yield"
+                                | "framework_task_input"
+                        )
+                    })
                 {
                     return Err(RuntimeError::Tool(
-                        "task_await must be the only tool call in its batch",
+                        "task_await/task_yield/task_input must be the only tool call in its batch",
                     ));
                 }
                 // Validate the entire batch before allowing any side effect.
@@ -581,6 +586,9 @@ impl<'a> Runtime<'a> {
                                 | "framework_task_retry"
                                 | "framework_task_resolve"
                                 | "framework_task_await"
+                                | "framework_task_yield"
+                                | "framework_task_input"
+                                | "framework_task_reply"
                         );
                         let result = if let Some(task) = &self.scheduled_task
                             && !task_tool
@@ -634,8 +642,10 @@ impl<'a> Runtime<'a> {
                     (crate::context::input_budget(agent) / 16).max(128),
                 );
                 messages.push(json!({"role":"tool", "tool_call_id":call.id, "content":output}));
-                if call.function.name == "framework_task_await"
-                    && invocation.state == CallState::Succeeded
+                if matches!(
+                    call.function.name.as_str(),
+                    "framework_task_await" | "framework_task_yield" | "framework_task_input"
+                ) && invocation.state == CallState::Succeeded
                 {
                     check_canceled(cancellation)?;
                     self.check_schedule()?;

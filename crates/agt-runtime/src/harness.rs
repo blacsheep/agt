@@ -383,12 +383,15 @@ pub(crate) fn execute(
                     | "task_retry"
                     | "task_resolve"
                     | "task_await"
+                    | "task_yield"
+                    | "task_input"
+                    | "task_reply"
             ) {
             crate::scheduler::guarded(home, t, invoke)
         } else {
             invoke()
         };
-        if name == "task_await" && result.is_ok() {
+        if matches!(name, "task_await" | "task_yield" | "task_input") && result.is_ok() {
             awaiting.set(true);
         }
         let state = if result.is_ok() {

@@ -32,7 +32,7 @@ pub(super) fn claim_work(s: &mut Scheduler, id: &str) -> ScheduledTask {
         .unwrap()
         .unwrap()
 }
-fn tool(name: &str, args: Value) -> Value {
+pub(super) fn tool(name: &str, args: Value) -> Value {
     json!({"role":"assistant","tool_calls":[{"id":name,"type":"function","function":{"name":format!("framework_{name}"),"arguments":args.to_string()}}]})
 }
 struct Suspend {

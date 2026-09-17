@@ -354,6 +354,11 @@ impl Scheduler {
         let im = im(&self.home)?;
         self.store.expire(now_ms())?;
         for task in self.store.unreconciled()? {
+            if task.work_event.as_deref() == Some("input_requested")
+                && crate::work::notice_blocked(&self.store.connection, &task)?
+            {
+                self.store.cancel_pending(&task.id)?;
+            }
             let round = self.store.discussion(&task.discussion)?;
             let active = im
                 .get_conversation(&ConversationId::new(&task.conversation))
@@ -508,6 +513,10 @@ impl Scheduler {
                         continue;
                     }
                     if let Some((id, _, true)) = &route
+                        && !matches!(
+                            message.metadata["work_event"].as_str(),
+                            Some("input_requested" | "resolved")
+                        )
                         && crate::work::wait::consumed_notice(&self.store.connection, id)?
                     {
                         im.update_delivery(
@@ -574,6 +583,10 @@ impl Scheduler {
                         last_decision: None,
                         work_id: route.as_ref().map(|(id, _, _)| id.clone()),
                         work_notification: route.as_ref().is_some_and(|(_, _, notice)| *notice),
+                        work_event: message.metadata["work_event"].as_str().map(str::to_owned),
+                        work_input_id: message.metadata["input_request_id"]
+                            .as_str()
+                            .map(str::to_owned),
                     })?;
                 }
             }

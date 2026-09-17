@@ -52,6 +52,10 @@ pub struct ScheduledTask {
     pub work_id: Option<String>,
     #[serde(default)]
     pub work_notification: bool,
+    #[serde(default)]
+    pub work_event: Option<String>,
+    #[serde(default)]
+    pub work_input_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -125,7 +129,7 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3..=11 => {},
+            3..=12 => {},
             _ => bail!("unsupported scheduler database version"),
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
@@ -456,9 +460,9 @@ impl ScheduleStore {
         {
             return Ok(None);
         }
-        if let Some(id) = &task.work_id
+        if task.work_id.is_some()
             && task.work_notification
-            && crate::work::wait::consumes_notice(&tx, id)?
+            && crate::work::notice_blocked(&tx, &task)?
         {
             return Ok(None);
         }
@@ -753,6 +757,8 @@ mod tests {
             last_decision: None,
             work_id: None,
             work_notification: false,
+            work_event: None,
+            work_input_id: None,
         }
     }
     fn fixture() -> (tempfile::TempDir, ScheduleStore) {

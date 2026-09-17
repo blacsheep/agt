@@ -20,7 +20,7 @@ pub(crate) use dispatch::*;
 
 pub(crate) fn migrate(c: &Connection) -> Result<()> {
     let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version == 11 {
+    if version == 12 {
         return Ok(());
     }
     if version < 5 {
@@ -62,7 +62,10 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
       INSERT INTO work_dependencies SELECT * FROM work_dependencies_old; DROP TABLE work_dependencies_old;
       CREATE INDEX work_dependency_target ON work_dependencies(depends_on); PRAGMA user_version=10;")?;
     }
-    c.execute_batch("CREATE TABLE work_fairness(principal TEXT PRIMARY KEY,notices INTEGER NOT NULL); PRAGMA user_version=11;")?;
+    if version < 11 {
+        c.execute_batch("CREATE TABLE work_fairness(principal TEXT PRIMARY KEY,notices INTEGER NOT NULL); PRAGMA user_version=11;")?;
+    }
+    c.execute_batch("ALTER TABLE work_waits ADD COLUMN kind TEXT NOT NULL DEFAULT 'dependency'; ALTER TABLE work_waits ADD COLUMN payload TEXT NOT NULL DEFAULT '{}'; ALTER TABLE work_outbox ADD COLUMN payload TEXT NOT NULL DEFAULT '{}'; PRAGMA user_version=12;")?;
     Ok(())
 }
 
@@ -122,6 +125,16 @@ pub enum WorkState {
         dependency: String,
         #[serde(default)]
         dependencies: Vec<String>,
+        deadline: i64,
+    },
+    WaitingUntil {
+        run_id: String,
+        not_before: i64,
+        reason: String,
+    },
+    WaitingInput {
+        run_id: String,
+        question: String,
         deadline: i64,
     },
     Succeeded {
@@ -296,7 +309,7 @@ impl WorkLedger {
         let mut stmt = self
             .store
             .connection
-            .prepare("SELECT record FROM work_items WHERE json_extract(record,'$.state') IN ('queued','running','waiting_dependency') ORDER BY rowid")?;
+            .prepare("SELECT record FROM work_items WHERE json_extract(record,'$.state') IN ('queued','running','waiting_dependency','waiting_until','waiting_input') ORDER BY rowid")?;
         stmt.query_map([], |r| r.get::<_, String>(0))?
             .map(|r| Ok(serde_json::from_str(&r?)?))
             .collect()
@@ -305,7 +318,10 @@ impl WorkLedger {
         self.change(&item.id, item.revision, |item| {
             if !matches!(
                 item.state,
-                WorkState::Queued | WorkState::WaitingDependency { .. }
+                WorkState::Queued
+                    | WorkState::WaitingDependency { .. }
+                    | WorkState::WaitingUntil { .. }
+                    | WorkState::WaitingInput { .. }
             ) {
                 bail!("work is not queued or waiting");
             }
@@ -496,8 +512,14 @@ fn append_event(
     publish: bool,
 ) -> Result<()> {
     c.execute(
-        "INSERT INTO work_outbox(work_id,revision,kind,created_at) VALUES(?1,?2,?3,?4)",
-        params![item.id, item.revision, kind, item.updated_at],
+        "INSERT INTO work_outbox(work_id,revision,kind,created_at,payload) VALUES(?1,?2,?3,?4,?5)",
+        params![
+            item.id,
+            item.revision,
+            kind,
+            item.updated_at,
+            serde_json::to_string(item)?
+        ],
     )?;
     let seq = c.last_insert_rowid();
     if let Some(recipient) = recipient {
@@ -513,7 +535,10 @@ fn append_event(
             item.id,
             crate::fingerprint(item.request.report_to.as_bytes())
         );
-        if kind == "resolved" {
+        if !matches!(
+            kind,
+            "succeeded" | "failed" | "canceled" | "outcome_unknown"
+        ) {
             key.push_str(&format!(":resolution:{}", item.revision));
         }
         c.execute(

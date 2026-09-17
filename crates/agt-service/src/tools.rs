@@ -32,11 +32,14 @@ impl ToolService {
                 schema("task_cancel", "Cancel a task and its exclusively owned descendants. Queued/suspended work stops immediately; running work receives a cancellation request, and may become outcome_unknown if external effects cannot be confirmed. Terminal results are preserved. Requires current expected_revision and reason; hosted requester/assignee or human Manager in the shared conversation only.", json!({"task_id":string,"expected_revision":{"type":"integer"},"reason":string}), &["task_id","expected_revision","reason"]),
                 schema("task_resolve", "Human Manager only: record evidence after inspecting an outcome_unknown execution. outcome is succeeded or failed. This does not execute tools or overwrite the original unknown record; it publishes the verification to the requester. Requires expected_revision and evidence. Never guess an external outcome.", json!({"task_id":string,"expected_revision":{"type":"integer"},"outcome":{"enum":["succeeded","failed"]},"evidence":string}), &["task_id","expected_revision","outcome","evidence"]),
                 schema("task_retry", "Explicitly create a new task from failed/canceled work or an unknown result verified as failed. Preserves the old task and links retry_of. Requires expected_revision, new request_key and reason. Requester or human Manager only; discussion and membership authorization must remain valid. Never automatically retry unknown external side effects.", json!({"task_id":string,"expected_revision":{"type":"integer"},"request_key":string,"reason":string}), &["task_id","expected_revision","request_key","reason"]),
+                schema("task_reply", "Answer a pending business input request. Requester or human Manager in the shared conversation only. input_request_id is the waiting Run ID from task_get; include current expected_revision and a unique request_key. Replays with the same answer are idempotent. Does not grant sandbox/MCP/approval permissions.",json!({"task_id":string,"input_request_id":string,"expected_revision":{"type":"integer"},"answer":string,"request_key":string}),&["task_id","input_request_id","expected_revision","answer","request_key"]),
                 schema("task_get", "Read a task you requested or were assigned, including execution and publication state. Task ID alone grants no access.", json!({"task_id":string}), &["task_id"]),
                 schema("task_list", "List your requested and assigned tasks, newest first. queued_only=true selects pending work to inspect before reprioritizing/defer. Querying does not acknowledge notifications.", json!({"limit":{"type":"integer"},"queued_only":{"type":"boolean"}}), &[]),
             ]);
         }
         if self.work.as_ref().is_some_and(|w| w.supports_await()) {
+            result.push(schema("task_yield","Save this task and release the execution slot until future not_before (Unix milliseconds), allowing other queued work to run. Call alone and end the turn. The original discussion budget and permissions still apply.",json!({"not_before":{"type":"integer"},"reason":{"type":"string"}}),&["not_before","reason"]));
+            result.push(schema("task_input","Save this task and ask its requester for business input, resuming on task_reply or deadline (future Unix milliseconds). Call alone and end the turn. This is not an execution approval or sandbox permission request.",json!({"question":{"type":"string"},"deadline":{"type":"integer"}}),&["question","deadline"]));
             result.push(schema("task_await", "Suspend this explicit work task until all 1..20 requested dependencies resolve, or deadline (Unix milliseconds). Call alone, never in a parallel tool batch. Runtime saves completed tool results and releases the execution slot; continuation receives the outcome, including failure, unknown outcome or timeout. Other tasks for this Agent can run while waiting. Does not cancel the dependency on timeout.", json!({"task_id":{"type":"string"},"task_ids":{"type":"array","items":{"type":"string"}},"deadline":{"type":"integer"}}), &["deadline"]));
         }
         result
@@ -84,6 +87,9 @@ impl ToolService {
                 | "task_defer"
                 | "task_reprioritize"
                 | "task_await"
+                | "task_yield"
+                | "task_input"
+                | "task_reply"
                 | "task_cancel"
                 | "task_resolve"
                 | "task_retry"

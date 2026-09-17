@@ -1000,7 +1000,7 @@ fn reset_schema_upgrade_preserves_existing_discussions() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        11
+        12
     );
 }
 
@@ -1516,3 +1516,6 @@ mod action_tests;
 
 #[path = "scheduler_triage_tests.rs"]
 mod triage_tests;
+
+#[path = "scheduler_input_tests.rs"]
+mod input_tests;
