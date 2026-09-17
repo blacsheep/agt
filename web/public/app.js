@@ -9,7 +9,8 @@ const state = { boot: null, viewer: null, conversation: null, conversations: [],
 const directNames = new Map();
 let debugMode = localStorage.getItem('agt-debug-mode') === 'true';
 let choosingIdentity = false, selectedObserver = null;
-let messageRequest = 0, conversationRequest = 0, modalGeneration = 0;
+let messageRequest = 0, conversationRequest = 0, modalGeneration = 0, commandGeneration = 0;
+let commandTarget = null;
 
 const layoutPreferences = {
   nav: localStorage.getItem('agt-layout-nav') !== 'false',
@@ -254,8 +255,9 @@ $('#conversation-menu').onkeydown = event => {
 document.addEventListener('pointerdown', event => { if (!event.target.closest('#conversation-menu')) closeConversationMenu(); });
 window.addEventListener('resize', () => closeConversationMenu());
 document.addEventListener('scroll', event => { if (!event.target.closest?.('#conversation-menu')) closeConversationMenu(); }, true);
-function clearConversation() { document.body.classList.remove('mobile-chat-open'); $('#latest-message').classList.add('hidden'); closeConversationMenu(); $('#group-drawer').close(); state.conversation = null; state.members = []; state.messages = []; state.cursor = null; state.generation++; renderLiveReplies(); renderMessages(); renderChatHead(); setupReadOnly(); }
+function clearConversation() { closeCommandPanel(); document.body.classList.remove('mobile-chat-open'); $('#latest-message').classList.add('hidden'); closeConversationMenu(); $('#group-drawer').close(); state.conversation = null; state.members = []; state.messages = []; state.cursor = null; state.generation++; renderLiveReplies(); renderMessages(); renderChatHead(); setupReadOnly(); }
 async function selectConversation(id) {
+  closeCommandPanel();
   if (state.sending) { notify('消息正在发送，请稍后切换会话。'); return; }
   const viewer = state.viewer, page = state.page, generation = ++state.generation;
   const entry = state.conversations.find(x => x.conversation.id === id);
@@ -986,6 +988,7 @@ function showResource() {
   });
 }
 function switchPage(page) {
+  closeCommandPanel();
   if (state.sending) { notify('消息发送中，请稍后切换页面。'); return; }
   closeConversationMenu();
   document.body.classList.toggle('workspace-page', ['chat','observer'].includes(page));
@@ -1058,7 +1061,7 @@ $('#debug-mode').checked = debugMode; document.body.classList.toggle('debug-mode
 $('#debug-mode').onchange = () => { debugMode = $('#debug-mode').checked; localStorage.setItem('agt-debug-mode', String(debugMode)); document.body.classList.toggle('debug-mode', debugMode); if ($('#modal').open && !state.modalBusy) $('#modal').close(); renderMessages(); renderReplyStatus(); renderActivity(); };
 $('#older').onclick = () => messages(false, true).catch(e => notify(errorText(e), true));
 $('#refresh').onclick = async () => { try { await bootstrap(); await conversations(); await messages(true); await activity(); notify('已同步本地状态。'); } catch (e) { notify(errorText(e), true); } };
-$('#chat-commands').onclick = () => { if(canParticipate()) showChatCommand({name:'help',args:''}); };
+$('#chat-commands').onclick = () => { if(!$('#command-panel').classList.contains('hidden')) closeCommandPanel(true); else if(canParticipate()) showChatCommand({name:'help',args:''}); };
 $('#composer').onsubmit = async event => {
   event.preventDefault(); if (state.sending || !canParticipate()) return;
   let body = $('#message-body').value.trim(); if (!body) return;
@@ -1172,46 +1175,104 @@ async function showHarnessEdit(reference) {
   } catch(e) {if(generation===modalGeneration)modalError(e);}
 }
 
+function closeCommandPanel(restoreFocus = false) {
+  commandGeneration++;
+  commandTarget = null;
+  $('#command-panel').classList.add('hidden');
+  document.body.classList.remove('command-panel-open');
+  $('#chat-commands').setAttribute('aria-expanded','false');
+  $('#command-panel-body').innerHTML='';
+  if (restoreFocus) $('#chat-commands').focus();
+}
+function commandPanel(title, content, kind = 'help') {
+  commandGeneration++;
+  const opening = $('#command-panel').classList.contains('hidden');
+  $('#command-panel').classList.remove('hidden');
+  document.body.classList.add('command-panel-open');
+  $('#chat-commands').setAttribute('aria-expanded','true');
+  $('#command-panel-title').textContent=title;
+  $('#command-panel-context').textContent=conversationName(state.conversation);
+  $('#command-panel-body').innerHTML=content;
+  $('#command-panel-error').classList.add('hidden');
+  $('#command-panel-nav').innerHTML=AgtCommands.items.filter(c=>c.name!=='clear').map(c=>`<button type="button" data-panel-command="${c.name}" aria-current="${kind===c.name?'page':'false'}" title="${esc(c.description)}">${esc(c.label)}</button>`).join('');
+  $$('#command-panel-nav button').forEach(b=>b.onclick=()=>showChatCommand({name:b.dataset.panelCommand,args:''}));
+  if(opening) $('#close-command-panel').focus({preventScroll:true});
+  else $('#command-panel-nav [aria-current=page]')?.focus({preventScroll:true});
+}
+function commandPanelError(error) {
+  $('#command-panel-error').textContent=errorText(error);
+  $('#command-panel-error').classList.remove('hidden');
+}
+$('#close-command-panel').onclick=()=>closeCommandPanel(true);
+$('#command-panel').addEventListener('keydown',event=>{
+  if(event.key==='Escape' && !event.isComposing){event.preventDefault();closeCommandPanel(true);}
+});
+function showCommandAction(kind) {
+  const reset=['new','clear'].includes(kind), c=state.conversation;
+  const allowed=reset?canResetContext(c):canParticipate() && !$('#end-reply').disabled;
+  commandPanel(reset?'重置上下文':'停止 Agent',`<p>${reset?'停止涉及本会话的 Agent 工作，清除会话摘要。下一条消息将从新的上下文开始。':'结束涉及本会话的讨论，取消后续回复和提醒。同一讨论在其他群的任务也会停止。'}</p><p class="form-note">聊天记录保留，已发出的外部工具操作不会撤销。${reset?'Agent 仍可通过历史查询工具查阅旧消息。':''}</p>${allowed?'':'<p class="form-note">当前没有可执行的操作，请检查会话权限和运行状态。</p>'}<button id="command-confirm" class="primary" type="button" ${allowed?'':'disabled'}>${reset?'确认停止并重置':'确认结束讨论'}</button><p id="command-action-feedback" role="status"></p>`,reset?'new':'stop');
+  const generation=commandGeneration;
+  $('#command-confirm').onclick=async()=>{
+    const button=$('#command-confirm');button.disabled=true;
+    $('#command-panel-error').classList.add('hidden');
+    try {
+      if(reset) await api('conversation',{action:'reset',conversation:c.id,confirm:true});
+      else await api('reply',{action:'end',conversation:c.id});
+      if(generation!==commandGeneration)return;
+      $('#command-action-feedback').textContent=reset?'上下文已重置，可以发送新消息。':'已结束本轮讨论。';
+      if(reset){
+        state.generation++;
+        state.runs=state.runs.map(r=>r.conversation===c.id?{...r,progress:null}:r);renderLiveReplies();
+      }
+      const parsed=AgtCommands.parse($('#message-body').value);
+      if(parsed?.type==='command' && [kind,reset?'clear':'stop'].includes(parsed.name)){$('#message-body').value='';state.pendingSend=null;renderMentions();resizeComposer();}
+      await activity();
+    }catch(e){if(generation===commandGeneration){commandPanelError(e);button.disabled=false;}}
+  };
+}
 async function showChatCommand(command) {
+  if(!state.conversation || !canParticipate()) return;
   const supported = AgtCommands.items.find(c=>c.name===command.name);
-  if (supported && !command.args && ['new','clear'].includes(command.name)) { showResetContext(state.conversation,true); return; }
-  if (supported && !command.args && command.name==='stop') { if ($('#end-reply').disabled) dialog('当前没有可停止的讨论','<p class="form-note">本会话没有待处理的讨论。可用 /status 查看最近运行。</p>'); else $('#end-reply').click(); return; }
+  if (supported && !command.args && ['new','clear'].includes(command.name)) { showCommandAction(command.name); return; }
+  if (supported && !command.args && command.name==='stop') { showCommandAction('stop'); return; }
   if (supported && !command.args && ['model','status','compact','rename','skills','mcp','permissions'].includes(command.name)) { await showHarnessCommand(command.name); return; }
   const heading = command.name==='help' && !command.args ? '会话命令' : supported ? '此命令暂不支持参数' : '此命令尚未接入 Web';
-  dialog(heading, `<p class="form-note">这里使用 AGT 的会话控制通道。Codex 终端命令不会被当成模型消息执行；本次没有发送聊天消息。</p><div class="chat-command-list">${AgtCommands.items.filter(c=>c.name!=='clear').map(c=>`<button type="button" class="chat-command" data-chat-command="${c.name}"><code>/${esc(c.name)}</code><span><strong>${esc(c.label)}</strong><small>${esc(c.description)}</small></span></button>`).join('')}</div><details class="harness-options"><summary>其他 Codex 命令如何处理？</summary><p class="form-note">/review、/diff、/resume、/fork 和交互审批尚未映射。请在对应 Codex 客户端操作，或用自然语言提出任务。带参数的命令目前不会执行；群内命令不支持 @ 定向控制。</p></details><div class="form-actions"><button id="command-as-text" class="secondary" type="button" ${AgtCommands.parse($('#message-body').value)?.type==='command'?'':'disabled'}>改为普通文本草稿</button></div><p class="form-note">要讨论命令本身，可输入 //model 等双斜杠文本，再点击发送。</p>`);
-  $$('[data-chat-command]').forEach(button=>button.onclick=()=>{ $('#modal').close(); showChatCommand({name:button.dataset.chatCommand,args:''}); });
-  $('#command-as-text').onclick=()=>{ $('#message-body').value='/'+$('#message-body').value.trim(); closeModal(); $('#message-body').focus(); resizeComposer(); };
+  commandPanel(heading, `<p class="form-note">这里使用 AGT 的会话控制通道。Codex 终端命令不会被当成模型消息执行；本次没有发送聊天消息。</p><div class="chat-command-list">${AgtCommands.items.filter(c=>c.name!=='clear').map(c=>`<button type="button" class="chat-command" data-chat-command="${c.name}"><code>/${esc(c.name)}</code><span><strong>${esc(c.label)}</strong><small>${esc(c.description)}</small></span></button>`).join('')}</div><details class="harness-options"><summary>其他 Codex 命令如何处理？</summary><p class="form-note">/review、/diff、/resume、/fork 和交互审批尚未映射。请在对应 Codex 客户端操作，或用自然语言提出任务。带参数的命令目前不会执行；群内命令不支持 @ 定向控制。</p></details><div class="form-actions"><button id="command-as-text" class="secondary" type="button" ${AgtCommands.parse($('#message-body').value)?.type==='command'?'':'disabled'}>改为普通文本草稿</button></div><p class="form-note">要讨论命令本身，可输入 //model 等双斜杠文本，再点击发送。</p>`);
+  $$('[data-chat-command]').forEach(button=>button.onclick=()=>{ showChatCommand({name:button.dataset.chatCommand,args:''}); });
+  $('#command-as-text').onclick=()=>{ $('#message-body').value='/'+$('#message-body').value.trim(); closeCommandPanel(); $('#message-body').focus(); resizeComposer(); };
 }
 async function showChatRuntime(kind) {
   const conversation=state.conversation.id;
-  dialog(kind==='model' ? '本会话的模型' : '本会话的运行状态','<p class="form-note">正在读取配置和运行记录，不调用模型…</p>');
-  const generation=modalGeneration;
+  commandPanel(kind==='model' ? '本会话的模型' : '本会话的运行状态','<p class="form-note">正在读取配置和运行记录，不调用模型…</p>',kind);
+  const generation=commandGeneration;
   try {
     const result=await api('chat-status',{conversation});
-    if(generation!==modalGeneration || !$('#modal').open)return;
-    $('#modal-body').innerHTML=`<p class="form-note">按 Agent 分别显示。最近执行模型来自后端返回值，可能与修改后的配置不同；没有记录时不推测。</p>${result.agents.map(a=>`<section class="command-agent"><div class="card-head"><strong>${esc(nameOf(a.principal))}</strong><span class="tag">${a.engine==='native'?'AGT 内置':esc(a.engine)}</span></div><dl class="resource-details"><dt>启用状态</dt><dd>${a.enabled?'已启用':'已停用'}</dd><dt>配置模型</dt><dd>${esc(a.configured_model || '沿用外部引擎默认配置')}</dd><dt>最近执行模型</dt><dd>${esc(a.last_run?.reported_model || '后端尚未报告')}</dd><dt>最近执行</dt><dd>${esc(a.last_run ? stateNames[a.last_run.state] || a.last_run.state : '暂无记录')}</dd>${a.harness?`<dt>Harness</dt><dd>${esc(a.harness)}</dd>`:''}</dl>${a.harness?`<button class="secondary" type="button" data-command-harness="${esc(a.harness)}">编辑共享环境…</button><p class="form-note">修改默认配置只影响新会话；已有会话保留配置快照。</p>`:''}</section>`).join('') || '<p class="form-note">本会话暂无已配置运行设置的 Agent。</p>'}`;
+    if(generation!==commandGeneration || $('#command-panel').classList.contains('hidden'))return;
+    $('#command-panel-body').innerHTML=`<p class="form-note">按 Agent 分别显示。最近执行模型来自后端返回值，可能与修改后的配置不同；没有记录时不推测。</p>${result.agents.map(a=>`<section class="command-agent"><div class="card-head"><strong>${esc(nameOf(a.principal))}</strong><span class="tag">${a.engine==='native'?'AGT 内置':esc(a.engine)}</span></div><dl class="resource-details"><dt>启用状态</dt><dd>${a.enabled?'已启用':'已停用'}</dd><dt>配置模型</dt><dd>${esc(a.configured_model || '沿用外部引擎默认配置')}</dd><dt>最近执行模型</dt><dd>${esc(a.last_run?.reported_model || '后端尚未报告')}</dd><dt>最近执行</dt><dd>${esc(a.last_run ? stateNames[a.last_run.state] || a.last_run.state : '暂无记录')}</dd>${a.harness?`<dt>Harness</dt><dd>${esc(a.harness)}</dd>`:''}</dl>${a.harness?`<button class="secondary" type="button" data-command-harness="${esc(a.harness)}">编辑共享环境…</button><p class="form-note">修改默认配置只影响新会话；已有会话保留配置快照。</p>`:''}</section>`).join('') || '<p class="form-note">本会话暂无已配置运行设置的 Agent。</p>'}`;
     $$('[data-command-harness]').forEach(b=>b.onclick=()=>showHarnessEdit(b.dataset.commandHarness));
-  } catch(e) {if(generation===modalGeneration && $('#modal').open){$('#modal-body').innerHTML='';modalError(e);}}
+  } catch(e) {if(generation===commandGeneration && !$('#command-panel').classList.contains('hidden')){$('#command-panel-body').innerHTML='';commandPanelError(e);}}
 }
 
 async function showHarnessCommand(kind) {
+  if(!state.conversation || !canParticipate()) return;
   const conversation=state.conversation.id;
   const targets=state.boot.bindings.filter(b=>state.members.some(m=>m.principal_id===b.principal && m.left_message_seq==null) && items('agent').find(a=>ref(a)===b.agent)?.harness);
-  if (!targets.length) { if(kind==='model'||kind==='status') return showChatRuntime(kind); dialog('本会话没有外部 Harness','<p class="form-note">此操作需要 Agent 关联 Codex Harness。</p>'); return; }
+  if (!targets.length) { if(kind==='model'||kind==='status') return showChatRuntime(kind); commandPanel('本会话没有外部 Harness','<p class="form-note">此操作需要 Agent 关联 Codex Harness。</p>',kind); return; }
   const titles={model:'选择会话模型',status:'执行会话',compact:'压缩上下文',rename:'会话命名',skills:'Codex Skills',mcp:'Codex MCP',permissions:'会话权限'};
-  dialog(titles[kind] || '执行会话',`${field('操作对象',`<select id="harness-target">${options(targets.map(b=>[b.principal,nameOf(b.principal)]))}</select>`)}<div id="harness-detail"><p class="form-note">正在读取执行会话…</p></div>`);
-  const generation=modalGeneration;
+  commandPanel(titles[kind] || '执行会话',`${field('操作对象',`<select id="harness-target">${options(targets.map(b=>[b.principal,nameOf(b.principal)]),commandTarget)}</select>`)}<div id="harness-detail"><p class="form-note">正在读取执行会话…</p></div>`,kind);
+  const generation=commandGeneration;
   let version=0;
   const load=async()=>{
     const request=++version, target=$('#harness-target').value;
-    const active=()=>generation===modalGeneration && $('#modal').open && request===version;
+    commandTarget=target;
+    const active=()=>generation===commandGeneration && !$('#command-panel').classList.contains('hidden') && request===version;
     const call=(operation,extra={})=>api('harness',{operation,conversation,target,...extra});
     $('#harness-detail').innerHTML='<p class="form-note">正在读取执行会话…</p>';
     try {
       const session=await call('current');
       if(!active())return;
       const operate=(operation,extra={})=>call(operation,{session:session.id,...extra});
-      const info=`<div class="harness-session-summary"><strong>${esc(session.title||'未命名执行会话')}</strong><span class="tag">${session.busy?'执行中或待检查':'就绪'}</span><dl class="resource-details"><dt>Harness</dt><dd>${esc(session.harness)}</dd><dt>项目目录</dt><dd>${esc(session.config.working_directory)}</dd><dt>Session ID</dt><dd>${esc(session.session_id||'首次执行时由 Codex 生成')}</dd></dl></div>`;
+      const info=`<div class="harness-session-summary"><strong>${esc(session.title||'未命名执行会话')}</strong><span class="tag">${session.busy?'执行中或待检查':'就绪'}</span><details class="session-metadata"><summary>连接详情</summary><dl class="resource-details"><dt>Harness</dt><dd>${esc(session.harness)}</dd><dt>项目目录</dt><dd>${esc(session.config.working_directory)}</dd><dt>Session ID</dt><dd>${esc(session.session_id||'首次执行时由 Codex 生成')}</dd></dl></details></div>`;
       $('#harness-detail').innerHTML=info;
       if(kind==='model') {
         $('#harness-detail').insertAdjacentHTML('beforeend','<p id="harness-loading" class="form-note">正在读取 Codex 可用模型…</p>');

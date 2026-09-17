@@ -79,49 +79,74 @@ try {
   await wait('document.querySelector("#harness-model-form [name=model]")');
   assert.equal(await evaluate('document.querySelector("#harness-model-form [name=model]").value'),'fixture-model');
   assert.equal(await evaluate('[...document.querySelector("#harness-model-form [name=effort]").options].map(o=>o.value).join(",")'),'high,xhigh');
-  for(const width of [1280,390]) {
+  for(const width of [1440,1280,1024,768,390]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<761});
-    assert.equal(await evaluate('document.querySelector("#modal").scrollWidth<=document.querySelector("#modal").clientWidth+1'),true);
+    assert.equal(await evaluate('document.querySelector("#command-panel").scrollWidth<=document.querySelector("#command-panel").clientWidth+1'),true);
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
     if(process.env.AGT_DESIGN_CAPTURE){const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(`/tmp/agt-session-model-${width}.png`,Buffer.from(shot.data,'base64'));}
   }
   await evaluate('document.querySelector("#harness-model-form [name=effort]").value="xhigh";document.querySelector("#harness-model-form").requestSubmit()');
   await wait('document.querySelector("#harness-feedback")?.textContent.includes("已保存")');
+  assert.equal(await evaluate('document.querySelector("#modal").open'),false);
   const sessions=await run(['harness','session','list']);
   const session=sessions.find(s=>s.conversation===chat.id);
   assert.equal(session.config.model,'fixture-model');assert.equal(session.config.reasoning_effort,'xhigh');assert.equal(session.session_id,null);
   assert.equal(await evaluate('items("harness")[0].model'),null);
-  await evaluate('closeModal();showHarnessCommand("rename")');
+  await evaluate('closeCommandPanel();showHarnessCommand("rename")');
   await wait('document.querySelector("#harness-rename-form [name=title]")');
   await evaluate('document.querySelector("#harness-rename-form [name=title]").value="Backend review";document.querySelector("#harness-rename-form").requestSubmit()');
   await wait('document.querySelector(".harness-session-summary strong")?.textContent==="Backend review"');
-  await evaluate('closeModal();showHarnessCommand("skills")');
+  await evaluate('closeCommandPanel();showHarnessCommand("skills")');
   await wait('document.querySelector("#harness-detail")?.textContent.includes("fixture-skill")');
-  await evaluate('closeModal();showHarnessCommand("mcp")');
+  await evaluate('closeCommandPanel();showHarnessCommand("mcp")');
   await wait('document.querySelector("#harness-detail")?.textContent.includes("fixture-mcp")');
   await evaluate('closeModal();showHarnessResourceSessions("default/local")');
   await wait('document.querySelector("[data-harness-chat]")');
   assert.equal(await evaluate('document.querySelector("[data-harness-chat]").dataset.harnessChat'),chat.id);
-  await evaluate('closeModal()');
+  await evaluate('closeModal();closeCommandPanel()');
   for(const text of ['/model','/status','/compact','/review','/permissions','/model future','/']) {
     await evaluate(`document.querySelector('#message-body').value=${JSON.stringify(text)}; document.querySelector('#composer').requestSubmit();`);
-    await wait('document.querySelector("#modal").open && !document.querySelector("#modal-body").textContent.includes("正在读取")');
+    await wait('!document.querySelector("#command-panel").classList.contains("hidden") && !document.querySelector("#command-panel-body").textContent.includes("正在读取")');
     assert.equal(await evaluate('state.messages.length'),0);
-    await evaluate('closeModal()');
+    assert.equal(await evaluate('document.querySelector("#modal").open'),false);
+    await evaluate('closeModal();closeCommandPanel()');
   }
   for(const width of [1280,390]) {
     await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<761});
     await evaluate('showChatCommand({name:"help",args:""})');
-    assert.equal(await evaluate('document.querySelector("#modal").scrollWidth<=document.querySelector("#modal").clientWidth+1'),true);
+    assert.equal(await evaluate('document.querySelector("#command-panel").scrollWidth<=document.querySelector("#command-panel").clientWidth+1'),true);
     if(process.env.AGT_DESIGN_CAPTURE){const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile(`/tmp/agt-chat-commands-${width}.png`,Buffer.from(shot.data,'base64'));}
-    await evaluate('closeModal()');
+    await evaluate('closeModal();closeCommandPanel()');
   }
   await evaluate(`document.querySelector('#message-body').value='//model'; document.querySelector('#composer').requestSubmit();`);
   await wait('state.messages.length===1 && !state.sending');
   assert.equal(await evaluate('state.messages[0].body'),'/model');
   await evaluate(`document.querySelector('#message-body').value='/clear'; document.querySelector('#composer').requestSubmit();`);
-  await wait('document.querySelector("#modal").open');
-  assert.match(await evaluate('document.querySelector("#modal-title").textContent'),/上下文/);
-  await evaluate('closeModal()');
+  await wait('!document.querySelector("#command-panel").classList.contains("hidden")');
+  assert.match(await evaluate('document.querySelector("#command-panel-title").textContent'),/上下文/);
+  await evaluate('closeModal();closeCommandPanel()');
+  await evaluate('showChatCommand({name:"new",args:""})');
+  await click('#command-confirm');
+  await wait('document.querySelector("#command-action-feedback")?.textContent.includes("已重置")');
+  assert.equal(await evaluate('state.messages.length'),1);
+  await evaluate('document.querySelector("#close-command-panel").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  assert.equal(await evaluate('document.activeElement.id'),'chat-commands');
+  await click('#chat-commands');
+  await click('[data-panel-command=model]');
+  await wait('document.querySelector("#harness-model-form")');
+  await click('#chat-commands');
+  assert.equal(await evaluate('document.querySelector("#command-panel").classList.contains("hidden")'),true);
+  await evaluate(`window.originalApi=api; window.pendingCurrent=null; api=(path,data)=>data?.operation==='current'?new Promise(resolve=>{window.pendingCurrent=resolve;}):originalApi(path,data); showHarnessCommand('status'); void 0;`);
+  await wait('window.pendingCurrent');
+  await evaluate(`closeCommandPanel(); window.pendingCurrent({title:'stale',config:{}}); api=originalApi;`);
+  assert.equal(await evaluate('document.querySelector("#command-panel-body").textContent'),'');
+  await evaluate('showHarnessCommand("status")');
+  await evaluate(`selectConversation(${JSON.stringify(chat.id)})`);
+  assert.equal(await evaluate('document.querySelector("#command-panel").classList.contains("hidden")'),true);
+  await evaluate(`window.originalApi=api; api=async()=>{throw new Error('fixture connection unavailable');}; showHarnessCommand('model'); void 0;`);
+  await wait('document.querySelector("#harness-detail")?.textContent.includes("fixture connection unavailable")');
+  assert.equal(await evaluate('document.querySelector("#modal").open'),false);
+  await evaluate('api=originalApi; closeCommandPanel()');
   assert.deepEqual(errors,[]);
   console.log('Harness browser passed: create/edit harness and external Agent without Model, enabled binding, execution controls, desktop/mobile overflow.');
 } finally {

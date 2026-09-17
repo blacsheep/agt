@@ -134,7 +134,7 @@
               <div class="compose-bottom">
                 <div class="compose-preferences">
                   <label class="auto-reply-label"><input id="auto-reply" type="checkbox" checked />发送后自动回复</label>
-                  <button id="chat-commands" class="quiet" type="button" aria-label="查看会话命令">/ 命令</button>
+                  <button id="chat-commands" class="quiet" type="button" aria-controls="command-panel" aria-expanded="false" aria-label="查看会话命令">/ 命令</button>
                   <small id="compose-hint">会调用模型 · Ctrl / ⌘ + Enter 发送</small>
                 </div
                 ><button id="send" class="primary" type="submit">
@@ -143,6 +143,13 @@
               </div>
             </form>
           </section>
+          <aside id="command-panel" class="command-panel hidden" aria-labelledby="command-panel-title">
+            <header class="command-panel-head"><div><span class="tiny-label">会话控制</span><h2 id="command-panel-title">命令</h2></div><button id="close-command-panel" class="icon-button" type="button" aria-label="收起会话控制">×</button></header>
+            <p id="command-panel-context" class="command-panel-context"></p>
+            <nav id="command-panel-nav" class="command-panel-nav" aria-label="会话命令"></nav>
+            <div id="command-panel-body" class="command-panel-body"></div>
+            <div id="command-panel-error" class="form-error hidden" role="alert"></div>
+          </aside>
           <aside class="activity-pane" id="activity-pane" aria-label="成员状态">
             <div class="activity-heading">
               <span class="tiny-label">PARTICIPATION</span>
