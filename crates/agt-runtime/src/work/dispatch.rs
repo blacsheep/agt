@@ -53,6 +53,11 @@ pub(crate) fn runnable(home: &Path, store: &ScheduleStore, task: &ScheduledTask)
     if !task.work_notification && item.state != WorkState::Queued {
         return Ok(false);
     }
+    if !task.work_notification
+        && queue::blocker(&store.connection, &item, crate::schedule_store::now_ms())?.is_some()
+    {
+        return Ok(false);
+    }
     Ok(blocked(home, store, &item, &task.principal)?.is_none())
 }
 

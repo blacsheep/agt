@@ -125,7 +125,7 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3..=6 => {},
+            3..=7 => {},
             _ => bail!("unsupported scheduler database version"),
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
@@ -402,10 +402,12 @@ impl ScheduleStore {
     }
 
     pub(crate) fn candidates(&self) -> Result<Vec<ScheduledTask>> {
-        query_tasks(
+        let mut tasks = query_tasks(
             &self.connection,
             "SELECT t.record FROM tasks t JOIN discussions d ON d.id=t.discussion WHERE t.state IN ('queued','waiting','ready_to_reply') AND d.state='active' ORDER BY CASE WHEN t.state='ready_to_reply' THEN 0 ELSE 1 END,t.due,t.rowid",
-        )
+        )?;
+        crate::work::queue::order(&self.connection, &mut tasks, now_ms())?;
+        Ok(tasks)
     }
     pub(crate) fn tasks(&self) -> Result<Vec<ScheduledTask>> {
         query_tasks(
@@ -445,6 +447,12 @@ impl ScheduleStore {
         let mut task: ScheduledTask = serde_json::from_str(&record)?;
         if !matches!(task.state.as_str(), "queued" | "waiting" | "ready_to_reply")
             || task.due_at > now
+        {
+            return Ok(None);
+        }
+        if let Some(id) = &task.work_id
+            && !task.work_notification
+            && crate::work::queue::blocker(&tx, &crate::work::read(&tx, id)?, now)?.is_some()
         {
             return Ok(None);
         }

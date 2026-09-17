@@ -946,6 +946,21 @@ fn cli_and_stdio_mcp_share_durable_task_queries_and_authorization() {
     let item = call("task_request", args.clone());
     assert_eq!(item["state"], "queued");
     assert_eq!(call("task_request", args)["id"], item["id"]);
+    let priority = call(
+        "task_reprioritize",
+        json!({"task_id":item["id"],"expected_revision":1,"priority":"urgent","reason":"owner escalation"}),
+    );
+    assert_eq!(priority["priority"], "urgent");
+    let future = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+        + 60_000;
+    let deferred = call(
+        "task_defer",
+        json!({"task_id":item["id"],"expected_revision":2,"not_before":future,"reason":"wait for owner"}),
+    );
+    assert_eq!(deferred["blocked_reason"], "deferred_until");
     let document = McpDocument::stdio(
         "tasks",
         env!("CARGO_BIN_EXE_agt"),
@@ -976,5 +991,8 @@ fn cli_and_stdio_mcp_share_durable_task_queries_and_authorization() {
     let result: Value = serde_json::from_str(read.content[0].text.as_deref().unwrap()).unwrap();
     assert_eq!(result["id"], item["id"]);
     assert_eq!(result["request"]["requester"], "owner");
+    assert_eq!(result["priority"], "urgent");
+    assert_eq!(result["deferred"]["reason"], "wait for owner");
+    assert!(client.call_tool("task_reprioritize",json!({"task_id":item["id"],"expected_revision":3,"priority":"low","reason":"unhosted process"})).unwrap().is_error);
     assert!(client.call_tool("task_request",json!({"assignee":"owner","conversation":chat,"input":"untrusted","request_key":"denied"})).unwrap().is_error);
 }

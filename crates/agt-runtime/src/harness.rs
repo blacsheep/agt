@@ -329,8 +329,10 @@ pub(crate) fn execute(
         ))?;
         let invoke = || service.call(name, args).map_err(error);
         let result = if let Some(t) = task
-            && !matches!(name, "task_request" | "task_get" | "task_list")
-        {
+            && !matches!(
+                name,
+                "task_request" | "task_get" | "task_list" | "task_defer" | "task_reprioritize"
+            ) {
             crate::scheduler::guarded(home, t, invoke)
         } else {
             invoke()

@@ -378,7 +378,7 @@ impl Scheduler {
                     im.update_delivery(*id, state, task.run_id.as_deref(), task.reason.as_deref())?;
                 }
                 if task.work_notification && task.state == "completed" {
-                    self.store.connection.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?2 AND kind!='requested')",rusqlite::params![task.principal,task.work_id])?;
+                    self.store.connection.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?2 AND kind IN ('succeeded','failed','canceled','outcome_unknown'))",rusqlite::params![task.principal,task.work_id])?;
                 }
                 self.store.mark_reconciled(&task.id)?;
             }

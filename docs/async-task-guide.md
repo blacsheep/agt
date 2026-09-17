@@ -3,7 +3,7 @@
 普通消息仍是聊天；需要可靠排队、完成/失败回报时使用显式任务。
 需要运行 `agt schedule run --watch`；Web 服务原有的 scheduler 子进程也会处理任务。
 本版没有新增任务页面，查询通过 CLI/MCP 或已挂载的内置工具完成。
-更新并构建后需要重启服务，让 CLI 与 scheduler 使用相同版本；旧二进制不能读取 v6 调度库。
+更新并构建后需要重启服务，让 CLI 与 scheduler 使用相同版本；旧二进制不能读取 v7 调度库。
 
 ## 给 lead 挂载能力
 
@@ -42,12 +42,58 @@ Native 模型需开启 tool_call；Codex 使用框架注入的 dynamicTools。
 用 message_send 向通知注明的原会话汇报。普通进度不会广播成群聊消息。
 
 这还不是 await：lead 当前 Run 正常结束后释放执行槽，结果到达会创建后续通知 Run。
-优先级、暂停具体任务并恢复原检查点等能力将在后续阶段实现。
+运行中暂停并恢复原检查点的 task_await 尚未开放；排队任务可以按以下方式控制。
+
+## 排序和延后尚未开始的任务
+
+给负责队列的 lead 挂载 `task_collaboration` 后，它可在当前托管运行中：
+
+1. `task_list({"queued_only":true,"limit":20})` 查看待办，用 task_get 读取最新 revision。
+2. `task_reprioritize` 调整自己负责、同一 discussion 中的排队任务。
+3. `task_defer` 指定执行时间，或明确要求 A 在 B 得出结果后执行。
+
+```json
+{
+  "task_id": "任务 B 的 ID",
+  "expected_revision": 1,
+  "priority": "high",
+  "reason": "先完成阻塞发布的修复"
+}
+```
+
+上面是 task_reprioritize 的参数。task_defer 的参数例如：
+
+```json
+{
+  "task_id": "任务 A 的 ID",
+  "expected_revision": 1,
+  "after_task": "任务 B 的 ID",
+  "deadline": 1893456000000,
+  "reason": "等待 B 完成后处理 A"
+}
+```
+
+时间使用 Unix 毫秒，示例 deadline 必须替换为实际截止时间。
+也可用 `not_before` 代替 `after_task`/`deadline`，表示最早执行时间。
+两种模式不能同时使用。修改失败提示旧 revision 时，重新读取任务再做决定。
+
+普通 Agent 只可设置 low/normal/high，不能授予或改写人类设置的 urgent。
+任务每等待五分钟提升一个有效档位，最高 high；同档按最初入队顺序执行。
+排序不抢占正在执行的工作，已被调度器领取的任务也不能改成等待。
+
+A 和 B 必须属于同一执行身份及授权 discussion，调用者必须能访问两项任务。
+B 成功、失败或取消均可解除屏障，结果不确定则继续阻塞。
+若截止前没有结果，`blocked_reason` 显示 `dependency_deadline_exceeded`，
+需要重新决定等待时间或条件；不会直接忽略 B。人工停止和 /new 仍优先于等待条件。
+
+请求者和 lead 查询 A 会看到相同的 `deferred`（原因、时间、目标任务）及 `waiting_for_task`。
+这只控制 A 的排队，不会冻结请求者 Agent。本版没有自动入站分诊，也不在每次排队更新时
+触发额外模型回复；要让 lead 先判断队列，可以在与它的正常对话中明确要求它读取待办并排序。
 
 ## 查询与排错
 
 ```bash
-agt tool call --principal lead task_list --args '{"limit":20}'
+agt tool call --principal lead task_list --args '{"limit":20,"queued_only":true}'
 agt tool call --principal lead task_get --args '{"task_id":"任务 ID"}'
 ```
 
@@ -59,7 +105,9 @@ CLI 和 stdio MCP 固定其启动身份，只允许查询本人发出或收到�
 | 字段 | 含义 |
 | --- | --- |
 | state | queued / running / succeeded / failed / canceled / outcome_unknown |
-| blocked_reason | 排队任务的停用、manual 或讨论授权阻塞原因 |
+| blocked_reason | 停用、manual、授权变化、deferred_until、waiting_for_task、dependency_outcome_unknown 或 dependency_deadline_exceeded |
+| priority / priority_reason | 明确设置的优先级与原因（不含自动老化） |
+| deferred / waiting_for_task | 双方共享的排队等待条件 |
 | run_id | 开始执行后的 Run，可使用 `agt run info <ID>` 检查 |
 | publication | not_ready / pending / published / blocked |
 | publication_error | 发布失败的安全错误代码，原结果继续保留 |

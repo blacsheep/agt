@@ -11,12 +11,13 @@ use std::path::Path;
 use crate::ScheduleStore;
 mod control;
 mod dispatch;
+pub(crate) mod queue;
 pub use control::TaskControl;
 pub(crate) use dispatch::*;
 
 pub(crate) fn migrate(c: &Connection) -> Result<()> {
     let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version == 6 {
+    if version == 7 {
         return Ok(());
     }
     if version < 5 {
@@ -39,7 +40,10 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
         PRAGMA user_version=5;",
         )?;
     }
-    c.execute_batch("ALTER TABLE work_publications ADD COLUMN error TEXT; CREATE INDEX work_execution_state ON work_items(json_extract(record,'$.state')); PRAGMA user_version=6;")?;
+    if version < 6 {
+        c.execute_batch("ALTER TABLE work_publications ADD COLUMN error TEXT; CREATE INDEX work_execution_state ON work_items(json_extract(record,'$.state')); PRAGMA user_version=6;")?;
+    }
+    c.execute_batch("CREATE TABLE work_dependencies(work_id TEXT PRIMARY KEY, depends_on TEXT NOT NULL); CREATE INDEX work_dependency_target ON work_dependencies(depends_on); PRAGMA user_version=7;")?;
     Ok(())
 }
 
@@ -58,6 +62,26 @@ pub struct WorkRequest {
     pub delivery_epoch: i64,
     pub input: String,
     pub request_key: String,
+    #[serde(default)]
+    pub priority: Priority,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Priority {
+    Low,
+    #[default]
+    Normal,
+    High,
+    Urgent,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Deferred {
+    pub reason: String,
+    pub not_before: Option<i64>,
+    pub after_task: Option<String>,
+    pub deadline: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +112,12 @@ pub struct WorkItem {
     pub state: WorkState,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(default)]
+    pub priority: Priority,
+    #[serde(default)]
+    pub priority_reason: Option<String>,
+    #[serde(default)]
+    pub deferred: Option<Deferred>,
 }
 
 #[derive(Debug, Serialize)]
@@ -160,7 +190,7 @@ impl WorkLedger {
             )
             .optional()?;
         if let Some((original, record)) = previous {
-            if original != encoded {
+            if serde_json::from_str::<WorkRequest>(&original)? != request {
                 bail!("work request key conflicts with existing input");
             }
             return Ok(serde_json::from_str(&record)?);
@@ -168,6 +198,9 @@ impl WorkLedger {
         let now = crate::schedule_store::now_ms();
         let item = WorkItem {
             id: uuid::Uuid::new_v4().to_string(),
+            priority: request.priority,
+            priority_reason: None,
+            deferred: None,
             request,
             revision: 1,
             state: WorkState::Queued,
@@ -362,7 +395,7 @@ impl WorkLedger {
     }
 }
 
-fn read(c: &Connection, id: &str) -> Result<WorkItem> {
+pub(crate) fn read(c: &Connection, id: &str) -> Result<WorkItem> {
     let value: String = c.query_row("SELECT record FROM work_items WHERE id=?1", [id], |r| {
         r.get(0)
     })?;

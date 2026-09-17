@@ -501,7 +501,11 @@ impl<'a> Runtime<'a> {
                         };
                         let task_tool = matches!(
                             call.function.name.as_str(),
-                            "framework_task_request" | "framework_task_get" | "framework_task_list"
+                            "framework_task_request"
+                                | "framework_task_get"
+                                | "framework_task_list"
+                                | "framework_task_defer"
+                                | "framework_task_reprioritize"
                         );
                         let result = if let Some(task) = &self.scheduled_task
                             && !task_tool

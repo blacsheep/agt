@@ -26,6 +26,143 @@ impl TaskControl {
             task: Some(task),
         }
     }
+    fn human_manager(&self, im: &ImStore) -> Result<bool> {
+        Ok(self.actor.role == agt_service::Role::Manager
+            && im.get_principal(&self.actor.principal)?.kind == PrincipalKind::User)
+    }
+    fn edit_queue(&self, name: &str, args: Value) -> Result<Value> {
+        let operation = |store: &ScheduleStore| -> Result<Value> {
+            let id = args["task_id"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("task_id required"))?;
+            let mut item = read(&store.connection, id)?;
+            let im = open_im(&self.home)?;
+            check_scope(&self.home, store, &item)?;
+            member(&im, &item.request.report_to, self.actor.principal.as_str())?;
+            let human = self.human_manager(&im)?;
+            if self.task.is_none() && !human {
+                bail!("queue changes require a hosted task or human Manager");
+            }
+            if self.actor.principal.as_str() != item.request.assignee
+                && !(human && self.actor.principal.as_str() == item.request.requester)
+            {
+                bail!("only assignee or requesting human Manager can manage this queue");
+            }
+            if let Some(task) = &self.task
+                && (task.principal != self.actor.principal.as_str()
+                    || task.discussion != item.request.discussion)
+            {
+                bail!("task belongs to another authorization scope");
+            }
+            let revision = args["expected_revision"]
+                .as_i64()
+                .ok_or_else(|| anyhow::anyhow!("expected_revision required"))?;
+            let reason = args["reason"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("reason required"))?;
+            if reason.trim().is_empty() || reason.len() > 2000 {
+                bail!("reason must contain 1..2000 bytes");
+            }
+            queue::ensure_queued(&store.connection, &item, revision)?;
+            match name {
+                "task_reprioritize" => {
+                    let priority: Priority = serde_json::from_value(args["priority"].clone())?;
+                    if !human && (priority == Priority::Urgent || item.priority == Priority::Urgent)
+                    {
+                        bail!("urgent priority is controlled by a human Manager");
+                    }
+                    item.priority = priority;
+                    item.priority_reason = Some(reason.into());
+                }
+                "task_defer" => {
+                    let not_before = args
+                        .get("not_before")
+                        .map(|v| {
+                            v.as_i64()
+                                .ok_or_else(|| anyhow::anyhow!("invalid not_before"))
+                        })
+                        .transpose()?;
+                    let after = args
+                        .get("after_task")
+                        .map(|v| {
+                            v.as_str()
+                                .map(str::to_owned)
+                                .ok_or_else(|| anyhow::anyhow!("invalid after_task"))
+                        })
+                        .transpose()?;
+                    let deadline = args
+                        .get("deadline")
+                        .map(|v| {
+                            v.as_i64()
+                                .ok_or_else(|| anyhow::anyhow!("invalid deadline"))
+                        })
+                        .transpose()?;
+                    let now = crate::schedule_store::now_ms();
+                    if not_before.is_some() == after.is_some() {
+                        bail!("provide exactly one of not_before or after_task");
+                    }
+                    if let Some(at) = not_before
+                        && (at <= now || deadline.is_some())
+                    {
+                        bail!("not_before must be future; deadline is only for after_task");
+                    }
+                    if let Some(target) = &after {
+                        let other = read(&store.connection, target)?;
+                        check_scope(&self.home, store, &other)?;
+                        member(&im, &other.request.report_to, self.actor.principal.as_str())?;
+                        if self.actor.principal.as_str() != other.request.assignee
+                            && self.actor.principal.as_str() != other.request.requester
+                        {
+                            bail!("dependency task is not visible to this actor");
+                        }
+                        if other.request.assignee != item.request.assignee
+                            || other.request.discussion != item.request.discussion
+                        {
+                            bail!("barrier must reference the same assignee and discussion");
+                        }
+                        if deadline.is_none_or(|at| at <= now) {
+                            bail!("after_task requires a future deadline");
+                        }
+                        queue::set_dependency(&store.connection, &item.id, target)?;
+                    } else {
+                        store.connection.execute(
+                            "DELETE FROM work_dependencies WHERE work_id=?1",
+                            [&item.id],
+                        )?;
+                    }
+                    item.deferred = Some(Deferred {
+                        reason: reason.into(),
+                        not_before,
+                        after_task: after,
+                        deadline,
+                    });
+                }
+                _ => bail!("unknown queue action"),
+            }
+            queue::save(
+                &store.connection,
+                &mut item,
+                if name == "task_defer" {
+                    "deferred"
+                } else {
+                    "reprioritized"
+                },
+            )?;
+            view(&self.home, store, &item)
+        };
+        if let Some(task) = &self.task {
+            crate::scheduler::guarded_store(&self.home, task, |s| {
+                operation(s).map_err(|e| crate::RuntimeError::Invalid(e.to_string()))
+            })
+            .map_err(Into::into)
+        } else {
+            let store = ScheduleStore::open(&self.home)?;
+            store.connection.execute_batch("BEGIN IMMEDIATE")?;
+            let result = operation(&store)?;
+            store.connection.execute_batch("COMMIT")?;
+            Ok(result)
+        }
+    }
     fn request(&self, args: Value) -> Result<Value> {
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
@@ -35,6 +172,8 @@ impl TaskControl {
             input: String,
             request_key: String,
             source_message: Option<String>,
+            #[serde(default)]
+            priority: Priority,
         }
         let input: Input = serde_json::from_value(args)?;
         let operation = |store: &ScheduleStore| -> Result<Value> {
@@ -93,6 +232,9 @@ impl TaskControl {
             {
                 bail!("discussion is ended or expired; renew authorization first");
             }
+            if input.priority == Priority::Urgent && !self.human_manager(&im)? {
+                bail!("urgent priority requires a human Manager");
+            }
             let request = WorkRequest {
                 requester: self.actor.principal.to_string(),
                 assignee: input.assignee.clone(),
@@ -103,6 +245,7 @@ impl TaskControl {
                 delivery_epoch: store.context_cutoff(&input.conversation)?,
                 input: input.input.clone(),
                 request_key: input.request_key.clone(),
+                priority: input.priority,
             };
             let item = WorkLedger::enqueue_on(&store.connection, request)?;
             view(&self.home, store, &item)
@@ -124,6 +267,9 @@ impl TaskControl {
 }
 impl WorkControl for TaskControl {
     fn call(&self, name: &str, args: Value) -> Result<Value> {
+        if matches!(name, "task_reprioritize" | "task_defer") {
+            return self.edit_queue(name, args);
+        }
         if name == "task_request" {
             return self.request(args);
         }
@@ -164,10 +310,20 @@ impl WorkControl for TaskControl {
                     if !(1..=200).contains(&limit) {
                         bail!("limit must be in 1..=200");
                     }
-                    let mut stmt = store.connection.prepare("SELECT record FROM work_items WHERE requester=?1 OR json_extract(record,'$.request.assignee')=?1 ORDER BY rowid DESC")?;
+                    let queued_only = args
+                        .get("queued_only")
+                        .map(|v| {
+                            v.as_bool()
+                                .ok_or_else(|| anyhow::anyhow!("queued_only must be boolean"))
+                        })
+                        .transpose()?
+                        .unwrap_or(false);
+                    let mut stmt = store.connection.prepare("SELECT record FROM work_items WHERE (requester=?1 OR json_extract(record,'$.request.assignee')=?1) AND (NOT ?2 OR json_extract(record,'$.state')='queued') ORDER BY rowid DESC")?;
                     let mut result = Vec::new();
-                    for row in
-                        stmt.query_map([self.actor.principal.as_str()], |r| r.get::<_, String>(0))?
+                    for row in stmt
+                        .query_map(params![self.actor.principal.as_str(), queued_only], |r| {
+                            r.get::<_, String>(0)
+                        })?
                     {
                         let item: WorkItem = serde_json::from_str(&row?)?;
                         if visible(&item) {
@@ -260,12 +416,18 @@ pub(super) fn blocked(
 fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Result<Value> {
     let mut value = serde_json::to_value(item)?;
     if item.state == WorkState::Queued {
-        value["blocked_reason"] = json!(blocked(home, store, item, &item.request.assignee)?);
+        value["blocked_reason"] = json!(blocked(home, store, item, &item.request.assignee)?.or(
+            queue::blocker(&store.connection, item, crate::schedule_store::now_ms())?
+        ));
+    }
+    if let Some(deferred) = &item.deferred {
+        // Both sides see the same durable condition; no private dependency payload is exposed.
+        value["waiting_for_task"] = json!(deferred.after_task);
     }
     let publication: Option<Option<String>> = store.connection.query_row("SELECT p.message_id FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE e.work_id=?1", [&item.id], |r| r.get(0)).optional()?;
     let error: Option<String> = store.connection.query_row("SELECT p.error FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE e.work_id=?1",[&item.id],|r| r.get(0)).optional()?.flatten();
     value["publication_error"] = json!(error);
-    let notification: Option<String> = store.connection.query_row("SELECT i.state FROM work_inbox i JOIN work_outbox e ON i.event_seq=e.seq WHERE e.work_id=?1 AND i.recipient=?2 AND e.kind!='requested'",params![item.id,item.request.requester],|r|r.get(0)).optional()?;
+    let notification: Option<String> = store.connection.query_row("SELECT i.state FROM work_inbox i JOIN work_outbox e ON i.event_seq=e.seq WHERE e.work_id=?1 AND i.recipient=?2 AND e.kind IN ('succeeded','failed','canceled','outcome_unknown')",params![item.id,item.request.requester],|r|r.get(0)).optional()?;
     value["requester_notification"] = json!(notification);
     if notification.as_deref() == Some("pending") {
         value["notification_blocked_reason"] =
