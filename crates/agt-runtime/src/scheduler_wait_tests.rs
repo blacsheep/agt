@@ -2,7 +2,7 @@ use super::*;
 use crate::work::{TaskControl, WorkLedger, WorkState};
 use agt_service::WorkControl;
 
-fn setup() -> (tempfile::TempDir, Scheduler, String, String) {
+pub(super) fn setup() -> (tempfile::TempDir, Scheduler, String, String) {
     let (home, user, chat) = fixture();
     AgentStore::new(home.path())
         .update_in(&agt_core::CategoryName::default(), "a", |c| {
@@ -26,7 +26,7 @@ fn setup() -> (tempfile::TempDir, Scheduler, String, String) {
     scheduler.scan().unwrap();
     (home, scheduler, chat, parent)
 }
-fn claim_work(s: &mut Scheduler, id: &str) -> ScheduledTask {
+pub(super) fn claim_work(s: &mut Scheduler, id: &str) -> ScheduledTask {
     s.store
         .claim(&format!("work:{id}"), &s.owner, now_ms())
         .unwrap()
@@ -73,7 +73,7 @@ impl ModelClient for Suspend {
         }
     }
 }
-fn suspend(home: &Path, s: &mut Scheduler, chat: &str, parent: &str) -> String {
+pub(super) fn suspend(home: &Path, s: &mut Scheduler, chat: &str, parent: &str) -> String {
     let task = claim_work(s, parent);
     let mut model = Suspend {
         step: 0,

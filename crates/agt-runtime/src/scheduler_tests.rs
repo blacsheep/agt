@@ -1000,7 +1000,7 @@ fn reset_schema_upgrade_preserves_existing_discussions() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        8
+        9
     );
 }
 
@@ -1510,3 +1510,6 @@ mod queue_tests;
 
 #[path = "scheduler_wait_tests.rs"]
 mod wait_tests;
+
+#[path = "scheduler_action_tests.rs"]
+mod action_tests;

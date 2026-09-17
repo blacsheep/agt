@@ -2,6 +2,8 @@ use super::*;
 
 fn request(key: &str) -> WorkRequest {
     WorkRequest {
+        parent_id: None,
+        retry_of: None,
         requester: "lead".into(),
         assignee: "codex".into(),
         origin_conversation: "origin".into(),
@@ -228,12 +230,12 @@ fn migration_preserves_scheduler_data_and_rejects_future_schema() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        8
+        9
     );
     ledger
         .store
         .connection
-        .pragma_update(None, "user_version", 9)
+        .pragma_update(None, "user_version", 99)
         .unwrap();
     assert!(ScheduleStore::open(home.path()).is_err());
     assert_eq!(
@@ -242,7 +244,7 @@ fn migration_preserves_scheduler_data_and_rejects_future_schema() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        9
+        99
     );
 }
 
@@ -279,7 +281,7 @@ fn version_five_upgrade_preserves_existing_work() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        8
+        9
     );
 }
 

@@ -77,10 +77,16 @@ pub(crate) fn outcome(home: &Path, run: &str) -> Result<Value> {
 /// Prevent a separate notification Run from racing the continuation. An abandoned
 /// intent does not consume a result. Timeout only consumes the timeout, not late results.
 pub(crate) fn consumed_notice(c: &Connection, dependency: &str) -> Result<bool> {
+    if read(c, dependency)?.resolution.is_some() {
+        return Ok(false);
+    }
     Ok(c.query_row("SELECT EXISTS(SELECT 1 FROM work_waits WHERE dependency=?1 AND json_extract(outcome,'$.kind')='resolved')",[dependency],|r|r.get(0))?)
 }
 
 pub(crate) fn consumes_notice(c: &Connection, dependency: &str) -> Result<bool> {
+    if read(c, dependency)?.resolution.is_some() {
+        return Ok(false);
+    }
     Ok(c.query_row("SELECT EXISTS(SELECT 1 FROM work_waits w JOIN work_items i ON i.id=w.work_id WHERE w.dependency=?1 AND (json_extract(w.outcome,'$.kind')='resolved' OR (w.outcome IS NULL AND json_extract(i.record,'$.state') IN ('running','waiting_dependency'))))",[dependency],|r|r.get(0))?)
 }
 
@@ -140,7 +146,8 @@ pub(super) fn reconcile(
     }
     // Scope validation uses a separate read connection; the transaction above already
     // owns the scheduler write lock, so reset/end cannot interleave with this decision.
-    let invalid = check_scope(home, &scope_store, &current).is_err()
+    let invalid = current.cancellation_requested.is_some()
+        || check_scope(home, &scope_store, &current).is_err()
         || adapter.is_none_or(|t| !matches!(t.state.as_str(), "suspended" | "interrupted"));
     if invalid {
         current.state = WorkState::Canceled {

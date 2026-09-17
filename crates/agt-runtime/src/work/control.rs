@@ -7,9 +7,9 @@ use std::path::PathBuf;
 /// Fixed host identity. Hosted requests require a live scheduler fence; local human
 /// requests require an explicitly authorized human message. No new budget is minted.
 pub struct TaskControl {
-    home: PathBuf,
-    actor: Actor,
-    task: Option<crate::ScheduledTask>,
+    pub(super) home: PathBuf,
+    pub(super) actor: Actor,
+    pub(super) task: Option<crate::ScheduledTask>,
     native_wait: bool,
 }
 impl TaskControl {
@@ -33,7 +33,7 @@ impl TaskControl {
         self.native_wait = true;
         self
     }
-    fn human_manager(&self, im: &ImStore) -> Result<bool> {
+    pub(super) fn human_manager(&self, im: &ImStore) -> Result<bool> {
         Ok(self.actor.role == agt_service::Role::Manager
             && im.get_principal(&self.actor.principal)?.kind == PrincipalKind::User)
     }
@@ -243,6 +243,12 @@ impl TaskControl {
                 bail!("urgent priority requires a human Manager");
             }
             let request = WorkRequest {
+                parent_id: self
+                    .task
+                    .as_ref()
+                    .filter(|t| !t.work_notification)
+                    .and_then(|t| t.work_id.clone()),
+                retry_of: None,
                 requester: self.actor.principal.to_string(),
                 assignee: input.assignee.clone(),
                 origin_conversation: origin.clone(),
@@ -281,6 +287,9 @@ impl WorkControl for TaskControl {
                 .is_some_and(|t| t.work_id.is_some() && !t.work_notification)
     }
     fn call(&self, name: &str, args: Value) -> Result<Value> {
+        if matches!(name, "task_cancel" | "task_retry" | "task_resolve") {
+            return self.lifecycle(name, args);
+        }
         if name == "task_await" {
             if !self.supports_await() {
                 bail!("this execution host cannot suspend work");
@@ -295,9 +304,11 @@ impl WorkControl for TaskControl {
         }
         let operation = |store: &ScheduleStore| -> Result<Value> {
             let im = open_im(&self.home)?;
+            let human = self.human_manager(&im)?;
             let visible = |item: &WorkItem| {
                 (item.request.requester == self.actor.principal.as_str()
-                    || item.request.assignee == self.actor.principal.as_str())
+                    || item.request.assignee == self.actor.principal.as_str()
+                    || human)
                     && im
                         .get_member(
                             &ConversationId::new(&item.request.report_to),
@@ -338,13 +349,12 @@ impl WorkControl for TaskControl {
                         })
                         .transpose()?
                         .unwrap_or(false);
-                    let mut stmt = store.connection.prepare("SELECT record FROM work_items WHERE (requester=?1 OR json_extract(record,'$.request.assignee')=?1) AND (NOT ?2 OR json_extract(record,'$.state')='queued') ORDER BY rowid DESC")?;
+                    let mut stmt = store.connection.prepare("SELECT record FROM work_items WHERE (?3 OR requester=?1 OR json_extract(record,'$.request.assignee')=?1) AND (NOT ?2 OR json_extract(record,'$.state')='queued') ORDER BY rowid DESC")?;
                     let mut result = Vec::new();
-                    for row in stmt
-                        .query_map(params![self.actor.principal.as_str(), queued_only], |r| {
-                            r.get::<_, String>(0)
-                        })?
-                    {
+                    for row in stmt.query_map(
+                        params![self.actor.principal.as_str(), queued_only, human],
+                        |r| r.get::<_, String>(0),
+                    )? {
                         let item: WorkItem = serde_json::from_str(&row?)?;
                         if visible(&item) {
                             result.push(view(&self.home, store, &item)?);
@@ -390,6 +400,16 @@ pub(crate) fn check_task_scope(home: &Path, store: &ScheduleStore, id: &str) -> 
 }
 pub(super) fn check_scope(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Result<()> {
     let im = open_im(home)?;
+    let mut parent = item.request.parent_id.clone();
+    while let Some(id) = parent {
+        let ancestor = read(&store.connection, &id)?;
+        if ancestor.cancellation_requested.is_some()
+            || matches!(ancestor.state, WorkState::Canceled { .. })
+        {
+            bail!("parent task canceled");
+        }
+        parent = ancestor.request.parent_id;
+    }
     let r = &item.request;
     member(&im, &r.origin_conversation, &r.requester)?;
     member(&im, &r.report_to, &r.requester)?;
@@ -433,7 +453,7 @@ pub(super) fn blocked(
     }
     Ok(None)
 }
-fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Result<Value> {
+pub(super) fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Result<Value> {
     let mut value = serde_json::to_value(item)?;
     if item.state == WorkState::Queued {
         value["blocked_reason"] = json!(blocked(home, store, item, &item.request.assignee)?.or(
@@ -449,10 +469,10 @@ fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Result<Value> {
         // Both sides see the same durable condition; no private dependency payload is exposed.
         value["waiting_for_task"] = json!(deferred.after_task);
     }
-    let publication: Option<Option<String>> = store.connection.query_row("SELECT p.message_id FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE e.work_id=?1", [&item.id], |r| r.get(0)).optional()?;
-    let error: Option<String> = store.connection.query_row("SELECT p.error FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE e.work_id=?1",[&item.id],|r| r.get(0)).optional()?.flatten();
+    let publication: Option<Option<String>> = store.connection.query_row("SELECT p.message_id FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE e.work_id=?1 ORDER BY e.seq DESC LIMIT 1", [&item.id], |r| r.get(0)).optional()?;
+    let error: Option<String> = store.connection.query_row("SELECT p.error FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE e.work_id=?1 ORDER BY e.seq DESC LIMIT 1",[&item.id],|r| r.get(0)).optional()?.flatten();
     value["publication_error"] = json!(error);
-    let notification: Option<String> = store.connection.query_row("SELECT i.state FROM work_inbox i JOIN work_outbox e ON i.event_seq=e.seq WHERE e.work_id=?1 AND i.recipient=?2 AND e.kind IN ('succeeded','failed','canceled','outcome_unknown')",params![item.id,item.request.requester],|r|r.get(0)).optional()?;
+    let notification: Option<String> = store.connection.query_row("SELECT i.state FROM work_inbox i JOIN work_outbox e ON i.event_seq=e.seq WHERE e.work_id=?1 AND i.recipient=?2 AND e.kind IN ('succeeded','failed','canceled','outcome_unknown','resolved') ORDER BY e.seq DESC LIMIT 1",params![item.id,item.request.requester],|r|r.get(0)).optional()?;
     value["requester_notification"] = json!(notification);
     if notification.as_deref() == Some("pending") {
         value["notification_blocked_reason"] =

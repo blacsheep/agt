@@ -331,7 +331,14 @@ pub(crate) fn execute(
         let result = if let Some(t) = task
             && !matches!(
                 name,
-                "task_request" | "task_get" | "task_list" | "task_defer" | "task_reprioritize"
+                "task_request"
+                    | "task_get"
+                    | "task_list"
+                    | "task_defer"
+                    | "task_reprioritize"
+                    | "task_cancel"
+                    | "task_retry"
+                    | "task_resolve"
             ) {
             crate::scheduler::guarded(home, t, invoke)
         } else {

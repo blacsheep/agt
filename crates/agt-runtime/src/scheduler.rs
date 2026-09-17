@@ -128,6 +128,15 @@ pub(crate) fn guarded_store<T>(
     if let Some(id) = &task.work_id {
         crate::work::check_task_scope(home, &store, id).map_err(|_| RuntimeError::Canceled)?;
     }
+    if !task.work_notification
+        && let Some(id) = &task.work_id
+        && crate::work::read(&store.connection, id)
+            .map_err(|_| RuntimeError::Canceled)?
+            .cancellation_requested
+            .is_some()
+    {
+        return Err(RuntimeError::Canceled);
+    }
     let result = operation(&store)?;
     store.connection.execute_batch("COMMIT")?;
     Ok(result)
@@ -327,6 +336,19 @@ impl Scheduler {
                 i += 1;
             }
         }
+        for (id, token, _) in &self.jobs {
+            let task = self.store.get(id)?;
+            if !task.work_notification
+                && let Some(work_id) = &task.work_id
+            {
+                let item = crate::work::read(&self.store.connection, work_id)?;
+                if item.cancellation_requested.is_some()
+                    || crate::work::check_task_scope(&self.home, &self.store, work_id).is_err()
+                {
+                    token.cancel();
+                }
+            }
+        }
         crate::work::reconcile(&self.home)?;
         self.scan()?;
         let im = im(&self.home)?;
@@ -378,7 +400,7 @@ impl Scheduler {
                     im.update_delivery(*id, state, task.run_id.as_deref(), task.reason.as_deref())?;
                 }
                 if task.work_notification && task.state == "completed" {
-                    self.store.connection.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?2 AND kind IN ('succeeded','failed','canceled','outcome_unknown'))",rusqlite::params![task.principal,task.work_id])?;
+                    self.store.connection.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?2 AND kind IN ('succeeded','failed','canceled','outcome_unknown','resolved'))",rusqlite::params![task.principal,task.work_id])?;
                 }
                 self.store.mark_reconciled(&task.id)?;
             }

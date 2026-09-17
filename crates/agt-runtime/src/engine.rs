@@ -557,6 +557,9 @@ impl<'a> Runtime<'a> {
                                 | "framework_task_list"
                                 | "framework_task_defer"
                                 | "framework_task_reprioritize"
+                                | "framework_task_cancel"
+                                | "framework_task_retry"
+                                | "framework_task_resolve"
                                 | "framework_task_await"
                         );
                         let result = if let Some(task) = &self.scheduled_task

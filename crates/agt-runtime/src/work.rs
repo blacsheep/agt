@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::ScheduleStore;
+mod actions;
 mod control;
 mod dispatch;
 pub(crate) mod queue;
@@ -18,7 +19,7 @@ pub(crate) use dispatch::*;
 
 pub(crate) fn migrate(c: &Connection) -> Result<()> {
     let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version == 8 {
+    if version == 9 {
         return Ok(());
     }
     if version < 5 {
@@ -47,13 +48,20 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
     if version < 7 {
         c.execute_batch("CREATE TABLE work_dependencies(work_id TEXT PRIMARY KEY, depends_on TEXT NOT NULL); CREATE INDEX work_dependency_target ON work_dependencies(depends_on); PRAGMA user_version=7;")?;
     }
-    c.execute_batch("CREATE TABLE work_waits(run_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, dependency TEXT NOT NULL, deadline INTEGER NOT NULL, outcome TEXT); CREATE INDEX work_wait_dependency ON work_waits(dependency); PRAGMA user_version=8;")?;
+    if version < 8 {
+        c.execute_batch("CREATE TABLE work_waits(run_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, dependency TEXT NOT NULL, deadline INTEGER NOT NULL, outcome TEXT); CREATE INDEX work_wait_dependency ON work_waits(dependency); PRAGMA user_version=8;")?;
+    }
+    c.pragma_update(None, "user_version", 9)?;
     Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkRequest {
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
+    pub retry_of: Option<String>,
     pub requester: String,
     pub assignee: String,
     pub origin_conversation: String,
@@ -142,6 +150,18 @@ pub struct WorkItem {
     pub deferred: Option<Deferred>,
     #[serde(default)]
     pub resume_from: Option<String>,
+    #[serde(default)]
+    pub cancellation_requested: Option<String>,
+    #[serde(default)]
+    pub resolution: Option<Resolution>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Resolution {
+    pub outcome: String,
+    pub evidence: String,
+    pub actor: String,
+    pub at: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -226,6 +246,8 @@ impl WorkLedger {
             priority_reason: None,
             deferred: None,
             resume_from: None,
+            cancellation_requested: None,
+            resolution: None,
             request,
             revision: 1,
             state: WorkState::Queued,
@@ -462,12 +484,15 @@ fn append_event(
         )?;
     }
     if publish {
-        // P1 ledger permits exactly one Run per task; retries will be new work items.
-        let key = format!(
+        // Terminal reports and later human verification have distinct stable keys.
+        let mut key = format!(
             "work:{}:attempt:1:report:{}",
             item.id,
             crate::fingerprint(item.request.report_to.as_bytes())
         );
+        if kind == "resolved" {
+            key.push_str(&format!(":resolution:{}", item.revision));
+        }
         c.execute(
             "INSERT INTO work_publications(event_seq,request_key,destination,message_id) VALUES(?1,?2,?3,NULL)",
             params![seq, key, item.request.report_to],

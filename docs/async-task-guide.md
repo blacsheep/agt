@@ -3,7 +3,7 @@
 普通消息仍是聊天；需要可靠排队、完成/失败回报时使用显式任务。
 需要运行 `agt schedule run --watch`；Web 服务原有的 scheduler 子进程也会处理任务。
 本版没有新增任务页面，查询通过 CLI/MCP 或已挂载的内置工具完成。
-更新并构建后需要重启服务，让 CLI 与 scheduler 使用相同版本；旧二进制不能读取 v8 调度库和 v3 Run 库。
+更新并构建后需要重启服务，让 CLI 与 scheduler 使用相同版本；旧二进制不能读取 v9 调度库和 v3 Run 库。
 
 ## 给 lead 挂载能力
 
@@ -145,9 +145,22 @@ CLI 和 stdio MCP 固定其启动身份，只允许查询本人发出或收到�
 
 outcome_unknown 表示需要检查实际执行与副作用，本版不会自动重跑。
 会话 /new、结束讨论、解散/退出引起权限或上下文边界变化时，旧结果不会自动进入新上下文。
-未完成发布保留在账本中；当前没有单任务取消/重试或更换汇报目的地的工具。
+未完成发布保留在账本中；支持下述单任务取消、核对和重试；更换汇报目的地的工具暂未开放。
 
 本地人类管理员也可发起任务，但须先发送本人消息并显式 `schedule start` 授权，
 再通过 `agt tool call --principal <本人> --manager task_request` 传入对应的 `source_message`。
 外部 stdio MCP 的 Agent 身份没有当前 scheduler 租约，不能仅靠启动 MCP 获得付费执行授权；
 应使用已托管 Agent 的 `task_collaboration` 能力发起工作。
+
+## 任务取消、核对与重试
+
+- `task_cancel({task_id, expected_revision, reason})`：取消未运行/等待中的任务，运行中的任务先登记取消请求。
+  框架停止后若仍无法确认外部副作用，保留 outcome_unknown；不把断线当作取消成功。
+  任务内 task_request 创建的子任务记录 parent_id，取消父任务会联动其独占后代。
+- `task_resolve({task_id, expected_revision, outcome, evidence})`：仅人类 Manager 可对 outcome_unknown
+  记录 succeeded/failed 核对结论及依据。原始状态保留，resolution 单独保存并定向通知请求者。
+- `task_retry({task_id, expected_revision, request_key, reason})`：从已失败/取消或核对为失败的任务创建新任务，
+  保留 retry_of；重复 request_key 幂等。结果未核对时禁止重试。讨论授权必须仍有效。
+
+调用前使用 task_get 获取最新 revision。托管请求者/执行者可取消；重试只限请求者或人类 Manager。
+本地未托管 Agent 不可通过 CLI/MCP 绕过执行授权。人类 Manager 只能管理自己当前仍为成员的共享会话任务。

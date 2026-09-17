@@ -37,16 +37,12 @@ pub(crate) fn route(
     {
         bail!("invalid work message scope");
     }
-    let key = if notice {
-        format!(
-            "tool:work:{}:attempt:1:report:{}",
-            id,
-            crate::fingerprint(item.request.report_to.as_bytes())
-        )
+    let valid = if notice {
+        store.connection.query_row("SELECT EXISTS(SELECT 1 FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE e.work_id=?1 AND ('tool:' || p.request_key)=?2)",params![id,message.client_message_id],|r|r.get::<_,bool>(0))?
     } else {
-        format!("work:{id}:request")
+        message.client_message_id.as_deref() == Some(format!("work:{id}:request").as_str())
     };
-    if message.client_message_id.as_deref() != Some(key.as_str()) {
+    if !valid {
         bail!("invalid work message key");
     }
     Ok(Some((id.into(), target.clone(), notice)))
@@ -60,7 +56,9 @@ pub(crate) fn runnable(home: &Path, store: &ScheduleStore, task: &ScheduledTask)
     if task.work_notification && super::wait::consumes_notice(&store.connection, id)? {
         return Ok(false);
     }
-    if !task.work_notification && item.state != WorkState::Queued {
+    if !task.work_notification
+        && (item.state != WorkState::Queued || item.cancellation_requested.is_some())
+    {
         return Ok(false);
     }
     if !task.work_notification
@@ -198,13 +196,27 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
             ledger.store.connection.execute_batch("BEGIN IMMEDIATE")?;
             let result = (|| -> Result<()> {
                 check_scope(home, &ledger.store, &item)?;
-                let body = match &item.state {
-                    WorkState::Succeeded { output, .. } => output.as_str(),
-                    WorkState::Failed { error, .. } => error.as_str(),
-                    WorkState::OutcomeUnknown { reason, .. } | WorkState::Canceled { reason } => {
-                        reason.as_str()
+                let event_kind: String = ledger.store.connection.query_row(
+                    "SELECT kind FROM work_outbox WHERE seq=?1",
+                    [publication.event_seq],
+                    |r| r.get(0),
+                )?;
+                let verification = item
+                    .resolution
+                    .as_ref()
+                    .map(|r| format!("Verified {} by {}: {}", r.outcome, r.actor, r.evidence));
+                let body = if event_kind == "resolved" {
+                    verification
+                        .as_deref()
+                        .ok_or_else(|| anyhow::anyhow!("verification missing"))?
+                } else {
+                    match &item.state {
+                        WorkState::Succeeded { output, .. } => output.as_str(),
+                        WorkState::Failed { error, .. } => error.as_str(),
+                        WorkState::OutcomeUnknown { reason, .. }
+                        | WorkState::Canceled { reason } => reason.as_str(),
+                        _ => bail!("result not ready"),
                     }
-                    _ => bail!("result not ready"),
                 };
                 // Bound the encoded model input too: quotes/control characters can
                 // expand sixfold in JSON. Full output stays in the WorkItem.
@@ -221,11 +233,15 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                 let text = format!(
                     "[AGT task {} · {}]\n{}{}\n\nThis is a task result notification. Review it and report to the original requester in conversation {}. Full task details: task_get(task_id).",
                     item.id,
-                    match item.state {
-                        WorkState::Succeeded { .. } => "succeeded",
-                        WorkState::Failed { .. } => "failed",
-                        WorkState::Canceled { .. } => "canceled",
-                        _ => "outcome_unknown",
+                    if event_kind == "resolved" {
+                        "resolved"
+                    } else {
+                        match item.state {
+                            WorkState::Succeeded { .. } => "succeeded",
+                            WorkState::Failed { .. } => "failed",
+                            WorkState::Canceled { .. } => "canceled",
+                            _ => "outcome_unknown",
+                        }
                     },
                     &body[..end],
                     if end < body.len() {

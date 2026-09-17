@@ -63,7 +63,8 @@ pub(crate) fn blocker(c: &Connection, item: &WorkItem, now: i64) -> Result<Optio
     if matches!(
         dependency.state,
         WorkState::Succeeded { .. } | WorkState::Failed { .. } | WorkState::Canceled { .. }
-    ) {
+    ) || dependency.resolution.is_some()
+    {
         return Ok(None);
     }
     if deferred.deadline.is_some_and(|at| at <= now) {
