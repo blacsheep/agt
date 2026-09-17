@@ -147,6 +147,19 @@ try {
   await wait('document.querySelector("#harness-detail")?.textContent.includes("fixture connection unavailable")');
   assert.equal(await evaluate('document.querySelector("#modal").open'),false);
   await evaluate('api=originalApi; closeCommandPanel()');
+  await evaluate(`state.boot.principals.push({id:'native-fixture',name:'Native',kind:'agent'}); state.members.push({principal_id:'native-fixture',left_message_seq:null}); state.boot.bindings.push({principal:'native-fixture',agent:'default/native-fixture'}); items('agent').push({name:'native-fixture',model:{category:'default',name:'fixture'}});`);
+  await evaluate('showChatCommand({name:"model",args:""})');
+  await wait('document.querySelector("#harness-model-form")');
+  assert.match(await evaluate('document.querySelector("#command-panel-body").textContent'),/仅作用于 Codex Agent/);
+  assert.equal(await evaluate('[...document.querySelector("#harness-target").options].some(o=>o.value==="native-fixture")'),false);
+  assert.match(await evaluate('document.querySelector("[data-panel-command=compact]").textContent'),/^Codex/);
+  await evaluate(`window.originalApi=api; window.statusCalls=[]; api=async(path,data)=>{statusCalls.push(path);return {agents:[]};};`);
+  await click('[data-panel-command=status]');
+  await wait('statusCalls.length===1');
+  assert.deepEqual(await evaluate('statusCalls'),['chat-status']);
+  await evaluate(`api=originalApi; closeCommandPanel(); state.members=state.members.filter(m=>m.principal_id==='native-fixture'||m.principal_id===state.boot.principal); showChatCommand({name:'help',args:''});`);
+  assert.equal(await evaluate('document.querySelector("[data-panel-command=compact]")'),null);
+  assert.equal(await evaluate('document.querySelector("[data-panel-command=model]").textContent'),'查看模型');
   assert.deepEqual(errors,[]);
   console.log('Harness browser passed: create/edit harness and external Agent without Model, enabled binding, execution controls, desktop/mobile overflow.');
 } finally {

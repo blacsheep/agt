@@ -1176,6 +1176,24 @@ async function showHarnessEdit(reference) {
   } catch(e) {if(generation===modalGeneration)modalError(e);}
 }
 
+function codexCommandTargets() {
+  return state.boot.bindings.filter(b=>{
+    if(principalOf(b.principal)?.deleted || !state.members.some(m=>m.principal_id===b.principal && m.left_message_seq==null)) return false;
+    const agent=items('agent').find(a=>ref(a)===b.agent);
+    return agent?.harness && items('harness').some(h=>ref(h)===ref(agent.harness) && h.engine==='codex');
+  });
+}
+function availableChatCommands() {
+  const codex=codexCommandTargets().length>0;
+  return AgtCommands.items.filter(c=>c.name!=='clear' && (!c.requires || codex)).map(c=>{
+    if(c.name==='model') return {...c,label:codex?'Codex · 选择模型':'查看模型',description:codex?'选择 Codex Agent，修改它在当前聊天中的模型与档位。':'查看各 Agent 的配置模型与最近执行模型；此处不修改内置 Agent 模型。'};
+    return c.requires ? {...c,label:'Codex · '+c.label} : c;
+  });
+}
+function showUnavailableCommand(kind) {
+  commandPanel('当前会话不支持 /'+kind,`<p>此命令用于 Codex 执行会话，当前会话没有可操作的 Codex Agent。</p><p class="form-note">内置 Agent 暂未接入此命令。可以查看模型和运行状态，或重置上下文。</p><button id="available-commands" class="secondary" type="button">查看可用命令</button><p class="form-note">草稿已保留，本次未发送消息或执行请求。</p>`);
+  $('#available-commands').onclick=()=>showChatCommand({name:'help',args:''});
+}
 function closeCommandPanel(restoreFocus = false) {
   commandGeneration++;
   commandTarget = null;
@@ -1195,7 +1213,7 @@ function commandPanel(title, content, kind = 'help') {
   $('#command-panel-context').textContent=conversationName(state.conversation);
   $('#command-panel-body').innerHTML=content;
   $('#command-panel-error').classList.add('hidden');
-  $('#command-panel-nav').innerHTML=AgtCommands.items.filter(c=>c.name!=='clear').map(c=>`<button type="button" data-panel-command="${c.name}" aria-current="${kind===c.name?'page':'false'}" title="${esc(c.description)}">${esc(c.label)}</button>`).join('');
+  $('#command-panel-nav').innerHTML=availableChatCommands().map(c=>`<button type="button" data-panel-command="${c.name}" aria-current="${kind===c.name?'page':'false'}" title="${esc(c.description)}">${esc(c.label)}</button>`).join('');
   $$('#command-panel-nav button').forEach(b=>b.onclick=()=>showChatCommand({name:b.dataset.panelCommand,args:''}));
   if(opening) $('#close-command-panel').focus({preventScroll:true});
   else $('#command-panel-nav [aria-current=page]')?.focus({preventScroll:true});
@@ -1234,11 +1252,12 @@ function showCommandAction(kind) {
 async function showChatCommand(command) {
   if(!state.conversation || !canParticipate()) return;
   const supported = AgtCommands.items.find(c=>c.name===command.name);
+  if (supported?.requires && !codexCommandTargets().length) { showUnavailableCommand(command.name); return; }
   if (supported && !command.args && ['new','clear'].includes(command.name)) { showCommandAction(command.name); return; }
   if (supported && !command.args && command.name==='stop') { showCommandAction('stop'); return; }
   if (supported && !command.args && ['model','status','compact','rename','skills','mcp','permissions'].includes(command.name)) { await showHarnessCommand(command.name); return; }
   const heading = command.name==='help' && !command.args ? '会话命令' : supported ? '此命令暂不支持参数' : '此命令尚未接入 Web';
-  commandPanel(heading, `<p class="form-note">这里使用 AGT 的会话控制通道。Codex 终端命令不会被当成模型消息执行；本次没有发送聊天消息。</p><div class="chat-command-list">${AgtCommands.items.filter(c=>c.name!=='clear').map(c=>`<button type="button" class="chat-command" data-chat-command="${c.name}"><code>/${esc(c.name)}</code><span><strong>${esc(c.label)}</strong><small>${esc(c.description)}</small></span></button>`).join('')}</div><details class="harness-options"><summary>其他 Codex 命令如何处理？</summary><p class="form-note">/review、/diff、/resume、/fork 和交互审批尚未映射。请在对应 Codex 客户端操作，或用自然语言提出任务。带参数的命令目前不会执行；群内命令不支持 @ 定向控制。</p></details><div class="form-actions"><button id="command-as-text" class="secondary" type="button" ${AgtCommands.parse($('#message-body').value)?.type==='command'?'':'disabled'}>改为普通文本草稿</button></div><p class="form-note">要讨论命令本身，可输入 //model 等双斜杠文本，再点击发送。</p>`);
+  commandPanel(heading, `<p class="form-note">以下只列出当前会话可用的操作。重置和停止作用于整个会话；标注 Codex 的操作仅作用于所选 Codex Agent。</p><div class="chat-command-list">${availableChatCommands().map(c=>`<button type="button" class="chat-command" data-chat-command="${c.name}"><code>/${esc(c.name)}</code><span><strong>${esc(c.label)}</strong><small>${esc(c.description)}</small></span></button>`).join('')}</div><details class="harness-options"><summary>其他 Codex 命令如何处理？</summary><p class="form-note">/review、/diff、/resume、/fork 和交互审批尚未映射。请在对应 Codex 客户端操作，或用自然语言提出任务。带参数的命令目前不会执行；群内命令不支持 @ 定向控制。</p></details><div class="form-actions"><button id="command-as-text" class="secondary" type="button" ${AgtCommands.parse($('#message-body').value)?.type==='command'?'':'disabled'}>改为普通文本草稿</button></div><p class="form-note">要讨论命令本身，可输入 //model 等双斜杠文本，再点击发送。</p>`);
   $$('[data-chat-command]').forEach(button=>button.onclick=()=>{ showChatCommand({name:button.dataset.chatCommand,args:''}); });
   $('#command-as-text').onclick=()=>{ $('#message-body').value='/'+$('#message-body').value.trim(); closeCommandPanel(); $('#message-body').focus(); resizeComposer(); };
 }
@@ -1257,10 +1276,13 @@ async function showChatRuntime(kind) {
 async function showHarnessCommand(kind) {
   if(!state.conversation || !canParticipate()) return;
   const conversation=state.conversation.id;
-  const targets=state.boot.bindings.filter(b=>state.members.some(m=>m.principal_id===b.principal && m.left_message_seq==null) && items('agent').find(a=>ref(a)===b.agent)?.harness);
-  if (!targets.length) { if(kind==='model'||kind==='status') return showChatRuntime(kind); commandPanel('本会话没有外部 Harness','<p class="form-note">此操作需要 Agent 关联 Codex Harness。</p>',kind); return; }
+  const targets=codexCommandTargets();
+  if (!targets.length) { if(kind==='model'||kind==='status') return showChatRuntime(kind); showUnavailableCommand(kind); return; }
+  const mixed=state.boot.bindings.some(b=>state.members.some(m=>m.principal_id===b.principal && m.left_message_seq==null) && !targets.some(t=>t.principal===b.principal));
+  if(kind==='status' && mixed) return showChatRuntime(kind);
   const titles={model:'选择会话模型',status:'执行会话',compact:'压缩上下文',rename:'会话命名',skills:'Codex Skills',mcp:'Codex MCP',permissions:'会话权限'};
-  commandPanel(titles[kind] || '执行会话',`${field('操作对象',`<select id="harness-target">${options(targets.map(b=>[b.principal,nameOf(b.principal)]),commandTarget)}</select>`)}<div id="harness-detail"><p class="form-note">正在读取执行会话…</p></div>`,kind);
+  commandPanel(titles[kind] || '执行会话',`${mixed?'<p class="form-note">此操作仅作用于 Codex Agent，不影响群内其他 Agent。</p><button id="all-agent-models" class="secondary" type="button">查看所有 Agent 的模型与状态</button>':''}${field('Codex 操作对象',`<select id="harness-target">${options(targets.map(b=>[b.principal,nameOf(b.principal)]),commandTarget)}</select>`)}<div id="harness-detail"><p class="form-note">正在读取执行会话…</p></div>`,kind);
+  if(mixed) $('#all-agent-models').onclick=()=>showChatRuntime('model');
   const generation=commandGeneration;
   let version=0;
   const load=async()=>{
