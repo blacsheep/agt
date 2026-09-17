@@ -20,7 +20,7 @@ pub(crate) use dispatch::*;
 
 pub(crate) fn migrate(c: &Connection) -> Result<()> {
     let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version == 12 {
+    if version == 13 {
         return Ok(());
     }
     if version < 5 {
@@ -66,6 +66,23 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
         c.execute_batch("CREATE TABLE work_fairness(principal TEXT PRIMARY KEY,notices INTEGER NOT NULL); PRAGMA user_version=11;")?;
     }
     c.execute_batch("ALTER TABLE work_waits ADD COLUMN kind TEXT NOT NULL DEFAULT 'dependency'; ALTER TABLE work_waits ADD COLUMN payload TEXT NOT NULL DEFAULT '{}'; ALTER TABLE work_outbox ADD COLUMN payload TEXT NOT NULL DEFAULT '{}'; PRAGMA user_version=12;")?;
+    if version < 13 {
+        c.execute_batch("CREATE TABLE IF NOT EXISTS change_outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, conversation TEXT, kind TEXT NOT NULL, at INTEGER NOT NULL);
+            CREATE TRIGGER IF NOT EXISTS work_change AFTER INSERT ON work_outbox BEGIN
+                INSERT INTO change_outbox(conversation,kind,at) SELECT json_extract(record,'$.request.report_to'),'work',NEW.created_at FROM work_items WHERE id=NEW.work_id;
+            END;
+            CREATE TRIGGER IF NOT EXISTS scheduled_created AFTER INSERT ON tasks BEGIN
+                INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record,'$.conversation'),'schedule',CAST(unixepoch('subsec')*1000 AS INTEGER));
+            END;
+            CREATE TRIGGER IF NOT EXISTS scheduled_changed AFTER UPDATE ON tasks WHEN OLD.record<>NEW.record BEGIN
+                INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record,'$.conversation'),'schedule',CAST(unixepoch('subsec')*1000 AS INTEGER));
+            END;
+            CREATE TRIGGER IF NOT EXISTS discussion_changed AFTER UPDATE ON discussions BEGIN
+                INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'schedule',CAST(unixepoch('subsec')*1000 AS INTEGER));
+            END;
+            PRAGMA user_version=13;")?;
+    }
+
     Ok(())
 }
 

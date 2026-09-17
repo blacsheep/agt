@@ -1121,7 +1121,12 @@ fn configure_connection(connection: &Connection, enable_wal: bool) -> Result<()>
 fn initialize_schema(connection: &Connection) -> Result<()> {
     let transaction = Transaction::new_unchecked(connection, TransactionBehavior::Immediate)?;
     let version: u32 = transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version == 5 {
+        return Ok(());
+    }
     if version == 4 {
+        migrate_events(&transaction)?;
+        transaction.commit()?;
         return Ok(());
     }
     if version == 2 || version == 3 {
@@ -1129,6 +1134,7 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
             crate::sessions::migrate(&transaction)?;
         }
         crate::sessions::migrate_viewed(&transaction)?;
+        migrate_events(&transaction)?;
         transaction.commit()?;
         return Ok(());
     }
@@ -1232,7 +1238,25 @@ fn initialize_schema(connection: &Connection) -> Result<()> {
     )?;
     crate::sessions::migrate(&transaction)?;
     crate::sessions::migrate_viewed(&transaction)?;
+    migrate_events(&transaction)?;
     transaction.commit()?;
+    Ok(())
+}
+
+fn migrate_events(tx: &Transaction<'_>) -> Result<()> {
+    tx.execute_batch("CREATE TABLE IF NOT EXISTS change_outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, conversation TEXT, kind TEXT NOT NULL, at INTEGER NOT NULL);
+        CREATE TRIGGER IF NOT EXISTS im_change AFTER INSERT ON im_events BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) VALUES(
+              CASE WHEN NEW.event_type IN ('member.joined','member.left','group.dissolved','group.supervised') THEN NULL ELSE NEW.conversation_id END,
+              'im', CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        CREATE TRIGGER IF NOT EXISTS principal_added AFTER INSERT ON principals BEGIN
+            INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        CREATE TRIGGER IF NOT EXISTS principal_changed AFTER UPDATE ON principals BEGIN
+            INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        PRAGMA user_version=5;")?;
     Ok(())
 }
 

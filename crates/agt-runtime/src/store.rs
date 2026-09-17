@@ -68,7 +68,7 @@ impl RunStore {
                  PRAGMA user_version = 2;",
             )?,
             2 => {}
-            3 | 4 => {}
+            3..=5 => {}
             _ => {
                 return Err(RuntimeError::Configuration(
                     "unsupported runtime database version",
@@ -80,6 +80,16 @@ impl RunStore {
         }
         if version < 4 {
             tx.execute_batch("UPDATE native_checkpoints SET checkpoint=json_set(checkpoint,'$.engine','native'); ALTER TABLE native_checkpoints RENAME TO run_checkpoints; PRAGMA user_version=4;")?;
+        }
+        if version < 5 {
+            tx.execute_batch("CREATE TABLE IF NOT EXISTS change_outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, conversation TEXT, kind TEXT NOT NULL, at INTEGER NOT NULL);
+                CREATE TRIGGER IF NOT EXISTS run_created AFTER INSERT ON runs BEGIN
+                    INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record_json,'$.request.trigger.conversation_id'),'run',CAST(unixepoch('subsec')*1000 AS INTEGER));
+                END;
+                CREATE TRIGGER IF NOT EXISTS run_changed AFTER UPDATE ON runs WHEN OLD.record_json<>NEW.record_json BEGIN
+                    INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record_json,'$.request.trigger.conversation_id'),'run',CAST(unixepoch('subsec')*1000 AS INTEGER));
+                END;
+                PRAGMA user_version=5;")?;
         }
         tx.commit()?;
         connection.pragma_update(None, "journal_mode", "WAL")?;

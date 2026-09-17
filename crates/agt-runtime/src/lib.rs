@@ -3,6 +3,7 @@ mod audit;
 mod context;
 mod context_store;
 mod conversation_context;
+pub mod events;
 pub use context::ContextCheckpoint;
 mod engine;
 mod harness;
