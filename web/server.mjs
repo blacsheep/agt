@@ -51,7 +51,30 @@ export function cliRunner(binary, home) {
     child.kill('SIGTERM');
     throw new ApiError(503, 'scheduler_offline', '回复服务未能启动，请检查调度进程状态和数据目录权限。');
   };
-  run.close = () => { for (const child of children) child.kill('SIGTERM'); };
+  run.watchEvents = ({ principal, after }, onPage, onEnd) => {
+    const child = spawn(binary, ['--home', home, 'events', 'watch', '--principal', principal, ...(after ? ['--after', after] : [])], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    children.add(child);
+    let buffer = '', ended = false;
+    const finish = () => { if (ended) return; ended = true; children.delete(child); onEnd(); };
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', chunk => {
+      buffer += chunk;
+      if (buffer.length > 256 * 1024) { child.kill('SIGTERM'); finish(); return; }
+      let boundary;
+      while ((boundary = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 1);
+        try { const page = JSON.parse(line); if (!['ready','change','resync_required'].includes(page.event) || typeof page.cursor !== 'string' || !Array.isArray(page.changes)) throw new Error(); onPage(page); }
+        catch { child.kill('SIGTERM'); finish(); return; }
+      }
+    });
+    child.once('error', finish); child.once('exit', finish);
+    return () => { child.kill('SIGTERM'); finish(); };
+  };
+  run.close = () => Promise.all([...children].map(child => new Promise(resolve => {
+    if (child.exitCode !== null || child.signalCode !== null) { resolve(); return; }
+    child.once('exit', resolve); child.once('error', resolve);
+    child.kill('SIGTERM');
+  })));
   return run;
 }
 
@@ -77,6 +100,8 @@ async function body(req) {
 
 export function createConsole({ run, home, principal = 'web-operator', token = randomBytes(32).toString('hex') }) {
   const changingConversations = new Set();
+  const streams = new Set();
+
   const tool = (name, args = {}, viewer = principal) => run(['tool', 'call', '--principal', viewer,
     ...(viewer === principal ? ['--manager'] : []), name, '--args', JSON.stringify(args)]);
   const member = conversation => tool('member_list', { conversation });
@@ -97,7 +122,27 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         res.end(await readFile(resolve(here, 'public', asset[0]))); return;
       }
       if (req.headers['x-agt-token'] !== token) throw new ApiError(401, 'unauthorized', '请使用启动终端提供的完整链接打开控制台。');
-      if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
+      if (req.method === 'GET' && url.pathname === '/api/events') {
+        if (!run.watchEvents) throw new ApiError(503, 'events_unavailable', '事件订阅未就绪，请更新 CLI 后重启服务。');
+        if (streams.size >= 8) throw new ApiError(429, 'too_many_streams', '订阅连接过多，请关闭多余窗口。');
+        const viewer = str(url.searchParams.get('viewer') || principal);
+        const after = url.searchParams.get('after');
+        if (after !== null) str(after);
+        const identities = await tool('principal_list');
+        if (!identities.some(p => p.id === viewer && !p.deleted && (viewer === principal || p.kind === 'agent'))) throw new ApiError(403, 'viewer_denied', '观察身份不存在或不可用。');
+        if (streams.size >= 8) throw new ApiError(429, 'too_many_streams', '订阅连接过多，请关闭多余窗口。');
+        res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'X-Accel-Buffering': 'no', Connection: 'keep-alive' });
+        res.flushHeaders();
+        streams.add(res);
+        let stop;
+        const cleanup = () => { streams.delete(res); stop?.(); };
+        res.once('close', cleanup);
+        stop = run.watchEvents({ principal: viewer, after }, page => {
+          // Rust checks membership on every delivery. No raw stdout/stderr reaches the client.
+          if (res.destroyed || !res.write(`event: ${page.event}\ndata: ${JSON.stringify(page)}\n\n`)) res.destroy();
+        }, () => res.end());
+        if (res.destroyed) cleanup();
+      } else if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
         const [principals, bindings, ...resources] = await Promise.all([
           tool('principal_list', { include_deleted: true }), tool('binding_list'), ...kinds.map(kind => tool('resource_list', { kind })),
         ]);
@@ -272,6 +317,7 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
       else res.end();
     }
   });
+  server.on('close', () => { for (const response of streams) response.destroy(); });
   server.requestTimeout = 35_000;
   return { server, token };
 }

@@ -137,9 +137,12 @@ pub(crate) fn guarded_store<T>(
     {
         return Err(RuntimeError::Canceled);
     }
+    let changes = store.connection.total_changes();
     let result = operation(&store)?;
     store.connection.execute_batch("COMMIT")?;
-    agt_storage::wake::notify(home);
+    if store.connection.total_changes() != changes {
+        agt_storage::wake::notify(home);
+    }
     Ok(result)
 }
 

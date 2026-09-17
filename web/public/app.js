@@ -76,6 +76,7 @@ function currentEntry() { return state.conversations.find(x => x.conversation.id
 function isObserver() { return state.page === 'observer' || state.viewer !== state.boot?.principal; }
 function canParticipate() { return !isObserver() && state.conversation?.state === 'active' && currentEntry()?.left_message_seq == null; }
 function setupReadOnly() {
+  ensureEvents();
   $('#chat-commands').disabled = !canParticipate();
   const observing = isObserver(), left = currentEntry()?.left_message_seq != null, dissolved = currentEntry()?.dissolved;
   $('#observe-banner').textContent = observing ? `只读查看 · ${nameOf(state.viewer)}${left ? ' · 已退出群聊，仅显示可见历史' : ''}` : dissolved ? '群聊已解散 · 历史记录只读' : left ? '你已退出群聊 · 仅可查看退出前有权访问的历史' : '会话已归档 · 历史记录只读';
@@ -1103,18 +1104,79 @@ $('#message-body').onkeydown = event => {
     $('#message-body').setAttribute('aria-activedescendant', selected.id);
   } else if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) closeMentions();
 };
-async function poll() {
-  if (state.polling || !state.boot || document.hidden) return;
-  state.polling = true;
-  try { await activity(); if (['chat', 'observer'].includes(state.page)) { await conversations(); await messages(); } $('#connection').textContent = '本地已连接'; }
-  catch (e) { $('#connection').textContent = '连接中断'; if (e.code === 'unauthorized') notify(errorText(e), true); }
-  finally { state.polling = false; }
+let eventSubscription = null, refreshTimer = null, refreshPending = false, directoryPending = false;
+function queueRefresh(directory = false) {
+  refreshPending = true; directoryPending ||= directory;
+  if (refreshTimer || document.hidden) return;
+  refreshTimer = setTimeout(async () => {
+    refreshTimer = null;
+    if (state.polling) { queueRefresh(); return; }
+    refreshPending = false;
+    state.polling = true;
+    try {
+      if (directoryPending) { directoryPending = false; await bootstrap(); }
+      await activity();
+      if (['chat', 'observer'].includes(state.page)) { await conversations(); await messages(); }
+    } catch (e) { $('#connection').textContent = '同步失败'; if (e.code === 'unauthorized') notify(errorText(e), true); }
+    finally { state.polling = false; if (refreshPending) queueRefresh(); }
+  }, 300);
 }
+function ensureEvents() {
+  if (!state.boot || !state.viewer || eventSubscription?.viewer === state.viewer) return;
+  eventSubscription?.controller.abort();
+  const subscription = { viewer: state.viewer, controller: new AbortController(), cursor: null };
+  eventSubscription = subscription;
+  consumeEvents(subscription);
+}
+async function consumeEvents(subscription) {
+  const { controller, viewer } = subscription;
+  let retry = 1000;
+  while (!controller.signal.aborted) {
+    try {
+      const query = new URLSearchParams({ viewer });
+      if (subscription.cursor) query.set('after', subscription.cursor);
+      const response = await fetch(`/api/events?${query}`, { headers: { 'X-AGT-Token': token || '' }, signal: controller.signal });
+      if (!response.ok) { if ([401,403].includes(response.status)) { $('#connection').textContent = '订阅权限已失效'; return; } throw new Error('stream unavailable'); }
+      const reader = response.body.getReader(), decoder = new TextDecoder();
+      let buffer = '';
+      try {
+        while (!controller.signal.aborted) {
+          const { done, value } = await reader.read(); if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          if (buffer.length > 256 * 1024) throw new Error('stream too large');
+          let boundary;
+          while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+            const frame = buffer.slice(0,boundary); buffer = buffer.slice(boundary + 2);
+            const data = frame.split('\n').find(line => line.startsWith('data: '));
+            if (!data) continue;
+            const page = JSON.parse(data.slice(6));
+            if (eventSubscription !== subscription || state.viewer !== viewer) return;
+            subscription.cursor = page.cursor;
+            $('#connection').textContent = '本地已连接'; $('#connection').title = '实时事件订阅已连接'; retry = 1000;
+            if (page.event === 'ready' || page.event === 'resync_required') queueRefresh(true);
+            else if (page.changes?.length) queueRefresh(page.changes.some(change => !change.conversation));
+          }
+        }
+      } finally { await reader.cancel().catch(() => {}); }
+      if (!controller.signal.aborted) throw new Error('stream ended');
+    } catch {
+      if (controller.signal.aborted) return;
+      $('#connection').textContent = '正在重连';
+      await new Promise(resolve => {
+        const finish = () => { clearTimeout(timer); controller.signal.removeEventListener('abort', finish); resolve(); };
+        const timer = setTimeout(finish, retry);
+        controller.signal.addEventListener('abort', finish, { once: true });
+      });
+      retry = Math.min(retry * 2, 15000);
+    }
+  }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) queueRefresh(true); });
 async function init() {
-  try { await bootstrap(); await conversations(); await activity(); setupReadOnly(); $('#connection').textContent = '本地已连接'; }
+  try { await bootstrap(); await conversations(); await activity(); setupReadOnly(); }
   catch (e) { $('#connection').textContent = '未连接'; notify(errorText(e), true); $('#execute').disabled = true; }
 }
-init(); setInterval(poll, 1500);
+init();
 
 function executionFields(agent = {}) {
   const model = agent.model ? ref(agent.model) : '';
