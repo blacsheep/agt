@@ -485,6 +485,17 @@ impl Scheduler {
                         )?;
                         continue;
                     }
+                    if let Some((id, _, true)) = &route
+                        && crate::work::wait::consumed_notice(&self.store.connection, id)?
+                    {
+                        im.update_delivery(
+                            delivery.id,
+                            DeliveryState::Completed,
+                            None,
+                            Some("result consumed by work continuation"),
+                        )?;
+                        continue;
+                    }
                     if message.seq
                         <= self
                             .store
@@ -891,7 +902,12 @@ pub(crate) fn execute(
     request.request_key = if !task.work_notification {
         task.work_id
             .as_ref()
-            .map(|id| crate::work::run_key(id))
+            .map(|id| {
+                crate::work::WorkLedger::open(home)
+                    .and_then(|l| l.get(id))
+                    .map(|i| crate::work::execution_key(&i))
+            })
+            .transpose()?
             .unwrap_or_else(|| format!("schedule:{}:{}", task.id, task.version))
     } else {
         format!("schedule:{}:{}", task.id, task.version)
@@ -915,6 +931,7 @@ pub(crate) fn execute(
     if task.work_id.is_some() && !task.work_notification {
         task.state = match record.state {
             RunState::Completed => "completed",
+            RunState::Suspended => "suspended",
             RunState::Running => "interrupted",
             RunState::Canceled => "canceled",
             RunState::Failed => "failed",

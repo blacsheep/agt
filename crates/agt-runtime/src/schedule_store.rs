@@ -125,7 +125,7 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3..=7 => {},
+            3..=8 => {},
             _ => bail!("unsupported scheduler database version"),
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
@@ -456,6 +456,12 @@ impl ScheduleStore {
         {
             return Ok(None);
         }
+        if let Some(id) = &task.work_id
+            && task.work_notification
+            && crate::work::wait::consumes_notice(&tx, id)?
+        {
+            return Ok(None);
+        }
         let live = tx
             .query_row(
                 "SELECT 1 FROM coordinator WHERE owner=?1 AND expires>?2",
@@ -700,7 +706,7 @@ fn query_tasks(c: &Connection, sql: &str) -> Result<Vec<ScheduledTask>> {
         .map(|r| Ok(serde_json::from_str(&r?)?))
         .collect()
 }
-fn save_task(c: &Connection, t: &ScheduledTask) -> Result<()> {
+pub(crate) fn save_task(c: &Connection, t: &ScheduledTask) -> Result<()> {
     c.execute(
         "UPDATE tasks SET state=?2,due=?3,quiet=?4,version=?5,owner=?6,record=?7 WHERE id=?1",
         params![

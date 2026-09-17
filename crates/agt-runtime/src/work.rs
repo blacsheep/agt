@@ -12,12 +12,13 @@ use crate::ScheduleStore;
 mod control;
 mod dispatch;
 pub(crate) mod queue;
+pub(crate) mod wait;
 pub use control::TaskControl;
 pub(crate) use dispatch::*;
 
 pub(crate) fn migrate(c: &Connection) -> Result<()> {
     let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version == 7 {
+    if version == 8 {
         return Ok(());
     }
     if version < 5 {
@@ -43,7 +44,10 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
     if version < 6 {
         c.execute_batch("ALTER TABLE work_publications ADD COLUMN error TEXT; CREATE INDEX work_execution_state ON work_items(json_extract(record,'$.state')); PRAGMA user_version=6;")?;
     }
-    c.execute_batch("CREATE TABLE work_dependencies(work_id TEXT PRIMARY KEY, depends_on TEXT NOT NULL); CREATE INDEX work_dependency_target ON work_dependencies(depends_on); PRAGMA user_version=7;")?;
+    if version < 7 {
+        c.execute_batch("CREATE TABLE work_dependencies(work_id TEXT PRIMARY KEY, depends_on TEXT NOT NULL); CREATE INDEX work_dependency_target ON work_dependencies(depends_on); PRAGMA user_version=7;")?;
+    }
+    c.execute_batch("CREATE TABLE work_waits(run_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, dependency TEXT NOT NULL, deadline INTEGER NOT NULL, outcome TEXT); CREATE INDEX work_wait_dependency ON work_waits(dependency); PRAGMA user_version=8;")?;
     Ok(())
 }
 
@@ -88,11 +92,29 @@ pub struct Deferred {
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum WorkState {
     Queued,
-    Canceled { reason: String },
-    Running { run_id: String },
-    Succeeded { run_id: String, output: String },
-    Failed { run_id: String, error: String },
-    OutcomeUnknown { run_id: String, reason: String },
+    Canceled {
+        reason: String,
+    },
+    Running {
+        run_id: String,
+    },
+    WaitingDependency {
+        run_id: String,
+        dependency: String,
+        deadline: i64,
+    },
+    Succeeded {
+        run_id: String,
+        output: String,
+    },
+    Failed {
+        run_id: String,
+        error: String,
+    },
+    OutcomeUnknown {
+        run_id: String,
+        reason: String,
+    },
 }
 
 /// Only committed Run results, or a confirmed loss of execution ownership, belong here.
@@ -118,6 +140,8 @@ pub struct WorkItem {
     pub priority_reason: Option<String>,
     #[serde(default)]
     pub deferred: Option<Deferred>,
+    #[serde(default)]
+    pub resume_from: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -201,6 +225,7 @@ impl WorkLedger {
             priority: request.priority,
             priority_reason: None,
             deferred: None,
+            resume_from: None,
             request,
             revision: 1,
             state: WorkState::Queued,
@@ -226,15 +251,18 @@ impl WorkLedger {
         let mut stmt = self
             .store
             .connection
-            .prepare("SELECT record FROM work_items WHERE json_extract(record,'$.state') IN ('queued','running') ORDER BY rowid")?;
+            .prepare("SELECT record FROM work_items WHERE json_extract(record,'$.state') IN ('queued','running','waiting_dependency') ORDER BY rowid")?;
         stmt.query_map([], |r| r.get::<_, String>(0))?
             .map(|r| Ok(serde_json::from_str(&r?)?))
             .collect()
     }
     pub(crate) fn cancel_queued(&mut self, item: &WorkItem, reason: &str) -> Result<WorkItem> {
         self.change(&item.id, item.revision, |item| {
-            if item.state != WorkState::Queued {
-                bail!("work is not queued");
+            if !matches!(
+                item.state,
+                WorkState::Queued | WorkState::WaitingDependency { .. }
+            ) {
+                bail!("work is not queued or waiting");
             }
             item.state = WorkState::Canceled {
                 reason: reason.into(),
@@ -319,6 +347,9 @@ impl WorkLedger {
             bail!("stale work revision");
         }
         let (kind, notify) = apply(&mut item)?;
+        if notify {
+            tx.execute("DELETE FROM work_dependencies WHERE work_id=?1", [&item.id])?;
+        }
         if kind == "running" {
             tx.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?2 AND kind='requested')",params![item.request.assignee,item.id])?;
         }

@@ -10,6 +10,13 @@ pub(crate) fn run_key(id: &str) -> String {
     format!("work:{id}:attempt:1")
 }
 
+pub(crate) fn execution_key(item: &WorkItem) -> String {
+    item.resume_from
+        .as_ref()
+        .map(|id| format!("work:{}:resume:{id}", item.id))
+        .unwrap_or_else(|| run_key(&item.id))
+}
+
 /// Only framework-created messages matching a durable work record are routable.
 pub(crate) fn route(
     store: &ScheduleStore,
@@ -50,6 +57,9 @@ pub(crate) fn runnable(home: &Path, store: &ScheduleStore, task: &ScheduledTask)
         return Ok(true);
     };
     let item = read(&store.connection, id)?;
+    if task.work_notification && super::wait::consumes_notice(&store.connection, id)? {
+        return Ok(false);
+    }
     if !task.work_notification && item.state != WorkState::Queued {
         return Ok(false);
     }
@@ -69,11 +79,11 @@ pub(crate) fn bind_run(home: &Path, task: &ScheduledTask, run: &RunRecord) -> Re
     if task.work_notification {
         return Ok(());
     }
-    if run.request.request_key != run_key(id) {
-        bail!("invalid work run key");
-    }
     let mut ledger = WorkLedger::open(home)?;
     let item = ledger.get(id)?;
+    if run.request.request_key != execution_key(&item) {
+        bail!("invalid work run key");
+    }
     match &item.state {
         WorkState::Queued => {
             ledger.record_running(id, item.revision, &run.id)?;
@@ -100,6 +110,7 @@ fn finish(ledger: &mut WorkLedger, item: &WorkItem, run: &RunRecord) -> Result<(
         RunState::Failed => WorkOutcome::Failed(
             "Agent execution failed; inspect the associated Run for diagnostics.".into(),
         ),
+        RunState::Suspended => bail!("suspended run requires continuation reconciliation"),
         RunState::Canceled | RunState::Running => WorkOutcome::Unknown(
             "Execution stopped or ownership was lost; inspect side effects before retrying.".into(),
         ),
@@ -120,7 +131,13 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                 .authorized(t, crate::schedule_store::now_ms())
                 .unwrap_or(false)
         });
-        let run = runs.by_request_key(&run_key(&item.id))?;
+        let run = runs.by_request_key(&execution_key(&item))?;
+        if matches!(item.state, WorkState::WaitingDependency { .. })
+            || run.as_ref().is_some_and(|r| r.state == RunState::Suspended)
+        {
+            super::wait::reconcile(home, &mut ledger, &item, run.as_ref(), adapter.as_ref())?;
+            continue;
+        }
         if item.state == WorkState::Queued {
             if let Some(run) = &run {
                 // Crash between runs.db claim and the work association. Never execute again.

@@ -10,6 +10,7 @@ pub struct TaskControl {
     home: PathBuf,
     actor: Actor,
     task: Option<crate::ScheduledTask>,
+    native_wait: bool,
 }
 impl TaskControl {
     pub fn local(home: &Path, actor: Actor) -> Self {
@@ -17,6 +18,7 @@ impl TaskControl {
             home: home.into(),
             actor,
             task: None,
+            native_wait: false,
         }
     }
     pub(crate) fn hosted(home: &Path, actor: Actor, task: crate::ScheduledTask) -> Self {
@@ -24,7 +26,12 @@ impl TaskControl {
             home: home.into(),
             actor,
             task: Some(task),
+            native_wait: false,
         }
+    }
+    pub(crate) fn with_native_wait(mut self) -> Self {
+        self.native_wait = true;
+        self
     }
     fn human_manager(&self, im: &ImStore) -> Result<bool> {
         Ok(self.actor.role == agt_service::Role::Manager
@@ -266,7 +273,20 @@ impl TaskControl {
     }
 }
 impl WorkControl for TaskControl {
+    fn supports_await(&self) -> bool {
+        self.native_wait
+            && self
+                .task
+                .as_ref()
+                .is_some_and(|t| t.work_id.is_some() && !t.work_notification)
+    }
     fn call(&self, name: &str, args: Value) -> Result<Value> {
+        if name == "task_await" {
+            if !self.supports_await() {
+                bail!("this execution host cannot suspend work");
+            }
+            return super::wait::register(&self.home, self.task.as_ref().unwrap(), args);
+        }
         if matches!(name, "task_reprioritize" | "task_defer") {
             return self.edit_queue(name, args);
         }
@@ -419,6 +439,11 @@ fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Result<Value> {
         value["blocked_reason"] = json!(blocked(home, store, item, &item.request.assignee)?.or(
             queue::blocker(&store.connection, item, crate::schedule_store::now_ms())?
         ));
+    }
+    if let WorkState::WaitingDependency { dependency, .. } = &item.state {
+        value["waiting_for_task"] = json!(dependency);
+        value["blocked_reason"] =
+            json!(blocked(home, store, item, &item.request.assignee)?.or(Some("waiting_for_task")));
     }
     if let Some(deferred) = &item.deferred {
         // Both sides see the same durable condition; no private dependency payload is exposed.

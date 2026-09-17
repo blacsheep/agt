@@ -10,6 +10,7 @@ use crate::{Result, RunRequest, RuntimeError, fingerprint};
 #[serde(rename_all = "snake_case")]
 pub enum RunState {
     Running,
+    Suspended,
     Completed,
     Failed,
     Canceled,
@@ -66,11 +67,15 @@ impl RunStore {
                  PRAGMA user_version = 2;",
             )?,
             2 => {}
+            3 => {}
             _ => {
                 return Err(RuntimeError::Configuration(
                     "unsupported runtime database version",
                 ));
             }
+        }
+        if version < 3 {
+            tx.execute_batch("CREATE TABLE native_checkpoints(run_id TEXT PRIMARY KEY, checkpoint TEXT NOT NULL); PRAGMA user_version=3;")?;
         }
         tx.commit()?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
@@ -180,6 +185,33 @@ impl RunStore {
         Ok((record, true))
     }
 
+    pub(crate) fn save_checkpoint(
+        &mut self,
+        record: &RunRecord,
+        checkpoint: &crate::work::wait::Checkpoint,
+    ) -> Result<()> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        tx.execute(
+            "INSERT INTO native_checkpoints VALUES(?1,?2)",
+            params![record.id, serde_json::to_string(checkpoint)?],
+        )?;
+        tx.execute(
+            "UPDATE runs SET record_json=?2 WHERE id=?1",
+            params![record.id, serde_json::to_string(record)?],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+    pub(crate) fn checkpoint(&self, id: &str) -> Result<crate::work::wait::Checkpoint> {
+        let value: String = self.connection.query_row(
+            "SELECT checkpoint FROM native_checkpoints WHERE run_id=?1",
+            [id],
+            |r| r.get(0),
+        )?;
+        Ok(serde_json::from_str(&value)?)
+    }
     pub(crate) fn save(&self, record: &RunRecord) -> Result<()> {
         self.connection.execute(
             "UPDATE runs SET record_json = ?2 WHERE id = ?1",
@@ -236,4 +268,37 @@ pub(crate) fn database_path(
 ) -> Result<std::path::PathBuf> {
     agt_storage::database_path(home, directory, name)
         .map_err(|_| RuntimeError::Configuration("unsafe or inaccessible database path"))
+}
+
+#[cfg(test)]
+mod checkpoint_migration_tests {
+    use super::*;
+    #[test]
+    fn version_two_upgrade_preserves_run_claims_and_rejects_future_schema() {
+        let home = tempfile::tempdir().unwrap();
+        let mut store = RunStore::open(home.path()).unwrap();
+        let request = RunRequest::new("example", "existing work");
+        let (record, _) = store.claim(&request, None).unwrap();
+        store
+            .connection
+            .execute_batch("DROP TABLE native_checkpoints; PRAGMA user_version=2;")
+            .unwrap();
+        drop(store);
+        let mut store = RunStore::open(home.path()).unwrap();
+        let (replayed, claimed) = store.claim(&request, None).unwrap();
+        assert!(!claimed);
+        assert_eq!(replayed.id, record.id);
+        assert_eq!(replayed.state, RunState::Running);
+        let count: i64 = store
+            .connection
+            .query_row("SELECT count(*) FROM native_checkpoints", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+        store
+            .connection
+            .pragma_update(None, "user_version", 4)
+            .unwrap();
+        drop(store);
+        assert!(RunStore::open(home.path()).is_err());
+    }
 }
