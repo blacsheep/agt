@@ -121,10 +121,11 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3 | 4 => {},
+            3..=5 => {},
             _ => bail!("unsupported scheduler database version"),
         }
-        tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL); PRAGMA user_version=4;")?;
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
+        crate::work::migrate(&tx)?;
         tx.commit()?;
         Ok(Self { connection })
     }

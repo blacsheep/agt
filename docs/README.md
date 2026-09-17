@@ -13,9 +13,9 @@
 
 - [外部 Harness 接入](harness-integration.md)：执行引擎、运行环境、Codex 会话与取消边界。
 
-## 待实施设计
+## 实施中设计
 
-- [异步工作任务与事件驱动协作](async-work-orchestration.md)：任务队列、双边等待、优先级、可靠回报、SSE 和 Codex 进度；2026-09-17 设计提案，尚未实施。
+- [异步工作任务与事件驱动协作](async-work-orchestration.md)：任务队列、双边等待、优先级、可靠回报、SSE 和 Codex 进度；2026-09-17 已开始 P1a 任务账本，执行接入与后续阶段尚未完成。
 
 ## 历史设计与实测
 

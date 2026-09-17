@@ -17,6 +17,7 @@ mod resolve;
 mod schedule_store;
 mod scheduler;
 mod store;
+pub mod work;
 pub use audit::{CallRecord, CallState};
 pub use schedule_store::{Discussion, ScheduleStatus, ScheduleStore, ScheduledTask};
 pub use scheduler::{

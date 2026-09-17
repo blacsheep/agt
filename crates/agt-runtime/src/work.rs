@@ -1,0 +1,370 @@
+//! Durable work ledger, separate from chat scheduling.
+//!
+//! This is a trusted persistence API, not an authorization or execution API.
+//! Callers must enforce actor visibility and scheduler admission before mutations.
+//! No CLI/model tools are exposed until that integration is complete.
+use anyhow::{Result, bail};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+
+use crate::ScheduleStore;
+
+pub(crate) fn migrate(c: &Connection) -> Result<()> {
+    let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if version == 5 {
+        return Ok(());
+    }
+    c.execute_batch(
+        "CREATE TABLE work_items(
+            id TEXT PRIMARY KEY, requester TEXT NOT NULL, request_key TEXT NOT NULL,
+            request_json TEXT NOT NULL, revision INTEGER NOT NULL, record TEXT NOT NULL,
+            UNIQUE(requester,request_key));
+        CREATE TABLE work_outbox(
+            seq INTEGER PRIMARY KEY AUTOINCREMENT, work_id TEXT NOT NULL,
+            revision INTEGER NOT NULL, kind TEXT NOT NULL, created_at INTEGER NOT NULL,
+            UNIQUE(work_id,revision));
+        CREATE TABLE work_inbox(
+            recipient TEXT NOT NULL, event_seq INTEGER NOT NULL,
+            state TEXT NOT NULL CHECK(state IN ('pending','handled')),
+            PRIMARY KEY(recipient,event_seq));
+        CREATE TABLE work_publications(
+            event_seq INTEGER PRIMARY KEY, request_key TEXT NOT NULL UNIQUE,
+            destination TEXT NOT NULL, message_id TEXT);
+        PRAGMA user_version=5;",
+    )?;
+    Ok(())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkRequest {
+    pub requester: String,
+    pub assignee: String,
+    pub origin_conversation: String,
+    pub report_to: String,
+    /// Existing authorization inherited from the initiating discussion.
+    pub discussion: String,
+    /// Context boundary captured by the caller; never grants authorization itself.
+    pub context_epoch: i64,
+    pub input: String,
+    pub request_key: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum WorkState {
+    Queued,
+    Running { run_id: String },
+    Succeeded { run_id: String, output: String },
+    Failed { run_id: String, error: String },
+    OutcomeUnknown { run_id: String, reason: String },
+}
+
+/// Only committed Run results, or a confirmed loss of execution ownership, belong here.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WorkOutcome {
+    Succeeded(String),
+    Failed(String),
+    Unknown(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkItem {
+    pub id: String,
+    pub request: WorkRequest,
+    pub revision: i64,
+    #[serde(flatten)]
+    pub state: WorkState,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WorkEvent {
+    pub seq: i64,
+    pub work_id: String,
+    pub revision: i64,
+    pub kind: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WorkPublication {
+    pub event_seq: i64,
+    pub work_id: String,
+    pub revision: i64,
+    pub request_key: String,
+    pub destination: String,
+}
+
+pub struct WorkLedger {
+    store: ScheduleStore,
+}
+
+impl WorkLedger {
+    pub fn open(home: &Path) -> Result<Self> {
+        Ok(Self {
+            store: ScheduleStore::open(home)?,
+        })
+    }
+
+    /// Persist a validated request and its assignee inbox item atomically.
+    /// Replaying the same key returns the original task; different input conflicts.
+    pub fn enqueue(&mut self, request: WorkRequest) -> Result<WorkItem> {
+        for value in [
+            &request.requester,
+            &request.assignee,
+            &request.origin_conversation,
+            &request.report_to,
+            &request.discussion,
+            &request.request_key,
+        ] {
+            if value.trim().is_empty() || value.len() > 256 {
+                bail!("work identifiers must contain 1..256 bytes");
+            }
+        }
+        if request.input.trim().is_empty()
+            || request.input.len() > 256 * 1024
+            || request.context_epoch < 0
+        {
+            bail!("invalid work input or context epoch");
+        }
+        let tx = self
+            .store
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let encoded = serde_json::to_string(&request)?;
+        let previous: Option<(String, String)> = tx
+            .query_row(
+                "SELECT request_json,record FROM work_items WHERE requester=?1 AND request_key=?2",
+                params![request.requester, request.request_key],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        if let Some((original, record)) = previous {
+            if original != encoded {
+                bail!("work request key conflicts with existing input");
+            }
+            return Ok(serde_json::from_str(&record)?);
+        }
+        let now = crate::schedule_store::now_ms();
+        let item = WorkItem {
+            id: uuid::Uuid::new_v4().to_string(),
+            request,
+            revision: 1,
+            state: WorkState::Queued,
+            created_at: now,
+            updated_at: now,
+        };
+        tx.execute(
+            "INSERT INTO work_items VALUES(?1,?2,?3,?4,?5,?6)",
+            params![
+                item.id,
+                item.request.requester,
+                item.request.request_key,
+                encoded,
+                item.revision,
+                serde_json::to_string(&item)?
+            ],
+        )?;
+        append_event(&tx, &item, "requested", Some(&item.request.assignee), false)?;
+        tx.commit()?;
+        Ok(item)
+    }
+
+    pub fn get(&self, id: &str) -> Result<WorkItem> {
+        read(&self.store.connection, id)
+    }
+
+    /// Associate a Run after unified scheduler admission, before executing side effects.
+    /// This does not reserve an execution slot or authorize starting the Run.
+    pub fn record_running(&mut self, id: &str, revision: i64, run_id: &str) -> Result<WorkItem> {
+        if run_id.trim().is_empty() || run_id.len() > 256 {
+            bail!("invalid run id");
+        }
+        self.change(id, revision, |item| {
+            if item.state != WorkState::Queued {
+                bail!("work is not queued");
+            }
+            item.state = WorkState::Running {
+                run_id: run_id.into(),
+            };
+            Ok(("running", false))
+        })
+    }
+
+    /// Commit result, requester inbox and publication obligation in one transaction.
+    /// An unknown outcome cannot be queued again by this API.
+    pub fn record_outcome(
+        &mut self,
+        id: &str,
+        revision: i64,
+        run_id: &str,
+        outcome: WorkOutcome,
+    ) -> Result<WorkItem> {
+        self.change(id, revision, |item| {
+            if !matches!(&item.state, WorkState::Running {run_id: active} if active == run_id) {
+                bail!("work attempt is not current");
+            }
+            let run_id = run_id.to_owned();
+            let kind = match outcome {
+                WorkOutcome::Succeeded(output) => {
+                    if output.trim().is_empty() {
+                        bail!("empty output is not a successful work result");
+                    }
+                    item.state = WorkState::Succeeded { run_id, output };
+                    "succeeded"
+                }
+                WorkOutcome::Failed(error) => {
+                    if error.trim().is_empty() {
+                        bail!("failure requires an error");
+                    }
+                    item.state = WorkState::Failed { run_id, error };
+                    "failed"
+                }
+                WorkOutcome::Unknown(reason) => {
+                    if reason.trim().is_empty() {
+                        bail!("unknown outcome requires a reason");
+                    }
+                    item.state = WorkState::OutcomeUnknown { run_id, reason };
+                    "outcome_unknown"
+                }
+            };
+            Ok((kind, true))
+        })
+    }
+
+    fn change(
+        &mut self,
+        id: &str,
+        revision: i64,
+        apply: impl FnOnce(&mut WorkItem) -> Result<(&'static str, bool)>,
+    ) -> Result<WorkItem> {
+        let tx = self
+            .store
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut item = read(&tx, id)?;
+        if item.revision != revision {
+            bail!("stale work revision");
+        }
+        let (kind, notify) = apply(&mut item)?;
+        item.revision += 1;
+        item.updated_at = crate::schedule_store::now_ms();
+        tx.execute(
+            "UPDATE work_items SET revision=?2,record=?3 WHERE id=?1",
+            params![id, item.revision, serde_json::to_string(&item)?],
+        )?;
+        append_event(
+            &tx,
+            &item,
+            kind,
+            notify.then_some(item.request.requester.as_str()),
+            notify,
+        )?;
+        tx.commit()?;
+        Ok(item)
+    }
+
+    /// Source cursor; consumers must persist their own acknowledgement after processing.
+    pub fn events_after(&self, seq: i64, limit: u32) -> Result<Vec<WorkEvent>> {
+        let mut statement = self.store.connection.prepare(
+            "SELECT seq,work_id,revision,kind,created_at FROM work_outbox WHERE seq>?1 ORDER BY seq LIMIT ?2")?;
+        Ok(statement
+            .query_map(params![seq, limit.clamp(1, 500)], event_row)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Reading an inbox does not acknowledge its items.
+    pub fn inbox(&self, recipient: &str, after: i64, limit: u32) -> Result<Vec<WorkEvent>> {
+        let mut statement = self.store.connection.prepare(
+            "SELECT e.seq,e.work_id,e.revision,e.kind,e.created_at FROM work_outbox e JOIN work_inbox i ON i.event_seq=e.seq WHERE i.recipient=?1 AND i.state='pending' AND e.seq>?2 ORDER BY e.seq LIMIT ?3")?;
+        Ok(statement
+            .query_map(params![recipient, after, limit.clamp(1, 500)], event_row)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    pub fn pending_publications(&self, limit: u32) -> Result<Vec<WorkPublication>> {
+        let mut statement = self.store.connection.prepare(
+            "SELECT p.event_seq,e.work_id,e.revision,p.request_key,p.destination FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE p.message_id IS NULL ORDER BY p.event_seq LIMIT ?1")?;
+        Ok(statement
+            .query_map([limit.clamp(1, 500)], |r| {
+                Ok(WorkPublication {
+                    event_seq: r.get(0)?,
+                    work_id: r.get(1)?,
+                    revision: r.get(2)?,
+                    request_key: r.get(3)?,
+                    destination: r.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Call only after IM confirms the stable publication key, including on replay.
+    /// Publication does not mean the requester has processed its inbox notification.
+    pub fn confirm_publication(&self, seq: i64, message_id: &str) -> Result<()> {
+        if message_id.trim().is_empty() {
+            bail!("publication requires a message id");
+        }
+        let updated = self.store.connection.execute(
+            "UPDATE work_publications SET message_id=?2 WHERE event_seq=?1 AND (message_id IS NULL OR message_id=?2)",params![seq,message_id])?;
+        if updated != 1 {
+            bail!("publication missing or already confirmed with another message");
+        }
+        Ok(())
+    }
+}
+
+fn read(c: &Connection, id: &str) -> Result<WorkItem> {
+    let value: String = c.query_row("SELECT record FROM work_items WHERE id=?1", [id], |r| {
+        r.get(0)
+    })?;
+    Ok(serde_json::from_str(&value)?)
+}
+
+fn event_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<WorkEvent> {
+    Ok(WorkEvent {
+        seq: r.get(0)?,
+        work_id: r.get(1)?,
+        revision: r.get(2)?,
+        kind: r.get(3)?,
+        created_at: r.get(4)?,
+    })
+}
+
+fn append_event(
+    c: &Connection,
+    item: &WorkItem,
+    kind: &str,
+    recipient: Option<&str>,
+    publish: bool,
+) -> Result<()> {
+    c.execute(
+        "INSERT INTO work_outbox(work_id,revision,kind,created_at) VALUES(?1,?2,?3,?4)",
+        params![item.id, item.revision, kind, item.updated_at],
+    )?;
+    let seq = c.last_insert_rowid();
+    if let Some(recipient) = recipient {
+        c.execute(
+            "INSERT INTO work_inbox VALUES(?1,?2,'pending')",
+            params![recipient, seq],
+        )?;
+    }
+    if publish {
+        // P1 ledger permits exactly one Run per task; retries will be new work items.
+        let key = format!(
+            "work:{}:attempt:1:report:{}",
+            item.id,
+            crate::fingerprint(item.request.report_to.as_bytes())
+        );
+        c.execute(
+            "INSERT INTO work_publications VALUES(?1,?2,?3,NULL)",
+            params![seq, key, item.request.report_to],
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;
