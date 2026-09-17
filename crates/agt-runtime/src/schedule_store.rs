@@ -85,6 +85,7 @@ pub struct ReplyUsage {
 }
 
 pub struct ScheduleStore {
+    pub(crate) home: std::path::PathBuf,
     pub(crate) connection: Connection,
 }
 
@@ -135,7 +136,10 @@ impl ScheduleStore {
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
         crate::work::migrate(&tx)?;
         tx.commit()?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            home: home.into(),
+        })
     }
 
     pub(crate) fn context_cutoff(&self, conversation: &str) -> Result<i64> {
@@ -215,6 +219,7 @@ impl ScheduleStore {
             }
         }
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok(())
     }
 
@@ -271,6 +276,7 @@ impl ScheduleStore {
             _ => bail!("unknown scheduler control"),
         }
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok(())
     }
 
@@ -320,6 +326,7 @@ impl ScheduleStore {
         }
         tx.execute("INSERT INTO coordinator VALUES(1,?1,?2) ON CONFLICT(id) DO UPDATE SET owner=excluded.owner,expires=excluded.expires",params![owner,now+LEASE_MS])?;
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok(true)
     }
 
@@ -402,6 +409,7 @@ impl ScheduleStore {
             params![delivery, task.id],
         )?;
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok(())
     }
 
@@ -507,6 +515,7 @@ impl ScheduleStore {
             task.reason = Some("100 replies reached; send a new human message to reset".into());
             save_task(&tx, &task)?;
             tx.commit()?;
+            agt_storage::wake::notify(&self.home);
             return Ok(None);
         }
         task.state = if replying { "responding" } else { "evaluating" }.into();
@@ -524,6 +533,7 @@ impl ScheduleStore {
         }
         save_task(&tx, &task)?;
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok(Some(task))
     }
 
@@ -584,6 +594,7 @@ impl ScheduleStore {
         }
         save_task(&tx, &task)?;
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok(true)
     }
 
@@ -603,6 +614,7 @@ impl ScheduleStore {
             save_task(&tx, &task)?;
         }
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok(())
     }
 
@@ -616,6 +628,7 @@ impl ScheduleStore {
         }
         let changed=tx.execute("UPDATE discussions SET calls=calls+1 WHERE id=?1 AND state IN ('active','paused') AND expires>?2",params![task.discussion,now])?;
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok(changed == 1)
     }
 

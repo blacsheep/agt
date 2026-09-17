@@ -109,6 +109,7 @@ impl TaskControl {
             store.connection.execute_batch("BEGIN IMMEDIATE")?;
             let result = operation(&store)?;
             store.connection.execute_batch("COMMIT")?;
+            agt_storage::wake::notify(&self.home);
             Ok(result)
         }
     }
@@ -263,6 +264,7 @@ impl TaskControl {
             store.connection.execute_batch("BEGIN IMMEDIATE")?;
             let result = operation(&store)?;
             store.connection.execute_batch("COMMIT")?;
+            agt_storage::wake::notify(&self.home);
             Ok(result)
         }
     }

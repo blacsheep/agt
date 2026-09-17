@@ -38,6 +38,7 @@ pub struct RunRecord {
 }
 
 pub struct RunStore {
+    home: std::path::PathBuf,
     connection: Connection,
 }
 
@@ -83,7 +84,10 @@ impl RunStore {
         tx.commit()?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
         connection.pragma_update(None, "foreign_keys", "ON")?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            home: home.into(),
+        })
     }
 
     pub(crate) fn by_request_key(&self, key: &str) -> Result<Option<RunRecord>> {
@@ -185,6 +189,7 @@ impl RunStore {
             ],
         )?;
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok((record, true))
     }
 
@@ -205,6 +210,7 @@ impl RunStore {
             params![record.id, serde_json::to_string(record)?],
         )?;
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok(())
     }
     pub(crate) fn checkpoint(&self, id: &str) -> Result<crate::work::wait::Checkpoint> {
@@ -220,6 +226,7 @@ impl RunStore {
             "UPDATE runs SET record_json = ?2 WHERE id = ?1",
             params![record.id, serde_json::to_string(record)?],
         )?;
+        agt_storage::wake::notify(&self.home);
         Ok(())
     }
 
@@ -260,6 +267,7 @@ impl RunStore {
             "UPDATE run_calls SET record_json=?2 WHERE id=?1",
             params![record.id, serde_json::to_string(record)?],
         )?;
+        agt_storage::wake::notify(&self.home);
         Ok(())
     }
 }

@@ -194,3 +194,24 @@ fn awaiting_parent_still_receives_child_input_notification() {
             .is_some()
     );
 }
+
+#[test]
+fn scheduler_wake_deadline_tracks_suspended_work_without_busy_scanning() {
+    let (home, mut scheduler, _, parent) = setup();
+    let task = claim_work(&mut scheduler, &parent);
+    execute(
+        home.path(),
+        task,
+        &mut One {
+            name: "task_yield",
+            args: json!({"reason":"timer test", "not_before":now_ms()+5000}),
+            calls: 0,
+        },
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    let delay = scheduler.next_wake_delay().unwrap();
+    assert!(delay > Duration::from_secs(1));
+    assert!(delay <= Duration::from_secs(5));
+}

@@ -237,6 +237,7 @@ impl WorkLedger {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let item = Self::enqueue_on(&tx, request)?;
         tx.commit()?;
+        agt_storage::wake::notify(&self.store.home);
         Ok(item)
     }
 
@@ -428,6 +429,7 @@ impl WorkLedger {
             notify,
         )?;
         tx.commit()?;
+        agt_storage::wake::notify(&self.store.home);
         Ok(item)
     }
 

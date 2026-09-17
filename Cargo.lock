@@ -89,6 +89,7 @@ dependencies = [
 name = "agt-im"
 version = "0.1.0"
 dependencies = [
+ "agt-storage",
  "rusqlite",
  "serde",
  "serde_json",
@@ -229,6 +230,7 @@ name = "agt-storage"
 version = "0.1.0"
 dependencies = [
  "agt-core",
+ "tempfile",
 ]
 
 [[package]]

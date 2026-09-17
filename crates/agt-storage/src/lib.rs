@@ -1,4 +1,5 @@
 pub mod fs;
+pub mod wake;
 
 pub use fs::{
     check_no_symlinks_under, ensure_dir, ensure_dir_under, write_atomic, write_atomic_under,

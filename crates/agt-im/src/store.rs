@@ -1098,8 +1098,14 @@ impl ImStore {
         self.get_conversation(conversation_id)
     }
 
-    pub(crate) fn lock(&self) -> Result<MutexGuard<'_, Connection>> {
-        self.connection.lock().map_err(|_| ImError::LockPoisoned)
+    pub(crate) fn lock(&self) -> Result<StoreGuard<'_>> {
+        let guard = self.connection.lock().map_err(|_| ImError::LockPoisoned)?;
+        let changes = guard.total_changes();
+        Ok(StoreGuard {
+            guard: Some(guard),
+            changes,
+            path: self.path.as_deref(),
+        })
     }
 }
 
@@ -1742,6 +1748,17 @@ fn to_sql_error(error: ImError) -> rusqlite::Error {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[test]
+    fn committed_writes_wake_but_reads_do_not() {
+        let home = tempfile::tempdir().unwrap();
+        let store = ImStore::open(home.path().join("im/im.db")).unwrap();
+        let listener = agt_storage::wake::Listener::open(home.path()).unwrap();
+        principal(&store, "wake-user");
+        assert!(listener.wait(Duration::from_millis(20)).unwrap());
+        store.list_principals().unwrap();
+        assert!(!listener.wait(Duration::from_millis(1)).unwrap());
+    }
     use super::*;
 
     fn principal(store: &ImStore, id: &str) -> PrincipalId {
@@ -2112,5 +2129,42 @@ mod tests {
             .expect("history");
         assert_eq!(page.messages.len(), 1);
         assert_eq!(page.messages[0].body, "old");
+    }
+}
+
+// Send only after the transaction and connection guard have been released.
+// Rollbacks can cause harmless extra hints; consumers always re-read durable state.
+pub(crate) struct StoreGuard<'a> {
+    guard: Option<MutexGuard<'a, Connection>>,
+    changes: u64,
+    path: Option<&'a Path>,
+}
+impl std::ops::Deref for StoreGuard<'_> {
+    type Target = Connection;
+    fn deref(&self) -> &Connection {
+        self.guard.as_ref().unwrap()
+    }
+}
+impl std::ops::DerefMut for StoreGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Connection {
+        self.guard.as_mut().unwrap()
+    }
+}
+impl Drop for StoreGuard<'_> {
+    fn drop(&mut self) {
+        let changed = self
+            .guard
+            .as_ref()
+            .is_some_and(|c| c.is_autocommit() && c.total_changes() != self.changes);
+        drop(self.guard.take());
+        if changed
+            && let Some(path) = self.path
+            && path.file_name().is_some_and(|n| n == "im.db")
+            && let Some(dir) = path.parent()
+            && dir.file_name().is_some_and(|n| n == "im")
+            && let Some(home) = dir.parent()
+        {
+            agt_storage::wake::notify(home);
+        }
     }
 }

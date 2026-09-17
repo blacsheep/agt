@@ -139,6 +139,7 @@ pub(crate) fn guarded_store<T>(
     }
     let result = operation(&store)?;
     store.connection.execute_batch("COMMIT")?;
+    agt_storage::wake::notify(home);
     Ok(result)
 }
 
@@ -219,6 +220,7 @@ pub fn delete_scheduled_conversation(
         [conversation],
     )?;
     store.connection.execute_batch("COMMIT")?;
+    agt_storage::wake::notify(home);
     crate::HarnessSessions::open(home)?.cancel_conversation(conversation)?;
     Ok(result)
 }
@@ -232,6 +234,7 @@ pub fn dissolve_scheduled_group(home: &Path, conversation: &str, actor: &str) ->
         [conversation],
     )?;
     store.connection.execute_batch("COMMIT")?;
+    agt_storage::wake::notify(home);
     crate::HarnessSessions::open(home)?.cancel_conversation(conversation)?;
     Ok(())
 }
@@ -266,6 +269,7 @@ pub fn reset_conversation_context(
     crate::context_store::ContextStore::open(home)?.clear(conversation)?;
     store.connection.execute("UPDATE discussions SET state='ended' WHERE conversation=?1 OR id IN (SELECT discussion FROM tasks WHERE conversation=?1)", [conversation])?;
     store.connection.execute_batch("COMMIT")?;
+    agt_storage::wake::notify(home);
     crate::HarnessSessions::open(home)?.cancel_conversation(conversation)?;
     Ok(
         json!({"conversation":conversation,"reset_through_seq":chat.last_message_seq,"history_preserved":true}),
@@ -299,6 +303,8 @@ impl Scheduler {
     }
 
     pub fn run(&mut self, watch: bool, token: &CancellationToken) -> Result<()> {
+        // Subscribe before the first snapshot: commits during tick leave a queued hint.
+        let listener = agt_storage::wake::Listener::open(&self.home)?;
         loop {
             if token.is_canceled() {
                 for (_, cancel, _) in &self.jobs {
@@ -309,10 +315,62 @@ impl Scheduler {
             if (token.is_canceled() || !watch) && self.jobs.is_empty() {
                 break;
             }
-            thread::sleep(Duration::from_millis(250));
+            let deadline = std::time::Instant::now() + self.next_wake_delay()?;
+            loop {
+                if token.is_canceled() || self.jobs.iter().any(|(_, _, job)| job.is_finished()) {
+                    break;
+                }
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero()
+                    || listener.wait(remaining.min(Duration::from_millis(250)))?
+                {
+                    break;
+                }
+            }
         }
         self.store.release(&self.owner)?;
         Ok(())
+    }
+
+    fn next_wake_delay(&self) -> Result<Duration> {
+        let now = now_ms();
+        // Repair missed hints without using full inbox scans as the normal path.
+        let mut next = now + 30_000;
+        let im = im(&self.home)?;
+        for task in self.store.candidates()? {
+            let mut due = task.due_at;
+            if task.work_id.is_none()
+                && let Ok(page) = im.list_messages(
+                    &ConversationId::new(&task.conversation),
+                    &PrincipalId::new(&task.principal),
+                    MessageListOptions {
+                        limit: 1,
+                        before: None,
+                        after: None,
+                    },
+                )
+                && let Some(message) = page.messages.last()
+            {
+                due = due.max(message.created_at + QUIET_MS);
+                if task.quiet {
+                    due = due.max(task.deadline.min(message.created_at + task.quiet_ms));
+                }
+            }
+            if due > now {
+                next = next.min(due);
+            }
+        }
+        let timer: Option<i64> = self.store.connection.query_row(
+            "SELECT MIN(due) FROM (
+                SELECT expires AS due FROM discussions WHERE state='active'
+                UNION ALL SELECT deadline FROM work_waits WHERE outcome IS NULL
+                UNION ALL SELECT json_extract(record,'$.deferred.not_before') FROM work_items WHERE json_extract(record,'$.state')='queued'
+                UNION ALL SELECT json_extract(record,'$.deferred.deadline') FROM work_items WHERE json_extract(record,'$.state')='queued'
+             ) WHERE due>?1", [now], |r| r.get(0))?;
+        if let Some(timer) = timer {
+            next = next.min(timer);
+        }
+        Ok(Duration::from_millis((next - now).max(1) as u64))
     }
 
     fn tick(&mut self, dispatch: bool) -> Result<()> {
@@ -466,6 +524,7 @@ impl Scheduler {
                         );
                         let _ = store.update(&current, now_ms());
                     }
+                    agt_storage::wake::notify(&home);
                 });
                 self.jobs.push((id, token, handle));
             }
