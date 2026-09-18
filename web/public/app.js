@@ -52,7 +52,38 @@ const nameOf = id => { const p = principalOf(id); return `${p?.name || id}${p?.d
 const canContact = p => !p.deleted && (p.kind !== 'agent' || state.boot.bindings.some(b => b.principal === p.id && items('agent').some(a => ref(a) === b.agent)));
 const dateTime = value => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const empty = (title, description) => `<div class="empty compact"><h2>${esc(title)}</h2><p>${esc(description)}</p></div>`;
-function notify(message, error = false) { $('#notice').textContent = message; $('#notice').className = `notice${error ? ' error' : ''}`; }
+function showNotice(id, message, { error = false, action = null } = {}) {
+  const notice = $(id);
+  notice.dismiss?.();
+  notice.listeners?.abort();
+  const listeners = new AbortController(); notice.listeners = listeners;
+  let timer, closed = false;
+  const dismiss = () => {
+    if (closed || notice.dismiss !== dismiss) return;
+    closed = true; clearTimeout(timer);
+    if (notice.contains(document.activeElement)) $('#chat-commands').focus();
+    notice.classList.add('hidden'); notice.replaceChildren();
+  };
+  const pause = () => clearTimeout(timer);
+  const resume = () => {
+    pause();
+    if (!closed && !error && !notice.matches(':hover') && !notice.contains(document.activeElement)) timer = setTimeout(() => { if (notice.matches(':hover') || notice.contains(document.activeElement)) return; dismiss(); }, action ? 10000 : 5000);
+  };
+  notice.dismiss = dismiss;
+  notice.className = `notice${error ? ' error' : ''}`;
+  const text = document.createElement('span'); text.className = 'notice-text'; text.textContent = message;
+  const content = document.createElement('div'); content.className = 'notice-content'; content.append(text);
+  if (action) content.append(action(dismiss));
+  const close = document.createElement('button'); close.type = 'button'; close.className = 'notice-close'; close.textContent = '×';
+  close.setAttribute('aria-label', '关闭提示'); close.title = '关闭提示'; close.onclick = dismiss;
+  notice.append(content, close);
+  notice.onmouseenter = pause; notice.onmouseleave = resume;
+  notice.addEventListener('focusin', pause, { signal: listeners.signal });
+  notice.addEventListener('focusout', () => queueMicrotask(resume), { signal: listeners.signal });
+  notice.onkeydown = event => { if (event.key === 'Escape') { event.stopPropagation(); dismiss(); } };
+  resume();
+}
+function notify(message, error = false) { showNotice('#notice', message, { error }); }
 function errorText(error) {
   if (error.field === 'data.api_key_env') return '密钥传递失败，请重新输入 API Key 后重试。';
   return debugMode ? `${error.message}${error.field ? ` · 字段：${error.field}` : ''}${error.code ? ` [${error.code}]` : ''}` : error.message; }
@@ -309,10 +340,11 @@ function showDeleteChat(c) {
     await api('conversation', { action: 'hide', conversation: c.id });
     $('#modal').close(); if (state.conversation?.id === c.id) clearConversation();
     await conversations();
-    const notice = $('#deleted-notice'); notice.classList.remove('hidden'); notice.textContent = '已移除个人会话入口，群聊与历史记录保留。';
-    const undo = document.createElement('button'); undo.className = 'quiet'; undo.textContent = '撤销移除';
-    undo.onclick = async () => { undo.disabled = true; try { await api('conversation', {action:'show',conversation:c.id}); notice.classList.add('hidden'); await conversations(); await selectConversation(c.id); } catch(e) {undo.disabled=false;notify(errorText(e),true);} };
-    notice.append(undo);
+    showNotice('#deleted-notice', '已移除个人会话入口，群聊与历史记录保留。', { action: dismiss => {
+      const undo = document.createElement('button'); undo.type = 'button'; undo.className = 'quiet'; undo.textContent = '撤销移除';
+      undo.onclick = async () => { undo.disabled = true; try { await api('conversation', {action:'show',conversation:c.id}); dismiss(); await conversations(); await selectConversation(c.id); } catch(e) {undo.disabled=false;notify(errorText(e),true);} };
+      return undo;
+    } });
   });
 }
 function canResetContext(c) {

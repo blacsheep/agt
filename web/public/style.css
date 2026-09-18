@@ -1755,3 +1755,29 @@ footer { color: var(--muted); }
 .task-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .task-actions button { font-size: 12px; }
 .task-action-form { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; }
+
+/* Transient feedback overlays the workspace without shrinking the conversation. */
+.notice-stack {
+  position: fixed; top: 68px; right: 20px; z-index: 45;
+  width: min(400px, calc(100vw - 32px)); display: grid; gap: 8px;
+  pointer-events: none;
+}
+.notice-stack .notice {
+  margin: 0; padding: 10px 12px; display: flex; align-items: flex-start; gap: 12px;
+  background: #f0f6ff; border: 1px solid #bfd0e8; color: #234369;
+  box-shadow: 0 4px 18px #172b4d18; pointer-events: auto;
+}
+.notice-stack .notice.hidden { display: none; }
+.notice-stack .notice.error { background: #fff3f1; border-color: #e4b4ad; color: #842d26; }
+.notice-content { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.notice-text { display: block; max-height: 24vh; overflow-y: auto; }
+.notice-stack .notice button { margin: 0; }
+.notice-stack .notice-content button { margin-top: 5px; padding: 3px 7px; color: inherit; text-decoration: underline; }
+.notice-stack .notice-close {
+  flex: 0 0 28px; width: 28px; height: 28px; padding: 0;
+  border: 1px solid transparent; background: transparent; color: inherit;
+  font-size: 22px; line-height: 1; border-radius: 5px;
+}
+.notice-stack .notice-close:hover { background: #17365d12; border-color: currentColor; }
+.notice-stack button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (max-width: 760px) { .notice-stack { top: 64px; right: 12px; width: calc(100vw - 24px); } }
