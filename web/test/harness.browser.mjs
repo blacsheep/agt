@@ -129,6 +129,9 @@ try {
   await click('#command-confirm');
   await wait('document.querySelector("#command-action-feedback")?.textContent.includes("已重置")');
   assert.equal(await evaluate('state.messages.length'),1);
+  await wait('document.querySelectorAll(".context-divider").length===1');
+  await evaluate('state.contextResets=[]; messages(true)');
+  assert.equal(await evaluate('document.querySelectorAll(".context-divider").length'),1);
   await evaluate('document.querySelector("#close-command-panel").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
   assert.equal(await evaluate('document.activeElement.id'),'chat-commands');
   await click('#chat-commands');

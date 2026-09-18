@@ -171,3 +171,6 @@ pub(crate) fn fingerprint(value: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     format!("{:x}", Sha256::digest(value))
 }
+
+mod context_history;
+pub use context_history::context_reset_history;

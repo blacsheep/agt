@@ -21,7 +21,7 @@ pub(crate) use dispatch::*;
 
 pub(crate) fn migrate(c: &Connection) -> Result<()> {
     let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version == 14 {
+    if version >= 14 {
         return Ok(());
     }
     if version < 5 {

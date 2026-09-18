@@ -5,7 +5,7 @@ const labels = { provider: 'Provider', model: '模型', prompt: 'Prompt', skill:
 const stateNames = { completed: '已完成', running: '执行中', failed: '失败', canceled: '已取消', succeeded: '成功', started: '结果待确认', idle: '等待执行', skipped: '已跳过', pending: '待执行', processing: '处理中' };
 let token = location.hash.slice(1) || sessionStorage.getItem('agt-token');
 if (location.hash) { sessionStorage.setItem('agt-token', token); history.replaceState(null, '', location.pathname); }
-const state = { boot: null, viewer: null, conversation: null, conversations: [], members: [], messages: [], cursor: null, resourceKind: 'model', runs: [], scheduler: { online: false, discussions: [], tasks: [] }, polling: false, sending: false, pendingSend: null, modalBusy: false, generation: 0, page: 'chat' };
+const state = { boot: null, viewer: null, conversation: null, conversations: [], members: [], messages: [], contextResets: [], cursor: null, resourceKind: 'model', runs: [], scheduler: { online: false, discussions: [], tasks: [] }, polling: false, sending: false, pendingSend: null, modalBusy: false, generation: 0, page: 'chat' };
 const directNames = new Map();
 let debugMode = localStorage.getItem('agt-debug-mode') === 'true';
 let choosingIdentity = false, selectedObserver = null;
@@ -288,7 +288,7 @@ $('#conversation-menu').onkeydown = event => {
 document.addEventListener('pointerdown', event => { if (!event.target.closest('#conversation-menu')) closeConversationMenu(); });
 window.addEventListener('resize', () => closeConversationMenu());
 document.addEventListener('scroll', event => { if (!event.target.closest?.('#conversation-menu')) closeConversationMenu(); }, true);
-function clearConversation() { closeCommandPanel(); document.body.classList.remove('mobile-chat-open'); $('#latest-message').classList.add('hidden'); closeConversationMenu(); $('#group-drawer').close(); state.conversation = null; state.members = []; state.messages = []; state.cursor = null; state.generation++; renderLiveReplies(); renderMessages(); renderChatHead(); setupReadOnly(); }
+function clearConversation() { closeCommandPanel(); document.body.classList.remove('mobile-chat-open'); $('#latest-message').classList.add('hidden'); closeConversationMenu(); $('#group-drawer').close(); state.conversation = null; state.members = []; state.messages = []; state.contextResets = []; state.cursor = null; state.generation++; renderLiveReplies(); renderMessages(); renderChatHead(); setupReadOnly(); }
 async function selectConversation(id) {
   closeCommandPanel();
   if (state.sending) { notify('消息正在发送，请稍后切换会话。'); return; }
@@ -300,7 +300,7 @@ async function selectConversation(id) {
   if (!state.conversation) return;
   document.body.classList.toggle('mobile-chat-open', matchMedia('(max-width: 760px)').matches);
   $('#latest-message').classList.add('hidden');
-  state.messages = []; state.members = []; state.cursor = null;
+  state.messages = []; state.contextResets = []; state.members = []; state.cursor = null;
   state.runs = state.runs.map(r => ({...r, progress: null})); renderLiveReplies();
   $('#message-body').value = ''; state.pendingSend = null; renderMentions();
   renderConversations(); renderChatHead(); setupReadOnly();
@@ -358,6 +358,7 @@ function showResetContext(c, fromComposer = false) {
   dialog('从新的上下文开始？', '<form id="modal-form"><p>停止涉及本会话的 Agent 工作，清除本会话所有 Agent 的会话摘要。下一条新消息将作为新的上下文起点。</p><p class="form-note">聊天记录保留，Agent 仍可通过历史查询工具主动查阅旧消息。已经发出的外部工具操作不会撤销。</p><div class="form-actions"><button class="primary" type="submit">停止并重置上下文</button></div></form>');
   formHandler(async () => {
     await api('conversation', {action:'reset', conversation:c.id, confirm:true});
+    if(state.conversation?.id===c.id) await messages(true);
     $('#modal').close();
     if (state.conversation?.id === c.id) {
       state.generation++;
@@ -574,6 +575,10 @@ async function messages(force = false, older = false) {
   const generation = state.generation;
   const page = await read('message_history', { conversation: c.id, limit: 50, ...(older ? { before: state.cursor } : {}) });
   if (generation !== state.generation || request !== messageRequest) return;
+  const previousResets=JSON.stringify(state.contextResets);
+  const resetMap=new Map((older || state.messages.length>50 ? state.contextResets : []).map(r=>[r.id,r]));
+  (page.context_resets || []).forEach(r=>resetMap.set(r.id,r));
+  state.contextResets=[...resetMap.values()].sort((a,b)=>a.through_seq-b.through_seq || a.id-b.id);
   const oldIds = state.messages.map(m => `${m.id}:${m.deleted_at}`).join('|');
   if (older) { state.messages = [...page.messages, ...state.messages.filter(m => !page.messages.some(n => n.id === m.id))]; state.cursor = page.next_cursor; }
   else if (state.messages.length > 50) {
@@ -581,7 +586,7 @@ async function messages(force = false, older = false) {
     state.messages = [...known.values()].sort((a, b) => a.seq - b.seq);
   } else { state.messages = page.messages; state.cursor = page.next_cursor; }
   const box = $('#messages'); const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 100;
-  if (force || older || oldIds !== state.messages.map(m => `${m.id}:${m.deleted_at}`).join('|')) {
+  if (force || older || previousResets !== JSON.stringify(state.contextResets) || oldIds !== state.messages.map(m => `${m.id}:${m.deleted_at}`).join('|')) {
     const previousHeight = box.scrollHeight; const top = box.scrollTop;
     renderMessages();
     if (older) box.scrollTop = box.scrollHeight - previousHeight + top;
@@ -592,7 +597,10 @@ async function messages(force = false, older = false) {
 }
 function renderMessages() {
   if (!state.conversation) { $('#messages').innerHTML = empty('给协作一个起点', '新建私聊或群聊，邀请你的 Agent 团队。'); return; }
-  $('#messages').innerHTML = state.messages.map(m => {
+  const timeline=[...state.messages.map(m=>({seq:m.seq, message:m})), ...(state.contextResets || []).map(r=>({seq:r.through_seq,reset:r}))].sort((a,b)=>a.seq-b.seq || (a.reset?1:0)-(b.reset?1:0) || (a.reset?.id||0)-(b.reset?.id||0));
+  $('#messages').innerHTML = timeline.map(entry => {
+    if(entry.reset) return `<div class="context-divider" role="separator" aria-label="上下文已重置"><span><strong>新上下文</strong><time>${esc(new Date(entry.reset.created_at).toLocaleString())}</time><small>从这里重新开始 · 聊天记录保留</small></span></div>`;
+    const m=entry.message;
     const own = m.sender_id === state.boot.principal;
     return `<article class="message ${own ? 'own' : ''}"><div class="avatar ${own ? 'user' : ''}">${esc(own ? '你' : nameOf(m.sender_id).slice(0, 1).toUpperCase())}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time>${dateTime(m.created_at)}</time></div><div class="bubble">${esc(m.deleted_at ? '此消息已删除' : m.body)}</div><div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? '查看投递 ↗' : '回复情况'}</button></div></div></article>`;
   }).join('') || empty('会话已就绪', '发送第一条消息，邀请 Agent 回应。');
@@ -1338,6 +1346,7 @@ function showCommandAction(kind) {
       if(reset) await api('conversation',{action:'reset',conversation:c.id,confirm:true});
       else await api('reply',{action:'end',conversation:c.id});
       if(generation!==commandGeneration)return;
+      if(reset) await messages(true);
       $('#command-action-feedback').textContent=reset?'上下文已重置，可以发送新消息。':'已结束本轮讨论。';
       if(reset){
         state.generation++;

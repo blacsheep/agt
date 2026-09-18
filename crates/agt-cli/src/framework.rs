@@ -117,6 +117,15 @@ pub(crate) enum ScheduleCommand {
         #[arg(long)]
         actor: String,
     },
+    ResetHistory {
+        conversation: String,
+        #[arg(long)]
+        actor: String,
+        #[arg(long)]
+        from: i64,
+        #[arg(long)]
+        through: i64,
+    },
     Status,
 }
 
@@ -186,6 +195,17 @@ pub(crate) fn schedule(command: ScheduleCommand, home: &Path, output: OutputMode
         } => {
             return emit(
                 &agt_runtime::reset_conversation_context(home, &conversation, &actor)?,
+                output,
+            );
+        }
+        ScheduleCommand::ResetHistory {
+            conversation,
+            actor,
+            from,
+            through,
+        } => {
+            return emit(
+                &agt_runtime::context_reset_history(home, &conversation, &actor, from, through)?,
                 output,
             );
         }

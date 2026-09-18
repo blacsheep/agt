@@ -216,7 +216,14 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
       } else if (req.method === 'POST' && url.pathname === '/api/read') {
         const data = await body(req); const name = str(data.name);
         if (!readTools.has(name)) throw new ApiError(403, 'tool_denied', '观察接口仅允许读取会话。');
-        send(200, await tool(name, object(data.args ?? {}), data.viewer ? str(data.viewer) : principal));
+        const args=object(data.args ?? {}), viewer=data.viewer ? str(data.viewer) : principal;
+        const result=await tool(name,args,viewer);
+        if(name==='message_history' && Array.isArray(result.messages)) {
+          const first=result.messages[0]?.seq ?? 0;
+          const last=result.messages.at(-1)?.seq ?? 0;
+          result.context_resets=await run(['schedule','reset-history',str(args.conversation),'--actor',viewer,'--from',String(result.next_cursor ? Math.max(0,first-1) : 0),'--through',String(last)]);
+        }
+        send(200,result);
       } else if (req.method === 'POST' && url.pathname === '/api/tool') {
         const data = await body(req); const name = str(data.name);
         if (!writeTools.has(name)) throw new ApiError(403, 'tool_denied', '该操作未开放。');

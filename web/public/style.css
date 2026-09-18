@@ -1781,3 +1781,9 @@ footer { color: var(--muted); }
 .notice-stack .notice-close:hover { background: #17365d12; border-color: currentColor; }
 .notice-stack button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 @media (max-width: 760px) { .notice-stack { top: 64px; right: 12px; width: calc(100vw - 24px); } }
+
+.context-divider { display: flex; align-items: center; gap: 16px; margin: 22px 12px; color: var(--muted, #687386); text-align: center; }
+.context-divider::before, .context-divider::after { content: ''; flex: 1; min-width: 16px; border-top: 1px dashed #c6d0df; }
+.context-divider span { display: grid; gap: 3px; min-width: 0; font-size: 11px; }
+.context-divider strong { color: #405a7c; font-size: 12px; font-weight: 600; }
+.context-divider small { font-size: 11px; }

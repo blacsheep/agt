@@ -130,11 +130,17 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3..=14 => {},
+            3..=15 => {},
             _ => bail!("unsupported scheduler database version"),
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
         crate::work::migrate(&tx)?;
+        if version < 15 {
+            tx.execute_batch("CREATE TABLE context_reset_events(id INTEGER PRIMARY KEY AUTOINCREMENT,conversation TEXT NOT NULL,through_seq INTEGER NOT NULL,created_at INTEGER NOT NULL);
+                CREATE INDEX context_reset_range ON context_reset_events(conversation,through_seq);
+                CREATE TRIGGER context_reset_added AFTER INSERT ON context_reset_events BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'context_reset',NEW.created_at); END;
+                PRAGMA user_version=15;")?;
+        }
         tx.commit()?;
         Ok(Self {
             connection,

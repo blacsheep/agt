@@ -269,6 +269,10 @@ pub fn reset_conversation_context(
     // Epoch and discussion cancellation commit together in scheduler.db. Removing a
     // cached summary before that commit is safe: on failure it can be rebuilt from IM.
     store.connection.execute("INSERT INTO context_resets VALUES(?1,?2) ON CONFLICT(conversation) DO UPDATE SET through_seq=MAX(through_seq,excluded.through_seq)", rusqlite::params![conversation, chat.last_message_seq])?;
+    store.connection.execute(
+        "INSERT INTO context_reset_events(conversation,through_seq,created_at) VALUES(?1,?2,?3)",
+        rusqlite::params![conversation, chat.last_message_seq, now_ms()],
+    )?;
     crate::context_store::ContextStore::open(home)?.clear(conversation)?;
     store.connection.execute("UPDATE discussions SET state='ended' WHERE conversation=?1 OR id IN (SELECT discussion FROM tasks WHERE conversation=?1)", [conversation])?;
     store.connection.execute_batch("COMMIT")?;
