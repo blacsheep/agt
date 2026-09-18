@@ -22,6 +22,28 @@ pub struct HarnessSession {
 pub struct HarnessSessions {
     pub(crate) db: Connection,
 }
+/// Before submission, errors cannot leave an active external turn behind.
+/// After submission, only the normal durable completion path may unlock.
+pub(crate) struct ExecutionLock<'a> {
+    sessions: &'a HarnessSessions,
+    id: &'a str,
+    submitted: std::cell::Cell<bool>,
+}
+impl ExecutionLock<'_> {
+    pub(crate) fn submitted(&self) {
+        self.submitted.set(true);
+    }
+}
+impl Drop for ExecutionLock<'_> {
+    fn drop(&mut self) {
+        if !self.submitted.get() {
+            let _ = self.sessions.db.execute(
+                "UPDATE harness_sessions SET dirty=0 WHERE scope=?1",
+                [self.id],
+            );
+        }
+    }
+}
 impl HarnessSessions {
     pub fn open(home: &Path) -> Result<Self> {
         let db = Connection::open(crate::store::database_path(
@@ -146,6 +168,14 @@ impl HarnessSessions {
             bail!("session is running or interrupted; stop and reset it before retrying");
         }
         Ok(())
+    }
+    pub(crate) fn execution_lock<'a>(&'a self, id: &'a str) -> Result<ExecutionLock<'a>> {
+        self.lock(id)?;
+        Ok(ExecutionLock {
+            sessions: self,
+            id,
+            submitted: std::cell::Cell::new(false),
+        })
     }
     pub fn configure(&self, id: &str, model: &str, effort: Option<&str>) -> Result<HarnessSession> {
         self.lock(id)?;

@@ -15,7 +15,9 @@ for line in sys.stdin:
  v=json.loads(line)
  with (root/'protocol.jsonl').open('a') as log:log.write(json.dumps(v)+'\n')
  method=v.get('method');p=v.get('params',{});id=v.get('id')
- if method=='initialize':reply(id,{'userAgent':'fixture/1'})
+ if method=='initialize':
+  if (root/'startup-fails').exists():sys.exit(0)
+  reply(id,{'userAgent':'fixture/1'})
  elif method=='account/read':reply(id,{'account':None,'requiresOpenaiAuth':False})
  elif method=='model/list':
   models=[{'id':'fixture-model','model':'fixture-model','displayName':'Fixture model','description':'Local test model','defaultReasoningEffort':'high','supportedReasoningEfforts':[{'reasoningEffort':'high','description':'High'},{'reasoningEffort':'xhigh','description':'Extra high'}],'isDefault':True,'hidden':False}]

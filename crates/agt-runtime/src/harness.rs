@@ -189,7 +189,7 @@ pub(crate) fn execute(
         )
         .map_err(error)?;
     let scope = session.id;
-    sessions.lock(&scope).map_err(error)?;
+    let execution_lock = sessions.execution_lock(&scope).map_err(error)?;
     // Read the snapshot after acquiring the same lock used by configuration commands.
     let session = sessions.get(&scope).map_err(error)?;
     let harness = session.config;
@@ -326,6 +326,7 @@ pub(crate) fn execute(
                 store.save(record)?;
             }
             Event::Submitted => {
+                execution_lock.submitted();
                 record.execution.as_mut().unwrap()["outcome_unknown"] = json!(true);
                 store.save(record)?;
             }
@@ -489,7 +490,7 @@ pub(crate) fn execute(
         store.save_checkpoint(
             record,
             &crate::work::wait::Checkpoint::Codex {
-                session_record: scope,
+                session_record: scope.clone(),
                 thread_id: session
                     .session_id
                     .ok_or_else(|| error("completed turn has no thread"))?,
