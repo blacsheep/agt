@@ -52,7 +52,7 @@ impl BindingStore {
         match version {
             0 => tx.execute_batch("CREATE TABLE bindings(principal TEXT PRIMARY KEY, agent TEXT NOT NULL, definition TEXT NOT NULL);
                 CREATE TABLE response_policies(conversation TEXT NOT NULL,principal TEXT NOT NULL,policy TEXT NOT NULL,PRIMARY KEY(conversation,principal)); PRAGMA user_version=1;")?,
-            1 | 2 | 3 => {},
+            1..=4 => {},
             _ => bail!("unsupported bindings database version"),
         }
         if version < 2 {
@@ -62,6 +62,15 @@ impl BindingStore {
             tx.execute_batch("CREATE TABLE IF NOT EXISTS binding_origins(principal TEXT PRIMARY KEY, agent TEXT NOT NULL);
                 INSERT OR REPLACE INTO binding_origins SELECT principal,agent FROM bindings;
                 PRAGMA user_version=3;")?;
+        }
+        if version < 4 {
+            tx.execute_batch("CREATE TABLE IF NOT EXISTS change_outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT,conversation TEXT,kind TEXT NOT NULL,at INTEGER NOT NULL);
+                CREATE TRIGGER IF NOT EXISTS binding_added AFTER INSERT ON bindings BEGIN INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
+                CREATE TRIGGER IF NOT EXISTS binding_changed AFTER UPDATE ON bindings BEGIN INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
+                CREATE TRIGGER IF NOT EXISTS binding_removed AFTER DELETE ON bindings BEGIN INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
+                CREATE TRIGGER IF NOT EXISTS policy_added AFTER INSERT ON response_policies BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'binding',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
+                CREATE TRIGGER IF NOT EXISTS policy_changed AFTER UPDATE ON response_policies BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'binding',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
+                PRAGMA user_version=4;")?;
         }
         tx.commit()?;
         Ok(Self {
@@ -105,6 +114,7 @@ impl BindingStore {
             params![binding.principal.as_str(), binding.agent],
         )?;
         tx.commit()?;
+        agt_storage::wake::notify(&self.home);
         Ok(binding)
     }
 
@@ -172,6 +182,7 @@ impl BindingStore {
         {
             bail!("Agent has no saved running settings");
         }
+        agt_storage::wake::notify(&self.home);
         Ok(())
     }
     pub fn unbind(&self, principal: &PrincipalId) -> Result<()> {
@@ -179,6 +190,7 @@ impl BindingStore {
             "DELETE FROM bindings WHERE principal=?1",
             [principal.as_str()],
         )?;
+        agt_storage::wake::notify(&self.home);
         Ok(())
     }
     pub fn set_policy(
@@ -197,6 +209,7 @@ impl BindingStore {
         }
         self.connection.execute("INSERT INTO response_policies VALUES(?1,?2,?3) ON CONFLICT(conversation,principal) DO UPDATE SET policy=excluded.policy",
             params![conversation.as_str(),principal.as_str(),serde_json::to_string(&policy)?])?;
+        agt_storage::wake::notify(&self.home);
         Ok(())
     }
     pub fn policy(

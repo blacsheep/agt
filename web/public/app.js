@@ -1158,7 +1158,7 @@ async function consumeEvents(subscription) {
             if (eventSubscription !== subscription || state.viewer !== viewer) return;
             subscription.cursor = page.cursor;
             $('#connection').textContent = '本地已连接'; $('#connection').title = '实时事件订阅已连接'; retry = 1000;
-            if (page.event === 'ready' || page.event === 'resync_required') queueRefresh(true);
+            if (page.event === 'ready' || page.event === 'resync_required' || (typeof page.scheduler_online === 'boolean' && page.scheduler_online !== state.scheduler.online)) queueRefresh(true);
             else if (page.changes?.length) queueRefresh(page.changes.some(change => !change.conversation));
           }
         }

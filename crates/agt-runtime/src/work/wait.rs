@@ -299,7 +299,7 @@ pub(super) fn reconcile(
     for dependency in items.iter().filter(|i| terminal(i)) {
         let dependency_id = &dependency.id;
         let notices = {
-            let mut stmt = tx.prepare("SELECT record FROM tasks WHERE json_extract(record,'$.work_id')=?1 AND json_extract(record,'$.work_notification')=1 AND COALESCE(json_extract(record,'$.work_event'),'') NOT IN ('input_requested','resolved') AND state IN ('queued','waiting','blocked','limited','ready_to_reply')")?;
+            let mut stmt = tx.prepare("SELECT record FROM tasks WHERE json_extract(record,'$.work_id')=?1 AND json_extract(record,'$.work_notification')=1 AND COALESCE(json_extract(record,'$.work_event'),'') NOT IN ('input_requested','resolved','dependency_expired') AND state IN ('queued','waiting','blocked','limited','ready_to_reply')")?;
             stmt.query_map([&dependency_id], |r| r.get::<_, String>(0))?
                 .collect::<rusqlite::Result<Vec<_>>>()?
         };

@@ -22,7 +22,9 @@ for line in sys.stdin:
   reply(id,{'data':models,'nextCursor':None})
  elif method=='skills/list':reply(id,{'data':[{'cwd':str(root),'skills':[{'name':'fixture-skill','description':'Test skill'}],'errors':[]}]})
  elif method=='mcpServerStatus/list':reply(id,{'data':[{'name':'fixture-mcp','authStatus':'notLoggedIn','tools':{}}],'nextCursor':None})
- elif method=='thread/name/set':reply(id,{})
+ elif method=='thread/name/set':
+  if (root/'rename-fails').exists():emit({'id':id,'error':{'code':-32000,'message':'fixture rename failure'}})
+  else:reply(id,{})
  elif method=='thread/compact/start':
   reply(id,{})
   if p['threadId']=='hang-compact':

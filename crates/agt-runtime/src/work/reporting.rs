@@ -215,3 +215,46 @@ pub(super) fn publish(home: &Path, store: &ScheduleStore) -> Result<()> {
     }
     Ok(())
 }
+
+/// A queue barrier expiring is a decision request, never permission to skip it.
+pub(super) fn expired_barrier(
+    home: &Path,
+    store: &ScheduleStore,
+    item: WorkItem,
+) -> Result<WorkItem> {
+    if queue::blocker(&store.connection, &item, crate::schedule_store::now_ms())?
+        != Some("dependency_deadline_exceeded")
+    {
+        return Ok(item);
+    }
+    store.connection.execute_batch("BEGIN IMMEDIATE")?;
+    let operation = (|| -> Result<WorkItem> {
+        let mut current = read(&store.connection, &item.id)?;
+        if queue::blocker(&store.connection, &current, crate::schedule_store::now_ms())?
+            != Some("dependency_deadline_exceeded")
+        {
+            return Ok(current);
+        }
+        let deadline = current.deferred.as_ref().and_then(|d| d.deadline);
+        let exists:bool=store.connection.query_row("SELECT EXISTS(SELECT 1 FROM work_outbox WHERE work_id=?1 AND kind='dependency_expired' AND json_extract(payload,'$.deferred.deadline')=?2)",params![current.id,deadline],|r|r.get(0))?;
+        if !exists {
+            super::actions::save_event(
+                &store.connection,
+                &mut current,
+                "dependency_expired",
+                true,
+            )?;
+        }
+        Ok(current)
+    })();
+    store.connection.execute_batch(if operation.is_ok() {
+        "COMMIT"
+    } else {
+        "ROLLBACK"
+    })?;
+    let current = operation?;
+    if current.revision != item.revision {
+        agt_storage::wake::notify(home);
+    }
+    Ok(current)
+}

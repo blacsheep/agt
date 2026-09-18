@@ -620,3 +620,108 @@ fn task_listing_filters_before_pagination_and_exposes_safe_timeline() {
         json!([])
     );
 }
+
+#[test]
+fn completed_codex_without_durable_result_requires_verification() {
+    let (home, user, chat) = external_fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let source = scheduler
+        .store
+        .tasks()
+        .unwrap()
+        .into_iter()
+        .find(|t| t.principal == "a")
+        .unwrap()
+        .message;
+    let control = TaskControl::local(
+        home.path(),
+        Actor {
+            principal: PrincipalId::new("user"),
+            role: Role::Manager,
+            automated_depth: None,
+        },
+    );
+    let item=control.call("task_request",json!({"assignee":"a","conversation":chat,"input":"EMPTY","request_key":"codex-assignee","source_message":source})).unwrap();
+    let id = item["id"].as_str().unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    scheduler.scan().unwrap();
+    let task = claim_work(&mut scheduler, id);
+    execute(
+        home.path(),
+        task,
+        &mut Answer(json!({})),
+        &CancellationToken::new(),
+    )
+    .ok();
+    crate::work::reconcile(home.path()).unwrap();
+    let result = control.call("task_get", json!({"task_id":id})).unwrap();
+    assert_eq!(result["state"], "outcome_unknown");
+    assert!(control.call("task_retry",json!({"task_id":id,"expected_revision":result["revision"],"request_key":"unsafe-retry","reason":"retry"})).is_err());
+}
+
+#[test]
+fn binding_changes_wake_and_project_without_exposing_configuration() {
+    let (home, _user, _chat) = fixture();
+    let mut events = crate::events::Events::open(home.path()).unwrap();
+    events.project().unwrap();
+    let cursor = events.page("user", None, None).unwrap().cursor;
+    let listener = agt_storage::wake::Listener::open(home.path()).unwrap();
+    BindingStore::open(home.path())
+        .unwrap()
+        .set_enabled(&PrincipalId::new("a"), false)
+        .unwrap();
+    assert!(listener.wait(Duration::from_millis(50)).unwrap());
+    events.project().unwrap();
+    let page = events.page("user", None, Some(&cursor)).unwrap();
+    assert!(
+        page.changes
+            .iter()
+            .any(|c| c.kind == "access" && c.conversation.is_none())
+    );
+}
+
+#[test]
+fn title_metadata_failure_does_not_reclassify_successful_codex_execution() {
+    let (home, user, _chat) = external_fixture();
+    let direct = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let sessions = crate::HarnessSessions::open(home.path()).unwrap();
+    let session = sessions.current(home.path(), "a", &direct).unwrap();
+    sessions.rename(&session.id, "Session title").unwrap();
+    std::fs::write(home.path().join("rename-fails"), "1").unwrap();
+    let sent = user
+        .call(
+            "message_send",
+            json!({"conversation":direct,"body":"do the task","request_key":"title-test"}),
+        )
+        .unwrap();
+    start_discussion(
+        home.path(),
+        &direct,
+        Some(sent["message"]["id"].as_str().unwrap()),
+        false,
+    )
+    .unwrap();
+    let mut scheduler = Scheduler::open(home.path(), 2).unwrap();
+    scheduler.scan().unwrap();
+    let task = claim(&mut scheduler, "a");
+    execute(
+        home.path(),
+        task.clone(),
+        &mut Answer(json!({})),
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    let completed = scheduler.store.get(&task.id).unwrap();
+    assert_eq!(completed.state, "completed");
+    let run = crate::RunStore::open(home.path())
+        .unwrap()
+        .get(completed.run_id.as_deref().unwrap())
+        .unwrap();
+    assert_eq!(run.execution.unwrap()["title_sync_failed"], true);
+    assert_eq!(run.state, crate::RunState::Completed);
+}

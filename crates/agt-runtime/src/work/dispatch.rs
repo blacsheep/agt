@@ -53,7 +53,7 @@ pub(crate) fn notice_blocked(c: &Connection, task: &ScheduledTask) -> Result<boo
         return Ok(false);
     };
     match task.work_event.as_deref() {
-        Some("resolved") => Ok(false),
+        Some("resolved" | "dependency_expired") => Ok(false),
         Some("input_requested") => Ok(
             !matches!(read(c,id)?.state,WorkState::WaitingInput{run_id,..} if task.work_input_id.as_deref()==Some(run_id.as_str())),
         ),
@@ -118,8 +118,8 @@ fn finish(ledger: &mut WorkLedger, item: &WorkItem, run: &RunRecord) -> Result<(
                 WorkOutcome::Succeeded(output.into())
             }
         }
-        RunState::Failed if run.execution.as_ref().is_some_and(|e|e["outcome_unknown"]==true) => WorkOutcome::Unknown(
-            "External turn was submitted but its final state was not confirmed; inspect side effects before retrying.".into(),
+        RunState::Failed if run.execution.as_ref().is_some_and(|e|e["outcome_unknown"]==true || e["turn_status"]=="completed") => WorkOutcome::Unknown(
+            "External execution did not produce a confirmed durable result; inspect side effects before retrying.".into(),
         ),
         RunState::Failed => WorkOutcome::Failed(
             "Agent execution failed; inspect the associated Run for diagnostics.".into(),
@@ -157,6 +157,7 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
             continue;
         }
         if item.state == WorkState::Queued {
+            item = super::reporting::expired_barrier(home, &ledger.store, item)?;
             if let Some(run) = &run {
                 // Crash between runs.db claim and the work association. Never execute again.
                 item = ledger.record_running(&item.id, item.revision, &run.id)?;
@@ -236,6 +237,8 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                     verification
                         .as_deref()
                         .ok_or_else(|| anyhow::anyhow!("verification missing"))?
+                } else if event_kind == "dependency_expired" {
+                    "The queue dependency deadline expired. The task remains blocked; inspect task_get and explicitly reconsider its priority/defer condition, or escalate to the user. Do not treat this as task completion."
                 } else {
                     match &item.state {
                         WorkState::WaitingInput { question, .. } => question.as_str(),
@@ -258,11 +261,25 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                     }
                     end /= 2;
                 }
+                let instruction = if matches!(
+                    event_kind.as_str(),
+                    "input_requested" | "dependency_expired"
+                ) {
+                    "This is a decision request, not a completed result. Inspect task_get, handle the question or blocking condition, and escalate to the user when needed.".to_owned()
+                } else {
+                    format!(
+                        "Review this result, then use task_report(task_id, expected_revision, body) to reliably report to the original conversation {}. Reading or finishing this notification does not discharge the reporting obligation.",
+                        item.request.origin_conversation
+                    )
+                };
                 let mut text = format!(
-                    "[AGT task {} · {}]\n{}{}\n\nThis is a task result notification. Review it, then use task_report(task_id, expected_revision, body) to reliably report to the original conversation {}. Reading or finishing this notification does not discharge the reporting obligation. Full task details: task_get(task_id).",
+                    "[AGT task {} · {}]\n{}{}\n\n{} Full task details: task_get(task_id).",
                     item.id,
-                    if event_kind == "resolved" {
-                        "resolved"
+                    if matches!(
+                        event_kind.as_str(),
+                        "resolved" | "dependency_expired" | "input_requested"
+                    ) {
+                        event_kind.as_str()
                     } else {
                         match item.state {
                             WorkState::WaitingInput { .. } => "input_required",
@@ -278,7 +295,7 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                     } else {
                         ""
                     },
-                    item.request.origin_conversation
+                    instruction
                 );
                 if let WorkState::WaitingInput { run_id, .. } = &item.state {
                     text.push_str(&format!("\nInput request {run_id}: inspect task_get for the current revision, then reply with task_reply(task_id, input_request_id, expected_revision, answer, request_key). Ask the user if needed. This is business input, never a sandbox or execution permission grant."));

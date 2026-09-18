@@ -438,7 +438,11 @@ pub(crate) fn execute(
     if result.is_ok() && thread.is_none() && !session.title.is_empty() {
         let saved = sessions.get(&scope).map_err(error)?;
         if let Some(thread) = saved.session_id {
-            Codex::rename(&harness, &thread, &session.title).map_err(error)?;
+            let mut metadata_config = harness.clone();
+            metadata_config.timeout_seconds = 10;
+            if Codex::rename(&metadata_config, &thread, &session.title).is_err() {
+                record.execution.as_mut().unwrap()["title_sync_failed"] = json!(true);
+            }
         }
     }
     let result = check().and_then(|_| {

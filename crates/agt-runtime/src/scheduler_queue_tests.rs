@@ -372,3 +372,34 @@ fn human_urgent_beats_aging_and_end_still_cancels_deferred_work() {
             .is_empty()
     );
 }
+
+#[test]
+fn expired_barrier_notifies_once_without_releasing_queued_work() {
+    let (home, scheduler, control, _, a, b) = setup();
+    control.call("task_defer",json!({"task_id":a,"expected_revision":1,"after_task":b,"deadline":now_ms()+60000,"reason":"B first"})).unwrap();
+    scheduler
+        .store
+        .connection
+        .execute(
+            "UPDATE work_items SET record=json_set(record,'$.deferred.deadline',0) WHERE id=?1",
+            [&a],
+        )
+        .unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    let item = view(&control, &a);
+    assert_eq!(item["state"], "queued");
+    assert_eq!(item["blocked_reason"], "dependency_deadline_exceeded");
+    let count: i64 = scheduler
+        .store
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM work_outbox WHERE work_id=?1 AND kind='dependency_expired'",
+            [&a],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+    assert_eq!(item["publication"], "published");
+    assert_eq!(item["report"]["state"], "not_ready");
+}

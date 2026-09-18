@@ -24,12 +24,14 @@ pub struct Page {
     pub cursor: String,
     pub changes: Vec<Change>,
     pub more: bool,
+    pub scheduler_online: bool,
 }
 impl Events {
     pub fn open(home: &Path) -> Result<Self> {
         ImStore::open(agt_storage::database_path(home, "im", "im.db")?)?;
         crate::RunStore::open(home)?;
         crate::ScheduleStore::open(home)?;
+        agt_service::BindingStore::open(home)?;
         let mut connection =
             Connection::open(agt_storage::database_path(home, "runtime", "events.db")?)?;
         connection.busy_timeout(Duration::from_secs(5))?;
@@ -65,6 +67,7 @@ impl Events {
             ("im", "im", "im.db"),
             ("run", "runtime", "runs.db"),
             ("schedule", "runtime", "scheduler.db"),
+            ("binding", "runtime", "bindings.db"),
         ] {
             let db = Connection::open(agt_storage::database_path(&self.home, directory, name)?)?;
             db.busy_timeout(Duration::from_secs(5))?;
@@ -140,6 +143,18 @@ impl Events {
         if conversation.is_some_and(|id| !visible(id)) {
             bail!("subscription membership revoked");
         }
+        // Heartbeats detect a crashed coordinator even when no data changed.
+        let scheduler = Connection::open(agt_storage::database_path(
+            &self.home,
+            "runtime",
+            "scheduler.db",
+        )?)?;
+        scheduler.busy_timeout(Duration::from_secs(5))?;
+        let scheduler_online = scheduler.query_row(
+            "SELECT EXISTS(SELECT 1 FROM coordinator WHERE expires>?1 AND owner LIKE 'scheduler:%')",
+            [crate::schedule_store::now_ms()],
+            |r| r.get::<_, bool>(0),
+        )?;
         let scope = crate::fingerprint(&serde_json::to_vec(&(principal, conversation))?);
         let prefix = format!("{}:{}:", self.generation, scope);
         let floor: i64 =
@@ -163,6 +178,7 @@ impl Events {
                 cursor: format!("{prefix}{high}"),
                 changes: vec![],
                 more: false,
+                scheduler_online,
             });
         };
         let mut stmt = self.connection.prepare(
@@ -216,6 +232,7 @@ impl Events {
             cursor: format!("{prefix}{last}"),
             changes,
             more: last < high,
+            scheduler_online,
         })
     }
 }
@@ -224,6 +241,25 @@ impl Events {
 mod tests {
     use super::*;
     use agt_im::{PrincipalInput, PrincipalKind};
+    #[test]
+    fn heartbeat_detects_coordinator_expiry_without_new_events() {
+        let (home, feed, _im, _) = setup();
+        let initial = feed.page("a", None, None).unwrap();
+        assert!(!initial.scheduler_online);
+        let db = Connection::open(home.path().join("runtime/scheduler.db")).unwrap();
+        db.execute(
+            "INSERT INTO coordinator VALUES(1,'scheduler:test',?1)",
+            [crate::schedule_store::now_ms() + 60_000],
+        )
+        .unwrap();
+        let online = feed.page("a", None, Some(&initial.cursor)).unwrap();
+        assert!(online.scheduler_online);
+        assert!(online.changes.is_empty());
+        db.execute("UPDATE coordinator SET expires=0", []).unwrap();
+        let offline = feed.page("a", None, Some(&online.cursor)).unwrap();
+        assert!(!offline.scheduler_online);
+        assert!(offline.changes.is_empty());
+    }
     fn setup() -> (tempfile::TempDir, Events, ImStore, String) {
         let home = tempfile::tempdir().unwrap();
         let feed = Events::open(home.path()).unwrap();

@@ -324,6 +324,12 @@ impl Codex {
                 if p.get("threadId").is_some_and(|id| id != &thread) {
                     continue;
                 }
+                if p.get("turnId")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| turn.as_deref().is_some_and(|current| current != id))
+                {
+                    continue;
+                }
                 if method == "item/tool/call" {
                     event(Event::Activity {
                         id: p["callId"].as_str().unwrap_or("dynamic"),
