@@ -174,3 +174,12 @@ pub(crate) fn fingerprint(value: &[u8]) -> String {
 
 mod context_history;
 pub use context_history::context_reset_history;
+
+mod harness_control;
+pub use harness_control::SessionControl;
+
+mod tool_progress;
+
+#[cfg(test)]
+#[path = "tests/progress/tools.rs"]
+mod tool_progress_tests;

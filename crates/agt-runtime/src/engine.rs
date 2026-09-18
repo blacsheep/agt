@@ -125,7 +125,7 @@ impl<'a> Runtime<'a> {
             }
         }
         self.store.save(&record)?;
-        Ok(record)
+        self.store.get(&record.id)
     }
 
     fn drive(
@@ -199,6 +199,10 @@ impl<'a> Runtime<'a> {
             .map(|actor| {
                 agt_service::ToolService::open(&self.home, actor.clone())
                     .map(|service| {
+                        let service = service.with_harness_control(Box::new(
+                            crate::SessionControl::new(&self.home, actor.clone())
+                                .with_task(self.scheduled_task.clone()),
+                        ));
                         let service = if agent
                             .builtin_tools
                             .contains(&agt_agent::BuiltinTool::TaskCollaboration)
@@ -233,6 +237,7 @@ impl<'a> Runtime<'a> {
                 let tool_name = schema["name"].as_str().expect("tool name");
                 if record.request.trigger.is_none()
                     && !tool_name.starts_with("resource_")
+                    && !tool_name.starts_with("harness_")
                     && tool_name != "provider_models"
                     && !matches!(
                         tool_name,
@@ -500,11 +505,14 @@ impl<'a> Runtime<'a> {
                     .and_then(|s| s["inputSchema"]["properties"].as_object())
                     .map(|p| p.keys().map(String::as_str).collect::<Vec<_>>())
                     .unwrap_or_default();
-                let mut invocation = self.store.start_call(CallRecord::new(
-                    record,
-                    Some(&call.function.name),
-                    argument_summary(&arguments, &fields),
-                ))?;
+                let mut invocation = self.store.start_call(
+                    CallRecord::new(
+                        record,
+                        Some(&call.function.name),
+                        argument_summary(&arguments, &fields),
+                    )
+                    .with_public_context(&arguments),
+                )?;
                 let result: Result<(String, Option<Value>)> = (|| {
                     if call.function.name == "delegate" {
                         let args: Delegation = serde_json::from_str(&call.function.arguments)?;
@@ -594,6 +602,7 @@ impl<'a> Runtime<'a> {
                         );
                         let result = if let Some(task) = &self.scheduled_task
                             && !task_tool
+                            && !call.function.name.starts_with("framework_harness_")
                         {
                             crate::scheduler::guarded(&self.home, task, operation)?
                         } else {
@@ -619,6 +628,11 @@ impl<'a> Runtime<'a> {
                         Ok((output, error))
                     }
                 })();
+                if let Ok((output, None)) = &result
+                    && let Ok(value) = serde_json::from_str(output)
+                {
+                    invocation.summarize_result(&value);
+                }
                 match &result {
                     Ok((_, None)) => invocation.finish(CallState::Succeeded, None),
                     Ok((_, Some(error))) => {

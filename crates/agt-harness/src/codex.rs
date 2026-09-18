@@ -24,6 +24,7 @@ pub enum Event<'a> {
     Accepted,
     Settled(&'static str),
     Activity {
+        tool_name: Option<&'a str>,
         id: &'a str,
         kind: &'static str,
         status: &'static str,
@@ -409,6 +410,7 @@ impl Codex {
                 }
                 if method == "item/tool/call" {
                     event(Event::Activity {
+                        tool_name: None,
                         id: p["callId"].as_str().unwrap_or("dynamic"),
                         kind: "framework",
                         status: "running",
@@ -422,6 +424,7 @@ impl Codex {
                     };
                     let success = result.is_ok();
                     event(Event::Activity {
+                        tool_name: None,
                         id: p["callId"].as_str().unwrap_or("dynamic"),
                         kind: "framework",
                         status: if success { "completed" } else { "failed" },
@@ -433,6 +436,7 @@ impl Codex {
                     self.send(json!({"id":value["id"],"result":{"success":success,"contentItems":[{"type":"inputText","text":text}]}}))?;
                 } else if value.get("id").is_some() && value.get("method").is_some() {
                     event(Event::Activity {
+                        tool_name: None,
                         id: "input",
                         kind: "input",
                         status: "unsupported",
@@ -468,6 +472,11 @@ impl Codex {
                         "completed"
                     };
                     event(Event::Activity {
+                        tool_name: if kind == "mcp" {
+                            p["item"]["tool"].as_str()
+                        } else {
+                            None
+                        },
                         id: p["item"]["id"].as_str().unwrap_or("unknown"),
                         kind,
                         status,

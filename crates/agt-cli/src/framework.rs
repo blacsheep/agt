@@ -41,6 +41,10 @@ fn service(home: &Path, identity: ServeArgs) -> Result<ToolService> {
         automated_depth: None,
     };
     Ok(ToolService::open(home, actor.clone())?
+        .with_harness_control(Box::new(agt_runtime::SessionControl::new(
+            home,
+            actor.clone(),
+        )))
         .with_work_control(Box::new(agt_runtime::work::TaskControl::local(home, actor))))
 }
 pub(crate) fn serve(args: ServeArgs, home: &Path) -> Result<()> {

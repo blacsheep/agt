@@ -28,18 +28,19 @@ pub(crate) fn stage(
     phase: &str,
 ) -> Result<()> {
     let now = crate::schedule_store::now_ms();
+    let previous = record.progress.take();
     record.progress = Some(RunProgress {
         phase: phase.into(),
         attempt: 0,
         preview: String::new(),
-        started_at: now,
+        started_at: previous.as_ref().map(|p| p.started_at).unwrap_or(now),
         updated_at: now,
         task: task.map(|t| t.id.clone()),
         task_version: task.map(|t| t.version),
         local_checked_at: None,
         protocol_at: None,
         meaningful_at: None,
-        activities: Vec::new(),
+        activities: previous.map(|p| p.activities).unwrap_or_default(),
     });
     store.save(record)
 }
@@ -91,6 +92,12 @@ pub(crate) fn update(
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Activity {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
     pub id: String,
     pub kind: String,
     pub status: String,
@@ -117,7 +124,12 @@ pub(crate) fn harness_event(
         Event::Text(_) => {
             progress.meaningful_at = Some(now);
         }
-        Event::Activity { id, kind, status } => {
+        Event::Activity {
+            id,
+            kind,
+            status,
+            tool_name,
+        } => {
             progress.meaningful_at = Some(now);
             progress.phase = if *status == "running" {
                 "tool_running"
@@ -133,6 +145,15 @@ pub(crate) fn harness_event(
                 activity.updated_at = now;
             } else {
                 progress.activities.push(Activity {
+                    tool_name: tool_name
+                        .filter(|n| {
+                            n.len() <= 128
+                                && n.chars()
+                                    .all(|c| c.is_ascii_alphanumeric() || "_./:-".contains(c))
+                        })
+                        .map(str::to_owned),
+                    label: None,
+                    summary: None,
                     id,
                     kind: (*kind).into(),
                     status: (*status).into(),

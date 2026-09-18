@@ -10,6 +10,7 @@ pub struct ToolService {
     home: PathBuf,
     messaging: Messaging,
     resource_management: bool,
+    harness: Option<Box<dyn crate::HarnessControl>>,
     work: Option<Box<dyn crate::WorkControl>>,
 }
 impl ToolService {
@@ -18,11 +19,17 @@ impl ToolService {
             home: home.to_owned(),
             messaging: Messaging::open(home, actor)?,
             resource_management: false,
+            harness: None,
             work: None,
         })
     }
     pub fn schemas(&self) -> Vec<Value> {
         let mut result = schemas(self.messaging.actor.role, self.resource_management);
+        if self.harness.is_some()
+            && (self.resource_management || self.messaging.actor.role == Role::Manager)
+        {
+            result.extend(super::harness_tools::schemas());
+        }
         if self.work.is_some() {
             let string = json!({"type":"string"});
             result.extend([
@@ -48,6 +55,10 @@ impl ToolService {
     }
     pub fn with_work_control(mut self, work: Box<dyn crate::WorkControl>) -> Self {
         self.work = Some(work);
+        self
+    }
+    pub fn with_harness_control(mut self, control: Box<dyn crate::HarnessControl>) -> Self {
+        self.harness = Some(control);
         self
     }
     pub fn with_resource_management(mut self, enabled: bool) -> Self {
@@ -81,6 +92,14 @@ impl ToolService {
     }
 
     fn call_inner(&self, name: &str, args: Value) -> Result<Value> {
+        if name.starts_with("harness_") {
+            self.require_resource_management()?;
+            return self
+                .harness
+                .as_ref()
+                .expect("schema checked")
+                .call(name, args);
+        }
         if matches!(
             name,
             "task_request"
@@ -114,9 +133,7 @@ impl ToolService {
             "resource_write" => {
                 self.require_resource_management()?;
                 let d: Write = serde_json::from_value(args)?;
-                if d.kind == "harness" {
-                    m.actor.require_manager()?;
-                }
+
                 let mut value = resources.write(&d.kind, &d.reference, d.create, d.data)?;
                 if d.kind == "agent" {
                     let (category, name) = crate::named_ref(&d.reference)?;
@@ -467,7 +484,7 @@ fn schemas(role: Role, resource_management: bool) -> Vec<Value> {
         tools.extend([
             schema("resource_list","List resource summaries. Secrets are redacted.",json!({"kind":kind}),&["kind"]),
             schema("resource_read","Read a resource by category/name (default category optional). Skills support @scope/package. Secrets are redacted.",json!({"kind":kind,"reference":string}),&["kind","reference"]),
-            schema("resource_write","Create or update resource. data: provider create {base_url,api_key} (api_key_env alternative), update any field; model create {provider,model,params?: ModelConfigUpdate}, update ModelConfigUpdate fields directly. ModelConfigUpdate.context_window is the input token window (4096..2000000, default 272000) used by runtime auto compaction; it does not limit output tokens; prompt {text}; skill create {description}, update {text: full SKILL.md}; mcp single-server {mcpServers:{name:config}}; harness {engine: codex,executable: absolute path,working_directory: absolute path,sandbox: read_only|workspace_write,model?: string,reasoning_effort?: string,description?: string,timeout_seconds?: 10..86400}; harness writes require a human Manager. agent {model OR harness,prompt?,skills?,mcps?,builtin_tools?: [resource_management, task_collaboration],description?}, Exactly one of model/harness required on create. External Agents execute only private messages or explicit mentions; their working directory comes from the harness. Agent arrays replace mounts (empty unmounts all); omitted fields unchanged. Categories must exist. Use exactly one of api_key/api_key_env; credentials are never returned. resource_management grants resource and Agent lifecycle management; task_collaboration separately grants asynchronous task requests, inspection, queue controls, cancellation, business replies and task_report during hosted runs; explicit Native/Codex work also exposes task_await/task_yield/task_input for checkpointed suspension. task_attention is restricted to the human workspace owner. Mount task_collaboration on the requesting lead; assignees only need a valid binding. Agent writes return a configuration summary plus activation status and next_steps. Do not report an Agent ready until its intended binding has enabled=true. Creating an Agent definition does not enable it: use principal_create(kind=agent), then agent_bind; use binding_list to inspect existing identities first.",json!({"kind":kind,"reference":string,"create":{"type":"boolean"},"data":{"type":"object"}}),&["kind","reference","create","data"]),
+            schema("resource_write","Create or update resource. data: provider create {base_url,api_key} (api_key_env alternative), update any field; model create {provider,model,params?: ModelConfigUpdate}, update ModelConfigUpdate fields directly. ModelConfigUpdate.context_window is the input token window (4096..2000000, default 272000) used by runtime auto compaction; it does not limit output tokens; prompt {text}; skill create {description}, update {text: full SKILL.md}; mcp single-server {mcpServers:{name:config}}; harness {engine: codex,executable: absolute path,working_directory: absolute path,sandbox: read_only|workspace_write,model?: string,reasoning_effort?: string,description?: string,timeout_seconds?: 10..86400}; Harness writes require resource_management or Manager. Creating a Harness saves connection configuration; it does not install Codex or create a container. Use harness_models to discover real models and reasoning levels; use harness_session_configure to change only one Agent/chat. Changing a resource default does not change existing sessions. agent {model OR harness,prompt?,skills?,mcps?,builtin_tools?: [resource_management, task_collaboration],description?}, Exactly one of model/harness required on create. External Agents execute only private messages or explicit mentions; their working directory comes from the harness. Agent arrays replace mounts (empty unmounts all); omitted fields unchanged. Categories must exist. Use exactly one of api_key/api_key_env; credentials are never returned. resource_management grants resource and Agent lifecycle management; task_collaboration separately grants asynchronous task requests, inspection, queue controls, cancellation, business replies and task_report during hosted runs; explicit Native/Codex work also exposes task_await/task_yield/task_input for checkpointed suspension. task_attention is restricted to the human workspace owner. Mount task_collaboration on the requesting lead; assignees only need a valid binding. Agent writes return a configuration summary plus activation status and next_steps. Do not report an Agent ready until its intended binding has enabled=true. Creating an Agent definition does not enable it: use principal_create(kind=agent), then agent_bind; use binding_list to inspect existing identities first.",json!({"kind":kind,"reference":string,"create":{"type":"boolean"},"data":{"type":"object"}}),&["kind","reference","create","data"]),
             schema("resource_delete","First omit confirm (or use null) to get dependency-aware deletion plan; then pass exact ordered items as confirm. Empty array does not authorize a nonempty plan. Protects the default prompt.",json!({"kind":kind,"reference":string,"recursive":{"type":"boolean","default":false},"confirm":{"type":["array","null"],"items":string}}),&["kind","reference"]),
             schema("provider_models", "Fetch model IDs using stored Provider credentials. Calls /models; does not run inference.", json!({"reference":string}), &["reference"]),
             schema("resource_test", "Validate Provider or MCP configuration only. Does not contact servers or execute MCP commands.", json!({"kind":{"enum":["provider","mcp"]},"reference":string}), &["kind","reference"]),

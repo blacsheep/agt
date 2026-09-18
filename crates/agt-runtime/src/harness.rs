@@ -88,6 +88,9 @@ pub(crate) fn execute(
     let service = actor
         .map(|a| {
             ToolService::open(home, a.clone()).map(|s| {
+                let s = s.with_harness_control(Box::new(
+                    crate::SessionControl::new(home, a.clone()).with_task(task.cloned()),
+                ));
                 let s = if agent
                     .builtin_tools
                     .contains(&agt_agent::BuiltinTool::TaskCollaboration)
@@ -119,6 +122,7 @@ pub(crate) fn execute(
             let name = s["name"].as_str().unwrap_or("");
             if record.request.trigger.is_none() {
                 return name.starts_with("resource_")
+                    || name.starts_with("harness_")
                     || matches!(
                         name,
                         "provider_models"
@@ -398,13 +402,17 @@ pub(crate) fn execute(
                 "Return your final answer to reply in the current chat; AGT publishes it automatically. message_send may contact other conversations only."
             );
         }
-        let mut tool_call = store.start_call(crate::CallRecord::new(
+        let mut tool_record = crate::CallRecord::new(
             &audit_record,
             Some(name),
             crate::audit::argument_summary(&args, &[]),
-        ))?;
+        )
+        .with_public_context(&args);
+        tool_record.kind = "framework".into();
+        let mut tool_call = store.start_call(tool_record)?;
         let invoke = || service.call(name, args).map_err(error);
         let result = if let Some(t) = task
+            && !name.starts_with("harness_")
             && !matches!(
                 name,
                 "task_request"
@@ -435,6 +443,9 @@ pub(crate) fn execute(
             failures.set(failures.get() + 1);
             crate::CallState::Failed
         };
+        if let Ok(value) = &result {
+            tool_call.summarize_result(value);
+        }
         tool_call.finish(
             state,
             result.as_ref().err().map(crate::audit::runtime_error),

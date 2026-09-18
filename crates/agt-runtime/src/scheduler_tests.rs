@@ -1487,3 +1487,6 @@ mod harness_session_lock_tests;
 
 #[path = "tests/context/reset_history.rs"]
 mod reset_history_tests;
+
+#[path = "tests/harness/tools.rs"]
+mod harness_tool_tests;

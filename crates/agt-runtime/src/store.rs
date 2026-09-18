@@ -208,6 +208,8 @@ impl RunStore {
         record: &RunRecord,
         checkpoint: &crate::work::wait::Checkpoint,
     ) -> Result<()> {
+        let mut record = record.clone();
+        self.merge_tool_progress(&mut record)?;
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -217,7 +219,7 @@ impl RunStore {
         )?;
         tx.execute(
             "UPDATE runs SET record_json=?2 WHERE id=?1",
-            params![record.id, serde_json::to_string(record)?],
+            params![record.id, serde_json::to_string(&record)?],
         )?;
         tx.commit()?;
         agt_storage::wake::notify(&self.home);
@@ -232,9 +234,11 @@ impl RunStore {
         Ok(serde_json::from_str(&value)?)
     }
     pub(crate) fn save(&self, record: &RunRecord) -> Result<()> {
+        let mut record = record.clone();
+        self.merge_tool_progress(&mut record)?;
         self.connection.execute(
             "UPDATE runs SET record_json = ?2 WHERE id = ?1",
-            params![record.id, serde_json::to_string(record)?],
+            params![record.id, serde_json::to_string(&record)?],
         )?;
         agt_storage::wake::notify(&self.home);
         Ok(())
@@ -263,12 +267,28 @@ impl RunStore {
         .collect()
     }
 
+    pub(crate) fn recent_tool_calls(&self, run: &str) -> Result<Vec<crate::CallRecord>> {
+        let mut stmt=self.connection.prepare("SELECT id,record_json FROM run_calls WHERE run_id=?1 AND json_extract(record_json,'$.tool_name') IS NOT NULL ORDER BY id DESC LIMIT 40")?;
+        let rows = stmt.query_map([run], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+        let mut result = Vec::new();
+        for row in rows {
+            let (id, json) = row?;
+            let mut record: crate::CallRecord = serde_json::from_str(&json)?;
+            record.id = id;
+            result.push(record);
+        }
+        result.reverse();
+        Ok(result)
+    }
     pub(crate) fn start_call(&self, mut record: crate::CallRecord) -> Result<crate::CallRecord> {
         self.connection.execute(
             "INSERT INTO run_calls(run_id, record_json) VALUES(?1,?2)",
             params![record.run_id, serde_json::to_string(&record)?],
         )?;
         record.id = self.connection.last_insert_rowid();
+        if record.tool_name.is_some() {
+            self.save(&self.get(&record.run_id)?)?;
+        }
         Ok(record)
     }
 
@@ -277,6 +297,9 @@ impl RunStore {
             "UPDATE run_calls SET record_json=?2 WHERE id=?1",
             params![record.id, serde_json::to_string(record)?],
         )?;
+        if record.tool_name.is_some() {
+            self.save(&self.get(&record.run_id)?)?;
+        }
         agt_storage::wake::notify(&self.home);
         Ok(())
     }

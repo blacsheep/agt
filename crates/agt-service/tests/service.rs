@@ -869,7 +869,7 @@ fn mcp_protocol_accepts_direct_provider_keys_and_exposes_resource_extensions() {
 }
 
 #[test]
-fn resource_agents_can_reference_but_cannot_write_execution_harnesses() {
+fn resource_agents_can_create_and_reference_execution_harnesses() {
     let home = home();
     let config = json!({"engine":"codex","executable":std::env::current_exe().unwrap(),"working_directory":home.path(),"sandbox":"read_only"});
     let owner = service(home.path(), "owner", true);
@@ -891,8 +891,12 @@ fn resource_agents_can_reference_but_cannot_write_execution_harnesses() {
     );
     assert!(owner.call("resource_write",json!({"kind":"agent","reference":"legacy","create":true,"data":{"environment":"local"}})).is_err());
     let args = json!({"kind":"harness","reference":"local","create":true,"data":config});
-    assert!(agent.call("resource_write", args.clone()).is_err());
-    owner.call("resource_write", args).unwrap();
+    assert!(
+        service(home.path(), "a", false)
+            .call("resource_write", args.clone())
+            .is_err()
+    );
+    agent.call("resource_write", args).unwrap();
     let result = agent
         .call(
             "resource_write",

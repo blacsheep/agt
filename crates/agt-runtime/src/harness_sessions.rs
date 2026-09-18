@@ -153,6 +153,15 @@ impl HarnessSessions {
             .collect()
     }
     pub fn configure(&self, id: &str, model: &str, effort: Option<&str>) -> Result<HarnessSession> {
+        self.configure_for_task(id, model, effort, None)
+    }
+    pub(crate) fn configure_for_task(
+        &self,
+        id: &str,
+        model: &str,
+        effort: Option<&str>,
+        task: Option<&crate::ScheduledTask>,
+    ) -> Result<HarnessSession> {
         let lease = self.execution_lock(id)?;
         let result = (|| {
             let mut session = self.get(id)?;
@@ -173,13 +182,23 @@ impl HarnessSessions {
             }
             session.config.model = Some(model.into());
             session.config.reasoning_effort = effort.map(str::to_owned);
-            lease.fenced(|| {
-                self.db.execute(
-                    "UPDATE harness_sessions SET config=?2 WHERE scope=?1",
-                    params![id, serde_json::to_string(&session.config)?],
-                )?;
-                Ok(())
-            })?;
+            // Model discovery may block; only the final write holds the scheduler fence.
+            let persist = || {
+                lease
+                    .fenced(|| {
+                        self.db.execute(
+                            "UPDATE harness_sessions SET config=?2 WHERE scope=?1",
+                            params![id, serde_json::to_string(&session.config)?],
+                        )?;
+                        Ok(())
+                    })
+                    .map_err(|e| crate::RuntimeError::Invalid(e.to_string()))
+            };
+            if let Some(task) = task {
+                crate::scheduler::guarded(&self.home, task, persist)?;
+            } else {
+                persist()?;
+            }
             Ok(())
         })();
         result?;

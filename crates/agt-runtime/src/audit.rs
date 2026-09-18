@@ -9,6 +9,10 @@ pub struct CallRecord {
     pub model_step: u32,
     pub kind: String,
     pub tool_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_summary: Option<String>,
     pub argument_summary: Value,
     pub state: CallState,
     pub error: Option<Value>,
@@ -37,12 +41,51 @@ impl CallRecord {
             model_step: run.model_steps,
             kind: if tool_name.is_some() { "tool" } else { "model" }.into(),
             tool_name: tool_name.map(str::to_owned),
+            public_label: None,
+            public_summary: None,
             argument_summary,
             state: CallState::Started,
             error: None,
             started_at: now(),
             finished_at: None,
         }
+    }
+    pub(crate) fn with_public_context(mut self, args: &Value) -> Self {
+        let name = self
+            .tool_name
+            .as_deref()
+            .unwrap_or("")
+            .trim_start_matches("framework_");
+        self.public_label = match name {
+            "harness_models" | "harness_session_models" => Some("查询可用模型"),
+            "harness_session_get" => Some("读取执行会话"),
+            "harness_session_configure" => Some("修改会话模型"),
+            "resource_write" => Some(match args["kind"].as_str() {
+                Some("harness") => "配置 Harness 连接",
+                Some("agent") => "配置 Agent",
+                Some("model") => "配置模型",
+                _ => "配置资源",
+            }),
+            "agent_bind" => Some("绑定并启用 Agent"),
+            "task_request" => Some("安排协作任务"),
+            _ => None,
+        }
+        .map(str::to_owned);
+        self
+    }
+    pub(crate) fn summarize_result(&mut self, value: &Value) {
+        let name = self
+            .tool_name
+            .as_deref()
+            .unwrap_or("")
+            .trim_start_matches("framework_");
+        self.public_summary = match name {
+            "harness_models" | "harness_session_models" => value["data"]
+                .as_array()
+                .map(|v| format!("找到 {} 个模型", v.len())),
+            "harness_session_configure" => Some("会话模型已更新".into()),
+            _ => None,
+        };
     }
     pub(crate) fn finish(&mut self, state: CallState, error: Option<Value>) {
         self.state = state;
