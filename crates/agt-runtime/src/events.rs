@@ -177,16 +177,28 @@ impl Events {
                 ))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
+        let owner = im.workspace_owner()?.as_ref() == Some(&actor);
         let mut last = cursor;
         let mut changes = Vec::new();
-        for (seq, id, kind) in rows {
+        for (seq, mut id, mut kind) in rows {
             last = seq;
-            if let Some(id) = &id {
-                if conversation.is_some_and(|filter| filter != id) || !visible(id) {
+            if let Some(chat) = &id {
+                if conversation.is_some_and(|filter| filter != chat) {
+                    continue;
+                }
+                if !visible(chat) {
+                    if owner && conversation.is_none() && kind == "work" {
+                        id = None;
+                        kind = "attention".into();
+                    } else {
+                        continue;
+                    }
+                }
+            } else if kind == "attention" {
+                if !owner || conversation.is_some() {
                     continue;
                 }
             } else if kind != "im" && kind != "access" {
-                // Unscoped standalone runs are private to their local owner, not an IM feed.
                 continue;
             }
             if !changes
@@ -296,5 +308,24 @@ mod tests {
         db.execute("UPDATE principals SET deleted_at=1 WHERE id='a'", [])
             .unwrap();
         assert!(feed.page("a", None, None).is_err());
+    }
+    #[test]
+    fn owner_receives_only_generic_attention_for_private_work() {
+        let (home, mut feed, im, chat) = setup();
+        im.ensure_workspace_owner(&PrincipalId::new("outsider"))
+            .unwrap();
+        feed.project().unwrap();
+        let cursor = feed.page("outsider", None, None).unwrap().cursor;
+        let db = Connection::open(home.path().join("runtime/scheduler.db")).unwrap();
+        db.execute(
+            "INSERT INTO change_outbox(conversation,kind,at) VALUES(?1,'work',?2)",
+            params![chat, crate::schedule_store::now_ms()],
+        )
+        .unwrap();
+        feed.project().unwrap();
+        let page = feed.page("outsider", None, Some(&cursor)).unwrap();
+        assert_eq!(page.changes.len(), 1);
+        assert_eq!(page.changes[0].kind, "attention");
+        assert!(page.changes[0].conversation.is_none());
     }
 }

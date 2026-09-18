@@ -130,7 +130,7 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3..=13 => {},
+            3..=14 => {},
             _ => bail!("unsupported scheduler database version"),
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;

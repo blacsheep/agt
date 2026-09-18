@@ -147,3 +147,103 @@ fn unhosted_agent_cannot_cancel_shared_work() {
             .is_err()
     );
 }
+
+#[test]
+fn report_is_a_separate_durable_obligation_and_publication_is_idempotent() {
+    let (home, mut s, chat, parent) = setup();
+    let child = suspend(home.path(), &mut s, &chat, &parent);
+    let mut ledger = WorkLedger::open(home.path()).unwrap();
+    let queued = ledger.get(&child).unwrap();
+    let running = ledger
+        .record_running(&child, queued.revision, "report-test-run")
+        .unwrap();
+    ledger
+        .record_outcome(
+            &child,
+            running.revision,
+            "report-test-run",
+            WorkOutcome::Succeeded("private child result".into()),
+        )
+        .unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    let control = manager(home.path());
+    let item = control.call("task_get", json!({"task_id":child})).unwrap();
+    assert_eq!(item["report"]["state"], "awaiting_report");
+    s.store
+        .connection
+        .execute(
+            "UPDATE work_reports SET created_at=0 WHERE work_id=?1",
+            [&child],
+        )
+        .unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    let count: i64 = s
+        .store
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM change_outbox WHERE kind='attention'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1, "overdue reminder is emitted only once");
+
+    let args = json!({"task_id":child,"expected_revision":item["revision"],"body":"reviewed report for original conversation"});
+    let submitted = control.call("task_report", args.clone()).unwrap();
+    assert_eq!(submitted["report"]["state"], "pending");
+    assert!(control.call("task_report", args.clone()).is_ok());
+    crate::work::reconcile(home.path()).unwrap();
+    let item = control.call("task_get", json!({"task_id":child})).unwrap();
+    assert_eq!(item["report"]["state"], "published");
+    let message = item["report"]["message_id"].as_str().unwrap();
+    // Crash after IM commit but before report acknowledgement: replay the stable message key.
+    s.store
+        .connection
+        .execute(
+            "UPDATE work_reports SET message_id=NULL WHERE work_id=?1",
+            [&child],
+        )
+        .unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    assert_eq!(
+        control.call("task_get", json!({"task_id":child})).unwrap()["report"]["message_id"],
+        message
+    );
+    let mut conflict = args;
+    conflict["body"] = json!("replace already delivered report");
+    assert!(control.call("task_report", conflict).is_err());
+}
+
+#[test]
+fn workspace_incidents_exclude_private_payloads_and_require_owner() {
+    let (home, _s, chat, parent) = setup();
+    let im = im(home.path()).unwrap();
+    im.ensure_workspace_owner(&PrincipalId::new("user"))
+        .unwrap();
+    let mut ledger = WorkLedger::open(home.path()).unwrap();
+    let running = ledger.record_running(&parent, 1, "unknown-test").unwrap();
+    ledger
+        .record_outcome(
+            &parent,
+            running.revision,
+            "unknown-test",
+            WorkOutcome::Unknown("private failure detail".into()),
+        )
+        .unwrap();
+    let control = manager(home.path());
+    let attention = control.call("task_attention", json!({})).unwrap();
+    assert_eq!(attention[0]["reasons"][0], "outcome_unknown");
+    assert!(!attention.to_string().contains("private failure"));
+    assert!(!attention.to_string().contains("delegate then integrate"));
+    assert!(!attention.to_string().contains(&chat));
+    let outsider = TaskControl::local(
+        home.path(),
+        Actor {
+            principal: PrincipalId::new("a"),
+            role: Role::Manager,
+            automated_depth: None,
+        },
+    );
+    assert!(outsider.call("task_attention", json!({})).is_err());
+}

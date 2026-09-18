@@ -397,6 +397,8 @@ pub(crate) fn execute(
                     | "task_yield"
                     | "task_input"
                     | "task_reply"
+                    | "task_report"
+                    | "task_attention"
             ) {
             crate::scheduler::guarded(home, t, invoke)
         } else {

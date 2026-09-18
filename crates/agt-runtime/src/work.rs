@@ -13,6 +13,7 @@ mod actions;
 mod control;
 mod dispatch;
 pub(crate) mod queue;
+mod reporting;
 pub(crate) mod triage;
 pub(crate) mod wait;
 pub use control::TaskControl;
@@ -20,7 +21,7 @@ pub(crate) use dispatch::*;
 
 pub(crate) fn migrate(c: &Connection) -> Result<()> {
     let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version == 13 {
+    if version == 14 {
         return Ok(());
     }
     if version < 5 {
@@ -81,6 +82,18 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
                 INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'schedule',CAST(unixepoch('subsec')*1000 AS INTEGER));
             END;
             PRAGMA user_version=13;")?;
+    }
+
+    if version < 14 {
+        c.execute_batch("CREATE TABLE IF NOT EXISTS work_reports(event_seq INTEGER PRIMARY KEY,work_id TEXT NOT NULL,body TEXT,actor TEXT,message_id TEXT,error TEXT,created_at INTEGER NOT NULL,attention_at INTEGER);
+            INSERT OR IGNORE INTO work_reports(event_seq,work_id,created_at) SELECT seq,work_id,created_at FROM work_outbox WHERE kind IN ('succeeded','failed','canceled','outcome_unknown','resolved');
+            CREATE TRIGGER IF NOT EXISTS report_changed AFTER UPDATE ON work_reports WHEN OLD.message_id IS NOT NEW.message_id OR OLD.error IS NOT NEW.error OR OLD.body IS NOT NEW.body BEGIN
+                INSERT INTO change_outbox(conversation,kind,at) SELECT json_extract(record,'$.request.report_to'),'work',CAST(unixepoch('subsec')*1000 AS INTEGER) FROM work_items WHERE id=NEW.work_id;
+            END;
+            CREATE TRIGGER IF NOT EXISTS report_overdue AFTER UPDATE ON work_reports WHEN OLD.attention_at IS NULL AND NEW.attention_at IS NOT NULL BEGIN
+                INSERT INTO change_outbox(kind,at) VALUES('attention',NEW.attention_at);
+            END;
+            PRAGMA user_version=14;")?;
     }
 
     Ok(())
@@ -541,6 +554,16 @@ fn append_event(
         ],
     )?;
     let seq = c.last_insert_rowid();
+    if matches!(
+        kind,
+        "succeeded" | "failed" | "canceled" | "outcome_unknown" | "resolved"
+    ) {
+        c.execute(
+            "INSERT INTO work_reports(event_seq,work_id,created_at) VALUES(?1,?2,?3)",
+            params![seq, item.id, item.updated_at],
+        )?;
+    }
+
     if let Some(recipient) = recipient {
         c.execute(
             "INSERT INTO work_inbox VALUES(?1,?2,'pending')",

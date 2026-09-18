@@ -367,6 +367,7 @@ impl Scheduler {
             "SELECT MIN(due) FROM (
                 SELECT expires AS due FROM discussions WHERE state='active'
                 UNION ALL SELECT deadline FROM work_waits WHERE outcome IS NULL
+                UNION ALL SELECT created_at+300000 FROM work_reports WHERE body IS NULL AND message_id IS NULL AND attention_at IS NULL
                 UNION ALL SELECT json_extract(record,'$.deferred.not_before') FROM work_items WHERE json_extract(record,'$.state')='queued'
                 UNION ALL SELECT json_extract(record,'$.deferred.deadline') FROM work_items WHERE json_extract(record,'$.state')='queued'
              ) WHERE due>?1", [now], |r| r.get(0))?;

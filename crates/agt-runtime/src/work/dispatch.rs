@@ -259,7 +259,7 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                     end /= 2;
                 }
                 let mut text = format!(
-                    "[AGT task {} · {}]\n{}{}\n\nThis is a task result notification. Review it and report to the original requester in conversation {}. Full task details: task_get(task_id).",
+                    "[AGT task {} · {}]\n{}{}\n\nThis is a task result notification. Review it, then use task_report(task_id, expected_revision, body) to reliably report to the original conversation {}. Reading or finishing this notification does not discharge the reporting obligation. Full task details: task_get(task_id).",
                     item.id,
                     if event_kind == "resolved" {
                         "resolved"
@@ -302,5 +302,6 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
             // A revoked destination leaves the result pending and queryable. Other tasks proceed.
         }
     }
+    super::reporting::publish(home, &ledger.store)?;
     Ok(())
 }

@@ -10,6 +10,7 @@ let server, chrome, socket;
 try {
   await run(['init', home]);
   await run(['im', 'principal', 'create', 'operator']);
+  await run(['im','owner','ensure','operator']);
   const call = (name,args) => run(['tool','call','--principal','operator','--manager',name,'--args',JSON.stringify(args)]);
   await run(['provider','create','fixture','--base-url','http://127.0.0.1:1/v1','--api-key','mock']);
   await run(['model','create','fixture','--provider','fixture','--model','mock']);
@@ -56,6 +57,13 @@ try {
   await evaluate('document.querySelector(".task-action-form textarea").value="用户取消测试任务"; document.querySelector(".task-action-form").requestSubmit();');
   await wait('document.querySelector(".work-state.canceled") !== null');
   assert.equal((await call('task_get',{task_id:task.id})).state,'canceled');
+  await click('[data-task-action=report]');
+  await evaluate('document.querySelector(".task-action-form textarea").value="任务已按用户要求取消，未启动模型。";document.querySelector(".task-action-form").requestSubmit();');
+  await wait('document.querySelector(".task-report").textContent.includes("待发布")');
+  await run(['schedule','run']);
+  await click('#task-refresh');
+  await wait('document.querySelector(".task-report").textContent.includes("已汇报")');
+
   await evaluate('state.page="observer"; state.viewer="lead"; setupReadOnly(); AgtTasks.open();');
   await wait('document.querySelector("#task-filter") !== null');
   await evaluate('document.querySelector("#task-filter").value="all";document.querySelector("#task-filter").dispatchEvent(new Event("change"));');

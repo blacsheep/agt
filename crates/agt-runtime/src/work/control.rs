@@ -292,6 +292,12 @@ impl WorkControl for TaskControl {
         if matches!(name, "task_cancel" | "task_retry" | "task_resolve") {
             return self.lifecycle(name, args);
         }
+        if name == "task_report" {
+            return self.report(args);
+        }
+        if name == "task_attention" {
+            return self.attention(args);
+        }
         if name == "task_reply" {
             return self.reply(args);
         }
@@ -493,6 +499,7 @@ pub(super) fn blocked(
 }
 pub(super) fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Result<Value> {
     let mut value = serde_json::to_value(item)?;
+    value["report"] = super::reporting::status(&store.connection, &item.id)?;
     if item.state == WorkState::Queued {
         value["blocked_reason"] = json!(blocked(home, store, item, &item.request.assignee)?.or(
             queue::blocker(&store.connection, item, crate::schedule_store::now_ms())?

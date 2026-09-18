@@ -589,6 +589,8 @@ impl<'a> Runtime<'a> {
                                 | "framework_task_yield"
                                 | "framework_task_input"
                                 | "framework_task_reply"
+                                | "framework_task_report"
+                                | "framework_task_attention"
                         );
                         let result = if let Some(task) = &self.scheduled_task
                             && !task_tool
