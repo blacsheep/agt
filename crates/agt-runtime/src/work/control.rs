@@ -363,15 +363,39 @@ impl WorkControl for TaskControl {
                         })
                         .transpose()?
                         .unwrap_or(false);
-                    let mut stmt = store.connection.prepare("SELECT record FROM work_items WHERE (?3 OR requester=?1 OR json_extract(record,'$.request.assignee')=?1) AND (NOT ?2 OR json_extract(record,'$.state')='queued') ORDER BY rowid DESC")?;
+                    let conversation = args
+                        .get("conversation")
+                        .map(|v| {
+                            v.as_str()
+                                .ok_or_else(|| anyhow::anyhow!("invalid conversation"))
+                        })
+                        .transpose()?;
+                    let before = args
+                        .get("before")
+                        .map(|v| {
+                            v.as_i64()
+                                .filter(|n| *n > 0)
+                                .ok_or_else(|| anyhow::anyhow!("invalid cursor"))
+                        })
+                        .transpose()?;
+                    let mut stmt = store.connection.prepare("SELECT rowid,record FROM work_items WHERE (?3 OR requester=?1 OR json_extract(record,'$.request.assignee')=?1) AND (NOT ?2 OR json_extract(record,'$.state')='queued') AND (?4 IS NULL OR json_extract(record,'$.request.report_to')=?4) AND (?5 IS NULL OR rowid<?5) ORDER BY rowid DESC")?;
                     let mut result = Vec::new();
                     for row in stmt.query_map(
-                        params![self.actor.principal.as_str(), queued_only, human],
-                        |r| r.get::<_, String>(0),
+                        params![
+                            self.actor.principal.as_str(),
+                            queued_only,
+                            human,
+                            conversation,
+                            before
+                        ],
+                        |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
                     )? {
-                        let item: WorkItem = serde_json::from_str(&row?)?;
+                        let (cursor, record) = row?;
+                        let item: WorkItem = serde_json::from_str(&record)?;
                         if visible(&item) {
-                            result.push(view(&self.home, store, &item)?);
+                            let mut value = view(&self.home, store, &item)?;
+                            value["list_cursor"] = json!(cursor);
+                            result.push(value);
                         }
                         if result.len() >= limit as usize {
                             break;
@@ -479,6 +503,18 @@ pub(super) fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Resul
         value["blocked_reason"] =
             json!(blocked(home, store, item, &item.request.assignee)?.or(Some("waiting_for_task")));
     }
+    if matches!(
+        item.state,
+        WorkState::WaitingInput { .. } | WorkState::WaitingUntil { .. }
+    ) {
+        value["blocked_reason"] = json!(blocked(home, store, item, &item.request.assignee)?.or(
+            Some(if matches!(item.state, WorkState::WaitingInput { .. }) {
+                "waiting_input"
+            } else {
+                "deferred_until"
+            })
+        ));
+    }
     if let Some(deferred) = &item.deferred {
         // Both sides see the same durable condition; no private dependency payload is exposed.
         value["waiting_for_task"] = json!(deferred.after_task);
@@ -502,5 +538,24 @@ pub(super) fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Resul
             },
         Some(Some(_)) => "published",
     });
+    if let Some(run_id) = value["run_id"].as_str()
+        && let Ok(run) = crate::RunStore::open(home).and_then(|s| s.get(run_id))
+    {
+        if let Some(progress) = &run.progress {
+            value["activity"] = json!(progress.activities);
+        } else if let Some(execution) = &run.execution {
+            value["activity"] = execution["activity"]["items"].clone();
+        }
+    }
+    let mut history = store.connection.prepare(
+        "SELECT kind,created_at FROM work_outbox WHERE work_id=?1 ORDER BY seq DESC LIMIT 40",
+    )?;
+    value["timeline"] = json!(
+        history
+            .query_map([&item.id], |r| Ok(
+                json!({"kind":r.get::<_,String>(0)?,"at":r.get::<_,i64>(1)?})
+            ))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    );
     Ok(value)
 }

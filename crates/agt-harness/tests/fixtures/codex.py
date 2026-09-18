@@ -39,10 +39,14 @@ for line in sys.stdin:
   text=p['input'][0]['text']
   if 'HANG' in text:
    (root/'started').write_text(str(__import__('os').getpid()));time.sleep(60)
+  elif 'DISCONNECT' in text:sys.exit(0)
   elif 'FAIL' in text:note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'failed','error':{'message':'fixture failed'}}})
   elif 'EMPTY' in text:note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'completed'}})
   elif 'APPROVE' in text:emit({'id':'approval','method':'item/commandExecution/requestApproval','params':{'threadId':thread,'turnId':turn}})
   else:
+   if 'PROGRESS' in text:
+    note('item/started',{'threadId':thread,'item':{'id':'command-1','type':'commandExecution','command':'secret-command','status':'inProgress'}})
+    note('item/completed',{'threadId':thread,'item':{'id':'command-1','type':'commandExecution','aggregatedOutput':'private-output','status':'completed'}})
    note('item/agentMessage/delta',{'threadId':thread,'turnId':turn,'itemId':'comment','delta':'working preview'})
    note('item/completed',{'threadId':thread,'turnId':turn,'item':{'type':'agentMessage','id':'comment','phase':'commentary','text':'not the final reply'}})
    if 'TOOL' in text:

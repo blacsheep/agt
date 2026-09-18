@@ -19,6 +19,14 @@ pub struct Execution<'a> {
 }
 pub enum Event<'a> {
     Tick,
+    Protocol,
+    Submitted,
+    Settled(&'static str),
+    Activity {
+        id: &'a str,
+        kind: &'static str,
+        status: &'static str,
+    },
     Completed,
     Text(&'a str),
     Tool,
@@ -110,7 +118,12 @@ impl Codex {
                 bail!("Codex execution timed out; inspect the run before retrying");
             }
             match self.messages.recv_timeout(Duration::from_millis(50)) {
-                Ok(value) => return value,
+                Ok(value) => {
+                    if value.is_ok() {
+                        event(Event::Protocol)?;
+                    }
+                    return value;
+                }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(_) => bail!("Codex app-server disconnected; task outcome may be incomplete"),
             }
@@ -283,6 +296,7 @@ impl Codex {
         event(Event::Thread(&thread))?;
         self.next_id += 1;
         let start_id = self.next_id;
+        event(Event::Submitted)?;
         self.send(json!({"id":start_id,"method":"turn/start","params":{"threadId":thread,"input":[{"type":"text","text":execution.input}],"model":harness.model,"effort":harness.reasoning_effort}}))?;
         let mut turn = None;
         let mut final_text = String::new();
@@ -291,6 +305,7 @@ impl Codex {
                 let value = self.receive(event)?;
                 if value["id"] == start_id && value.get("method").is_none() {
                     if value.get("error").is_some() {
+                        event(Event::Settled("rejected"))?;
                         bail!(
                             "Codex turn/start rejected: {}",
                             value["error"]["message"]
@@ -310,7 +325,11 @@ impl Codex {
                     continue;
                 }
                 if method == "item/tool/call" {
-                    event(Event::Tool)?;
+                    event(Event::Activity {
+                        id: p["callId"].as_str().unwrap_or("dynamic"),
+                        kind: "framework",
+                        status: "running",
+                    })?;
                     let name = p["tool"].as_str().context("missing dynamic tool name")?;
                     let allowed = execution.tools.iter().any(|t| t.name == name);
                     let result = if allowed {
@@ -319,12 +338,22 @@ impl Codex {
                         Err(anyhow::anyhow!("tool unavailable"))
                     };
                     let success = result.is_ok();
+                    event(Event::Activity {
+                        id: p["callId"].as_str().unwrap_or("dynamic"),
+                        kind: "framework",
+                        status: if success { "completed" } else { "failed" },
+                    })?;
                     let text = match result {
                         Ok(v) => v.to_string(),
                         Err(e) => e.to_string(),
                     };
                     self.send(json!({"id":value["id"],"result":{"success":success,"contentItems":[{"type":"inputText","text":text}]}}))?;
                 } else if value.get("id").is_some() && value.get("method").is_some() {
+                    event(Event::Activity {
+                        id: "input",
+                        kind: "input",
+                        status: "unsupported",
+                    })?;
                     self.send(json!({"id":value["id"],"error":{"code":-32601,"message":"AGT does not support this interactive request; task stopped without approval"}}))?;
                     bail!(
                         "Codex requested {method}; interactive approvals/input are not supported by this harness"
@@ -336,13 +365,30 @@ impl Codex {
                     }
                 } else if method == "item/agentMessage/delta" {
                     event(Event::Text(p["delta"].as_str().unwrap_or("")))?;
-                } else if method == "item/started"
+                } else if matches!(method, "item/started" | "item/completed")
                     && matches!(
                         p["item"]["type"].as_str(),
                         Some("commandExecution" | "fileChange" | "mcpToolCall" | "dynamicToolCall")
                     )
                 {
-                    event(Event::Tool)?;
+                    let kind = match p["item"]["type"].as_str() {
+                        Some("commandExecution") => "command",
+                        Some("fileChange") => "files",
+                        Some("mcpToolCall") => "mcp",
+                        _ => "framework",
+                    };
+                    let status = if method == "item/started" {
+                        "running"
+                    } else if matches!(p["item"]["status"].as_str(), Some("failed" | "declined")) {
+                        "failed"
+                    } else {
+                        "completed"
+                    };
+                    event(Event::Activity {
+                        id: p["item"]["id"].as_str().unwrap_or("unknown"),
+                        kind,
+                        status,
+                    })?;
                 } else if method == "item/completed" && p["item"]["type"] == "agentMessage" {
                     if p["item"]["phase"] != "commentary" {
                         final_text = p["item"]["text"].as_str().unwrap_or("").to_owned();
@@ -351,6 +397,12 @@ impl Codex {
                     if turn.as_deref().is_some_and(|id| p["turn"]["id"] != id) {
                         continue;
                     }
+                    let status = match p["turn"]["status"].as_str() {
+                        Some("completed") => "completed",
+                        Some("interrupted") => "interrupted",
+                        _ => "failed",
+                    };
+                    event(Event::Settled(status))?;
                     match p["turn"]["status"].as_str() {
                         Some("completed") => {
                             event(Event::Completed)?;

@@ -589,7 +589,7 @@ async function activity() {
   try {
     const query = state.conversation ? '?' + new URLSearchParams({conversation: state.conversation.id, viewer: state.viewer || state.boot.principal}) : '';
     const data = await api('activity' + query); if (generation !== state.generation) return;
-    state.runs = data.runs; state.scheduler = data.scheduler; renderReplyStatus(); renderActivity();
+    state.runs = data.runs; state.scheduler = data.scheduler; renderReplyStatus(); renderActivity(); window.AgtTasks?.refresh();
   } catch (error) {
     if (generation === state.generation) { state.scheduler.online = false; renderReplyStatus(); renderActivity(); }
     throw error;
@@ -598,7 +598,7 @@ async function activity() {
 function runLabel(r) {
   return ({ completed: r.tool_failures ? '回复结束，部分操作未完成' : '本次回复已结束', running: '正在准备回复', failed: '暂时无法回复', canceled: '回复已取消' })[r.state] || '等待处理';
 }
-const progressLabels = { preparing: '准备上下文与工具', waiting: '等待模型输出', reasoning: '模型处理中', generating: '正在生成', tool_pending: '准备工具调用', tool_running: '正在执行工具', compacting: '正在压缩上下文', retrying: '连接异常，正在重试' };
+const progressLabels = { preparing: '准备上下文与工具', waiting: '等待模型输出', reasoning: '模型处理中', generating: '正在生成', tool_pending: '准备工具调用', tool_running: '正在执行工具', compacting: '正在压缩上下文', retrying: '连接异常，正在重试', input_required: '执行器需要交互' };
 function renderLiveReplies() {
   const box = $('#live-replies');
   const runs = state.scheduler.online && state.conversation?.state === 'active' && currentEntry()?.left_message_seq == null
@@ -609,7 +609,7 @@ function renderLiveReplies() {
     let node = previous.get(run.id); previous.delete(run.id);
     if (!node) {
       node = document.createElement('details'); node.className = 'live-reply'; node.dataset.run = run.id; node.open = true;
-      node.innerHTML = '<summary><span class="live-dot" aria-hidden="true"></span><strong></strong><span class="live-phase"></span><small></small></summary><div class="live-body"><p class="live-preview"></p><span class="live-caption"></span></div>';
+      node.innerHTML = '<summary><span class="live-dot" aria-hidden="true"></span><strong></strong><span class="live-phase"></span><small></small></summary><div class="live-body"><p class="live-preview"></p><span class="live-caption"></span><div class="harness-activity"></div></div>';
     }
     const set = (selector, text) => { const target = node.querySelector(selector); if (target.textContent !== text) target.textContent = text; };
     set('strong', nameOf(p.principal) || run.agent.split('/').at(-1));
@@ -621,6 +621,11 @@ function renderLiveReplies() {
     set('.live-preview', p.preview || '');
     preview.hidden = !p.preview;
     set('.live-caption', p.preview ? '生成预览 · 仅显示最近片段，完成后发布正式消息' : p.phase === 'retrying' ? '本次预览已清除，正在重新请求。' : '收到正文后会在这里预览；模型处理期间可能暂时没有文字。');
+    const timeline = node.querySelector('.harness-activity');
+    if (p.protocol_at) {
+      const age = Math.max(0, Math.floor((Date.now() - p.protocol_at) / 1000));
+      timeline.innerHTML = `<div class="progress-clocks"><span>最近协议 ${esc(dateTime(p.protocol_at))}</span><span>最近进展 ${p.meaningful_at ? esc(dateTime(p.meaningful_at)) : '等待中'}</span><span>本地检查 ${p.local_checked_at ? esc(dateTime(p.local_checked_at)) : '—'}</span></div>${age > 30 ? '<p class="form-note">暂未收到新进度，执行结果尚未确认。</p>' : ''}<ol class="task-timeline">${(p.activities || []).slice(-6).map(a => `<li><span>${esc(({command:'执行命令',files:'修改文件',mcp:'调用 MCP',framework:'框架工具',input:'交互请求'})[a.kind] || '工具')}</span><small>${esc(({running:'进行中',completed:'已结束',failed:'失败',unsupported:'不支持的交互'})[a.status] || a.status)} · ${esc(dateTime(a.updated_at))}</small></li>`).join('')}</ol>`;
+    } else timeline.innerHTML = '';
     if (box.children[index] !== node) box.insertBefore(node, box.children[index] || null);
     if (following) preview.scrollTop = preview.scrollHeight;
   }
@@ -1263,9 +1268,10 @@ function closeCommandPanel(restoreFocus = false) {
   document.body.classList.remove('command-panel-open');
   $('#chat-commands').setAttribute('aria-expanded','false');
   $('#command-panel-body').innerHTML='';
-  if (restoreFocus) $('#chat-commands').focus();
+  if (restoreFocus) $($('#command-panel').dataset.mode === 'tasks' ? '#chat-tasks' : '#chat-commands').focus();
 }
 function commandPanel(title, content, kind = 'help') {
+  $('#command-panel').dataset.mode = kind;
   commandGeneration++;
   const opening = $('#command-panel').classList.contains('hidden');
   $('#command-panel').classList.remove('hidden');

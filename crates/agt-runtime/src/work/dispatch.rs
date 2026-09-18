@@ -118,6 +118,9 @@ fn finish(ledger: &mut WorkLedger, item: &WorkItem, run: &RunRecord) -> Result<(
                 WorkOutcome::Succeeded(output.into())
             }
         }
+        RunState::Failed if run.execution.as_ref().is_some_and(|e|e["outcome_unknown"]==true) => WorkOutcome::Unknown(
+            "External turn was submitted but its final state was not confirmed; inspect side effects before retrying.".into(),
+        ),
         RunState::Failed => WorkOutcome::Failed(
             "Agent execution failed; inspect the associated Run for diagnostics.".into(),
         ),

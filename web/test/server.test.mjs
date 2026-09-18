@@ -569,3 +569,14 @@ test('real JSONL watch delivers committed changes and replays a reconnect cursor
   t.after(stopReplay);
   await until(() => replay.some(p => p.changes.some(c => c.kind === 'access')));
 });
+
+
+test('task queries use observer identity while task controls fix the human operator', async t => {
+  const seen = [];
+  const {request} = await fixture(t, async args => {seen.push(args);return [];});
+  assert.equal((await request('/api/read',{name:'task_list',viewer:'lead',args:{conversation:'chat',before:4}})).status,200);
+  assert.deepEqual(seen[0].slice(0,5),['tool','call','--principal','lead','task_list']);
+  assert.equal((await request('/api/tool',{name:'task_cancel',viewer:'lead',args:{}})).status,403);
+  assert.equal((await request('/api/tool',{name:'task_reply',args:{task_id:'id',expected_revision:3,answer:'ok'}})).status,200);
+  assert.deepEqual(seen[1].slice(0,6),['tool','call','--principal','operator','--manager','task_reply']);
+});

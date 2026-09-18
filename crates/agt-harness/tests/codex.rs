@@ -164,3 +164,48 @@ fn control_operations_query_engine_without_sending_chat_messages() {
     assert!(!log.contains("turn/start"));
     assert!(log.contains("thread/compact/start"));
 }
+
+#[test]
+fn activity_is_structured_and_disconnect_has_no_confirmed_terminal_event() {
+    for input in ["PROGRESS", "DISCONNECT"] {
+        let (_dir, config) = fixture();
+        let mut submitted = false;
+        let mut settled = false;
+        let mut activity = Vec::new();
+        let mut event = |e: Event<'_>| {
+            match e {
+                Event::Submitted => submitted = true,
+                Event::Settled(_) => settled = true,
+                Event::Activity { kind, status, .. } => {
+                    activity.push((kind.to_string(), status.to_string()))
+                }
+                _ => {}
+            };
+            Ok(())
+        };
+        let mut client = Codex::connect(&config, &mut event).unwrap();
+        let result = client.execute(
+            &config,
+            Execution {
+                input,
+                instructions: "",
+                thread: None,
+                tools: &[],
+            },
+            &mut event,
+            &mut |_, _| unreachable!(),
+        );
+        assert!(submitted);
+        assert_eq!(settled, input == "PROGRESS");
+        assert_eq!(result.is_ok(), input == "PROGRESS");
+        if input == "PROGRESS" {
+            assert_eq!(
+                activity,
+                vec![
+                    ("command".into(), "running".into()),
+                    ("command".into(), "completed".into())
+                ]
+            );
+        }
+    }
+}

@@ -8,10 +8,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const readTools = new Set(['conversation_list', 'member_list', 'message_history', 'message_status', 'message_inbox']);
-const writeTools = new Set(['direct_create', 'group_create', 'message_send', 'member_add', 'member_remove', 'resource_write', 'principal_create', 'agent_bind', 'agent_unbind', 'agent_set_enabled']);
+const readTools = new Set(['conversation_list', 'member_list', 'message_history', 'message_status', 'message_inbox', 'task_get', 'task_list']);
+const writeTools = new Set(['direct_create', 'group_create', 'message_send', 'member_add', 'member_remove', 'resource_write', 'principal_create', 'agent_bind', 'agent_unbind', 'agent_set_enabled', 'task_cancel', 'task_reply', 'task_reprioritize', 'task_defer', 'task_resolve', 'task_retry']);
 const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent', 'harness'];
-const assets = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
+const assets = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
 
 export class ApiError extends Error {
   constructor(status, code, message, field) { super(message); Object.assign(this, { status, code, field }); }
@@ -163,7 +163,9 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
           const task = scheduler.tasks.find(t => t.id === p.task && t.version === p.task_version && t.state === 'responding' && t.principal === trigger.principal && t.conversation === conversation);
           const round = task && scheduler.discussions.find(d => d.id === task.discussion);
           if (!round || !['active', 'paused'].includes(round.state)) return null;
-          return { phase: p.phase, attempt: p.attempt, preview: typeof p.preview === 'string' ? p.preview.slice(-4096) : '', started_at: p.started_at, updated_at: p.updated_at, principal: task.principal };
+          return { phase: p.phase, attempt: p.attempt, preview: typeof p.preview === 'string' ? p.preview.slice(-4096) : '', started_at: p.started_at, updated_at: p.updated_at, principal: task.principal,
+            ...(Number.isFinite(p.protocol_at) ? { protocol_at: p.protocol_at, local_checked_at: p.local_checked_at, meaningful_at: p.meaningful_at,
+              activities: (Array.isArray(p.activities) ? p.activities : []).slice(-40).filter(a => ['command','files','mcp','framework','input'].includes(a.kind) && ['running','completed','failed','unsupported'].includes(a.status)).map(a => ({kind:a.kind,status:a.status,started_at:a.started_at,updated_at:a.updated_at})) } : {}) };
         };
         // Never serialize private Run input, final output, tool arguments or summaries.
         send(200, { scheduler, runs: runs.map(r => ({ id: r.id, agent: r.request.agent, conversation: r.request.trigger?.conversation_id, state: r.state, model_steps: r.model_steps, tool_failures: r.tool_failures, error: r.error ? '执行失败，请查看消息投递了解原因。' : null, progress: progress(r) })) });

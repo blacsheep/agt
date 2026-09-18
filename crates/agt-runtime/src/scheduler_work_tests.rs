@@ -540,3 +540,83 @@ fn codex_assignee_completes_work_and_reports_to_human_requester() {
         .unwrap();
     assert_eq!(run.execution.as_ref().unwrap()["engine"], "codex");
 }
+
+#[test]
+fn disconnected_codex_work_is_unknown_and_cannot_be_retried() {
+    let (home, user, chat) = external_fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let source = scheduler
+        .store
+        .tasks()
+        .unwrap()
+        .into_iter()
+        .find(|t| t.principal == "a")
+        .unwrap()
+        .message;
+    let control = TaskControl::local(
+        home.path(),
+        Actor {
+            principal: PrincipalId::new("user"),
+            role: Role::Manager,
+            automated_depth: None,
+        },
+    );
+    let item=control.call("task_request",json!({"assignee":"a","conversation":chat,"input":"DISCONNECT","request_key":"codex-assignee","source_message":source})).unwrap();
+    let id = item["id"].as_str().unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    scheduler.scan().unwrap();
+    let task = claim_work(&mut scheduler, id);
+    execute(
+        home.path(),
+        task,
+        &mut Answer(json!({})),
+        &CancellationToken::new(),
+    )
+    .ok();
+    crate::work::reconcile(home.path()).unwrap();
+    let result = control.call("task_get", json!({"task_id":id})).unwrap();
+    assert_eq!(result["state"], "outcome_unknown");
+    assert!(control.call("task_retry",json!({"task_id":id,"expected_revision":result["revision"],"request_key":"unsafe-retry","reason":"retry"})).is_err());
+}
+
+#[test]
+fn task_listing_filters_before_pagination_and_exposes_safe_timeline() {
+    let (home, user, chat) = fixture();
+    let scheduler = begin(home.path(), &user, &chat);
+    let source = scheduler
+        .store
+        .tasks()
+        .unwrap()
+        .into_iter()
+        .find(|t| t.principal == "a")
+        .unwrap()
+        .message;
+    let control = TaskControl::local(
+        home.path(),
+        Actor {
+            principal: PrincipalId::new("user"),
+            role: Role::Manager,
+            automated_depth: None,
+        },
+    );
+    for key in ["first", "second"] {
+        control.call("task_request",json!({"assignee":"a","conversation":chat,"input":key,"request_key":key,"source_message":source})).unwrap();
+    }
+    let first = control
+        .call("task_list", json!({"conversation":chat,"limit":1}))
+        .unwrap();
+    let second = control
+        .call(
+            "task_list",
+            json!({"conversation":chat,"limit":1,"before":first[0]["list_cursor"]}),
+        )
+        .unwrap();
+    assert_ne!(first[0]["id"], second[0]["id"]);
+    assert!(first[0]["timeline"].is_array());
+    assert_eq!(
+        control
+            .call("task_list", json!({"conversation":"unrelated"}))
+            .unwrap(),
+        json!([])
+    );
+}

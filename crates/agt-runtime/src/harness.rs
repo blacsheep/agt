@@ -297,6 +297,7 @@ pub(crate) fn execute(
         .map(|t| t.conversation_id.to_string());
     let mut event = |event: Event<'_>| -> anyhow::Result<()> {
         check()?;
+        crate::progress::harness_event(record, store, &event)?;
         match event {
             Event::Text(text) => {
                 crate::progress::update(record, store, crate::ModelEvent::Text(text))?
@@ -324,6 +325,16 @@ pub(crate) fn execute(
                 record.execution.as_mut().unwrap()["model"] = json!(model);
                 store.save(record)?;
             }
+            Event::Submitted => {
+                record.execution.as_mut().unwrap()["outcome_unknown"] = json!(true);
+                store.save(record)?;
+            }
+            Event::Settled(status) => {
+                record.execution.as_mut().unwrap()["outcome_unknown"] = json!(false);
+                record.execution.as_mut().unwrap()["turn_status"] = json!(status);
+                store.save(record)?;
+            }
+            Event::Protocol | Event::Activity { .. } => {}
             Event::Completed => completed.set(true),
             Event::Tick => {}
         }
@@ -419,6 +430,9 @@ pub(crate) fn execute(
         &mut call,
     );
     drop(client);
+    if let Some(progress) = &record.progress {
+        record.execution.as_mut().unwrap()["activity"] = json!({"items":progress.activities,"local_checked_at":progress.local_checked_at,"protocol_at":progress.protocol_at,"meaningful_at":progress.meaningful_at});
+    }
     if result.is_ok() && thread.is_none() && !session.title.is_empty() {
         let saved = sessions.get(&scope).map_err(error)?;
         if let Some(thread) = saved.session_id {

@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/style.css" />
     <script src="/commands.js" defer></script>
     <script src="/app.js" defer></script>
+    <script src="/tasks.js" defer></script>
   </head>
   <body class="workspace-page">
     <aside class="rail" id="workspace-nav">
@@ -90,6 +91,7 @@
               <div class="chat-actions">
                 <button id="execute" class="quiet" disabled>继续回复</button>
                 <button id="end-reply" class="stop-button" disabled>停止本群 Agent</button>
+                <button id="chat-tasks" class="secondary" type="button" aria-controls="command-panel">任务</button>
                 <button id="chat-commands" class="secondary" type="button" aria-controls="command-panel" aria-expanded="false" aria-label="展开会话控制" disabled><span aria-hidden="true">/</span> 会话控制</button>
                 <button id="group-info" class="quiet" disabled>群信息</button>
               </div>

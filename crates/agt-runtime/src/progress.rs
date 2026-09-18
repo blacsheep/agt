@@ -11,6 +11,14 @@ pub struct RunProgress {
     pub updated_at: i64,
     pub task: Option<String>,
     pub task_version: Option<i64>,
+    #[serde(default)]
+    pub local_checked_at: Option<i64>,
+    #[serde(default)]
+    pub protocol_at: Option<i64>,
+    #[serde(default)]
+    pub meaningful_at: Option<i64>,
+    #[serde(default)]
+    pub activities: Vec<Activity>,
 }
 
 pub(crate) fn stage(
@@ -28,6 +36,10 @@ pub(crate) fn stage(
         updated_at: now,
         task: task.map(|t| t.id.clone()),
         task_version: task.map(|t| t.version),
+        local_checked_at: None,
+        protocol_at: None,
+        meaningful_at: None,
+        activities: Vec::new(),
     });
     store.save(record)
 }
@@ -71,6 +83,77 @@ pub(crate) fn update(
     }
     let now = crate::schedule_store::now_ms();
     if force || old_phase != progress.phase || now - progress.updated_at >= 300 {
+        progress.updated_at = now;
+        store.save(record)?;
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Activity {
+    pub id: String,
+    pub kind: String,
+    pub status: String,
+    pub started_at: i64,
+    pub updated_at: i64,
+}
+
+pub(crate) fn harness_event(
+    record: &mut RunRecord,
+    store: &RunStore,
+    event: &agt_harness::Event<'_>,
+) -> Result<()> {
+    use agt_harness::Event;
+    let now = crate::schedule_store::now_ms();
+    let progress = record.progress.as_mut().expect("stage initialized");
+    let mut boundary = false;
+    match event {
+        Event::Tick => {
+            progress.local_checked_at = Some(now);
+        }
+        Event::Protocol => {
+            progress.protocol_at = Some(now);
+        }
+        Event::Text(_) => {
+            progress.meaningful_at = Some(now);
+        }
+        Event::Activity { id, kind, status } => {
+            progress.meaningful_at = Some(now);
+            progress.phase = if *status == "running" {
+                "tool_running"
+            } else if *kind == "input" {
+                "input_required"
+            } else {
+                "waiting"
+            }
+            .into();
+            let id = crate::fingerprint(id.as_bytes());
+            if let Some(activity) = progress.activities.iter_mut().find(|a| a.id == id) {
+                activity.status = (*status).into();
+                activity.updated_at = now;
+            } else {
+                progress.activities.push(Activity {
+                    id,
+                    kind: (*kind).into(),
+                    status: (*status).into(),
+                    started_at: now,
+                    updated_at: now,
+                });
+                if progress.activities.len() > 40 {
+                    progress.activities.remove(0);
+                }
+            }
+            boundary = true;
+        }
+        Event::Turn(_) => {
+            progress.meaningful_at = Some(now);
+            progress.phase = "waiting".into();
+            boundary = true;
+        }
+        _ => {}
+    }
+    // Tick is only local liveness. It never updates protocol/progress timestamps.
+    if boundary || now - progress.updated_at >= 1000 {
         progress.updated_at = now;
         store.save(record)?;
     }
