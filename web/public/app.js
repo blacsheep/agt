@@ -1363,8 +1363,14 @@ async function showHarnessCommand(kind) {
       const session=await call('current');
       if(!active())return;
       const operate=(operation,extra={})=>call(operation,{session:session.id,...extra});
-      const info=`<div class="harness-session-summary"><strong>${esc(session.title||'未命名执行会话')}</strong><span class="tag">${session.busy?'执行中或待检查':'就绪'}</span><details class="session-metadata"><summary>连接详情</summary><dl class="resource-details"><dt>Harness</dt><dd>${esc(session.harness)}</dd><dt>项目目录</dt><dd>${esc(session.config.working_directory)}</dd><dt>Session ID</dt><dd>${esc(session.session_id||'首次执行时由 Codex 生成')}</dd></dl></details></div>`;
-      $('#harness-detail').innerHTML=info;
+      const executionLabels={preparing:'准备中',running:'执行中',canceling:'正在停止',reconciling:'正在恢复',succeeded:'已完成',failed:'已失败 · 可继续',canceled:'已取消 · 可继续',needs_review:'需要处理'};
+      const canCancelExecution=['preparing','running','canceling'].includes(session.execution?.state);
+      const executionLabel=executionLabels[session.execution?.state] || (session.busy?'暂不可用':'就绪');
+      const info=`<div class="harness-session-summary"><strong>${esc(session.title||'未命名执行会话')}</strong><span class="tag">${esc(executionLabel)}</span><details class="session-metadata"><summary>连接详情</summary><dl class="resource-details"><dt>Harness</dt><dd>${esc(session.harness)}</dd><dt>项目目录</dt><dd>${esc(session.config.working_directory)}</dd><dt>Session ID</dt><dd>${esc(session.session_id||'首次执行时由 Codex 生成')}</dd></dl></details></div>`;
+      $('#harness-detail').innerHTML=info+'<div class="form-actions"><button id="harness-status-refresh" class="secondary" type="button">刷新状态</button></div>';
+      $('#harness-status-refresh').onclick=load;
+      if(session.execution?.state==='needs_review') $('#harness-detail').insertAdjacentHTML('beforeend','<p class="form-note" role="status">上次执行结果无法确认。请检查原 Codex 线程和项目改动，确认旧执行已停止后使用 /new 开始新上下文。不会自动重做旧任务。</p><button id="harness-new-context" class="secondary" type="button">开始新上下文…</button>');
+      if($('#harness-new-context')) $('#harness-new-context').onclick=()=>showCommandAction('new');
       if(kind==='model') {
         $('#harness-detail').insertAdjacentHTML('beforeend','<p id="harness-loading" class="form-note">正在读取 Codex 可用模型…</p>');
         const catalog=await operate('models'); if(!active())return;
@@ -1381,7 +1387,7 @@ async function showHarnessCommand(kind) {
         $('#harness-detail').insertAdjacentHTML('beforeend',`<form id="harness-rename-form">${field('会话名称',`<input name="title" value="${esc(session.title)}" maxlength="80" required>`,'同步到 Codex 的会话名称；不会修改聊天名称或 Session ID。')}<div class="form-actions"><button class="primary" ${session.busy?'disabled':''}>保存名称</button></div><p id="harness-feedback" role="status" class="form-note"></p></form>`);
         $('#harness-rename-form').onsubmit=async e=>{e.preventDefault();const b=e.currentTarget.querySelector('button');b.disabled=true;try{await operate('rename',{title:e.currentTarget.elements.title.value});if(active())await load();}catch(e){if(active()){$('#harness-feedback').textContent=errorText(e);b.disabled=false;}}};
       } else if(kind==='compact') {
-        $('#harness-detail').insertAdjacentHTML('beforeend',`<p class="form-note">由 Codex 压缩当前上下文，可能产生模型费用。保留聊天记录和 Session ID；失败或取消后请检查状态并用 /new 重新开始。</p><div class="form-actions"><button id="harness-compact" class="primary" ${session.busy||!session.session_id?'disabled':''}>开始压缩</button><button id="harness-cancel" class="secondary" ${session.busy?'':'disabled'}>取消执行</button></div><p id="harness-feedback" role="status" class="form-note"></p>`);
+        $('#harness-detail').insertAdjacentHTML('beforeend',`<p class="form-note">由 Codex 压缩当前上下文，可能产生模型费用。保留聊天记录和 Session ID。确认结束后可继续使用；结果无法确认时会显示「需要处理」。</p><div class="form-actions"><button id="harness-compact" class="primary" ${session.busy||!session.session_id?'disabled':''}>开始压缩</button><button id="harness-cancel" class="secondary" ${canCancelExecution?'':'disabled'}>取消执行</button></div><p id="harness-feedback" role="status" class="form-note"></p>`);
         $('#harness-cancel').onclick=async()=>{try{await operate('cancel');if(active())$('#harness-feedback').textContent='已请求取消，请检查状态后重置上下文。';}catch(e){if(active())$('#harness-feedback').textContent=errorText(e);}};
         $('#harness-compact').onclick=async()=>{$('#harness-compact').disabled=true;$('#harness-cancel').disabled=false;$('#harness-feedback').textContent='正在压缩，请等待 Codex 完成…';try{await operate('compact');if(active()){$('#harness-feedback').textContent='上下文压缩已完成。';$('#harness-compact').disabled=false;}}catch(e){if(active())$('#harness-feedback').textContent=errorText(e);}finally{if(active())$('#harness-cancel').disabled=true;}};
       } else if(kind==='skills'||kind==='mcp') {

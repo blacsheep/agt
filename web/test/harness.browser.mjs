@@ -147,6 +147,14 @@ try {
   await wait('document.querySelector("#harness-detail")?.textContent.includes("fixture connection unavailable")');
   assert.equal(await evaluate('document.querySelector("#modal").open'),false);
   await evaluate('api=originalApi; closeCommandPanel()');
+  await evaluate(`window.originalApi=api; api=async(path,data)=>{const result=await originalApi(path,data);return data?.operation==='current'?{...result,busy:true,execution:{state:'needs_review'}}:result;}; showHarnessCommand('status'); void 0;`);
+  await wait('document.querySelector("#harness-new-context")');
+  assert.match(await evaluate('document.querySelector(".harness-session-summary .tag").textContent'),/需要处理/);
+  assert.ok(await evaluate('document.querySelector("#harness-status-refresh")'));
+  await click('#harness-new-context');
+  assert.match(await evaluate('document.querySelector("#command-panel-title").textContent'),/重置上下文/);
+  await evaluate('api=originalApi; closeCommandPanel()');
+
   await evaluate(`state.boot.principals.push({id:'native-fixture',name:'Native',kind:'agent'}); state.members.push({principal_id:'native-fixture',left_message_seq:null}); state.boot.bindings.push({principal:'native-fixture',agent:'default/native-fixture'}); items('agent').push({name:'native-fixture',model:{category:'default',name:'fixture'}});`);
   await evaluate('showChatCommand({name:"model",args:""})');
   await wait('document.querySelector("#harness-model-form")');
