@@ -23,13 +23,16 @@ pub struct HarnessSessions {
     pub(crate) db: Connection,
 }
 /// Before submission, errors cannot leave an active external turn behind.
-/// After submission, only the normal durable completion path may unlock.
+/// After submission, only explicit rejection or durable completion may unlock.
 pub(crate) struct ExecutionLock<'a> {
     sessions: &'a HarnessSessions,
     id: &'a str,
     submitted: std::cell::Cell<bool>,
 }
 impl ExecutionLock<'_> {
+    pub(crate) fn rejected(&self) {
+        self.submitted.set(false);
+    }
     pub(crate) fn submitted(&self) {
         self.submitted.set(true);
     }
@@ -257,13 +260,18 @@ impl HarnessSessions {
         if self.get(id)?.session_id.is_none() {
             bail!("session has not started yet");
         }
-        self.lock(id)?;
+        let execution_lock = self.execution_lock(id)?;
         let session = self.get(id)?;
         let thread = session.session_id.context("session has not started yet")?;
-        // Failure is deliberately left dirty: never race/replay a compaction with an unknown outcome.
-        Codex::compact(&session.config, &thread, &mut |_| {
+        // Keep submitted compactions fenced unless the engine explicitly rejects them.
+        Codex::compact(&session.config, &thread, &mut |event| {
             if token.is_canceled() || self.canceled(id)? {
                 bail!("compaction canceled");
+            }
+            match event {
+                agt_harness::Event::Submitted => execution_lock.submitted(),
+                agt_harness::Event::Settled("rejected") => execution_lock.rejected(),
+                _ => {}
             }
             Ok(())
         })?;

@@ -28,6 +28,8 @@ for line in sys.stdin:
   if (root/'rename-fails').exists():emit({'id':id,'error':{'code':-32000,'message':'fixture rename failure'}})
   else:reply(id,{})
  elif method=='thread/compact/start':
+  if (root/'reject-start').exists():
+   emit({'id':id,'error':{'code':-32602,'message':'fixture rejected'}});continue
   reply(id,{})
   if p['threadId']=='hang-compact':
    (root/'compacting').write_text('1');time.sleep(60)
@@ -38,6 +40,8 @@ for line in sys.stdin:
   thread='thread-'+str(time.time_ns());reply(id,{'thread':{'id':thread},'model':'fixture-effective-model','reasoningEffort':'high'})
  elif method=='thread/resume':thread=p['threadId'];reply(id,{'thread':{'id':thread},'model':'fixture-effective-model','reasoningEffort':'high'})
  elif method=='turn/start':
+  if (root/'reject-start').exists():
+   emit({'id':id,'error':{'code':-32602,'message':'fixture rejected'}});continue
   turn='turn-'+str(time.time_ns());reply(id,{'turn':{'id':turn,'status':'inProgress'}})
   note('turn/started',{'threadId':thread,'turn':{'id':turn}})
   text=p['input'][0]['text']

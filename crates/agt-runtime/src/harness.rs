@@ -326,14 +326,17 @@ pub(crate) fn execute(
                 store.save(record)?;
             }
             Event::Submitted => {
-                execution_lock.submitted();
                 record.execution.as_mut().unwrap()["outcome_unknown"] = json!(true);
                 store.save(record)?;
+                execution_lock.submitted();
             }
             Event::Settled(status) => {
                 record.execution.as_mut().unwrap()["outcome_unknown"] = json!(false);
                 record.execution.as_mut().unwrap()["turn_status"] = json!(status);
                 store.save(record)?;
+                if status == "rejected" {
+                    execution_lock.rejected();
+                }
             }
             Event::Protocol | Event::Activity { .. } => {}
             Event::Completed => completed.set(true),

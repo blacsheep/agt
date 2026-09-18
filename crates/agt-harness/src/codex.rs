@@ -243,11 +243,13 @@ impl Codex {
         client.request("thread/resume", json!({"threadId":thread,"cwd":harness.working_directory,"model":harness.model,"approvalPolicy":"never","sandbox":harness.sandbox.protocol(),"config":{"model_reasoning_effort":harness.reasoning_effort}}), event)?;
         client.next_id += 1;
         let id = client.next_id;
+        event(Event::Submitted)?;
         client
             .send(json!({"id":id,"method":"thread/compact/start","params":{"threadId":thread}}))?;
         loop {
             let value = client.receive(event)?;
             if value["id"] == id && value.get("error").is_some() {
+                event(Event::Settled("rejected"))?;
                 bail!("Codex compaction rejected: {}", value["error"]["message"]);
             }
             if value["params"]["threadId"] == thread && value["method"] == "turn/completed" {

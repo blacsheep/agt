@@ -1464,44 +1464,6 @@ fn harness_session_snapshots_models_names_and_compaction_are_isolated() {
     assert_eq!(fresh.config, changed);
 }
 
-#[cfg(unix)]
-#[test]
-fn harness_compaction_cancellation_keeps_the_unknown_outcome_fenced() {
-    let (home, user, _) = external_fixture();
-    let path = home.path();
-    let chat = user
-        .call("direct_create", json!({"principal":"a"}))
-        .unwrap()["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let store = crate::HarnessSessions::open(path).unwrap();
-    let session = store.current(path, "a", &chat).unwrap();
-    store
-        .db
-        .execute(
-            "UPDATE harness_sessions SET thread='hang-compact' WHERE scope=?1",
-            [&session.id],
-        )
-        .unwrap();
-    let work = path.to_owned();
-    let id = session.id.clone();
-    let handle = std::thread::spawn(move || {
-        crate::HarnessSessions::open(&work)
-            .unwrap()
-            .compact(&id, &CancellationToken::new())
-    });
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while !path.join("compacting").exists() {
-        assert!(std::time::Instant::now() < deadline);
-        std::thread::sleep(std::time::Duration::from_millis(20));
-    }
-    store.cancel_conversation(&chat).unwrap();
-    assert!(handle.join().unwrap().is_err());
-    assert!(store.get(&session.id).unwrap().busy);
-    assert!(store.configure(&session.id, "fixture-model", None).is_err());
-}
-
 #[path = "scheduler_work_tests.rs"]
 mod work_tests;
 
@@ -1519,3 +1481,6 @@ mod triage_tests;
 
 #[path = "scheduler_input_tests.rs"]
 mod input_tests;
+
+#[path = "tests/harness/session_lock.rs"]
+mod harness_session_lock_tests;
