@@ -1787,3 +1787,9 @@ footer { color: var(--muted); }
 .context-divider span { display: grid; gap: 3px; min-width: 0; font-size: 11px; }
 .context-divider strong { color: #405a7c; font-size: 12px; font-weight: 600; }
 .context-divider small { font-size: 11px; }
+
+.tool-activity-list li > div { min-width: 0; display: grid; gap: 3px; }
+.tool-activity-list code { font-size: 11px; color: #64748b; overflow-wrap: anywhere; }
+.tool-activity-list li > small { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.live-reply summary .live-phase { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media(max-width:600px) { .tool-activity-list li { flex-wrap: wrap; } }

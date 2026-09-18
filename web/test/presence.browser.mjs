@@ -30,7 +30,7 @@ try {
   const evaluate = async expression => { const value = await cdp('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }); if (value.exceptionDetails) throw new Error(JSON.stringify(value.exceptionDetails)); return value.result.value; };
   const wait = async expression => { for (let i = 0; i < 150; i++) { if (await evaluate(expression)) return; await new Promise(ok => setTimeout(ok, 100)); } throw new Error(`Timed out: ${expression}`); };
   const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
-  await wait('document.querySelector("#connection").textContent === "本地已连接"');
+  await wait('document.querySelector("#connection")?.textContent === "本地已连接"');
   await evaluate(`
     state.polling = true;
     const chat = { id: 'sample-chat', kind: 'group', state: 'active', title: '示例协作', last_message_seq: 3 };
@@ -87,9 +87,20 @@ try {
   assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'), 1);
   assert.equal(await evaluate('window.streamInjected === undefined && !document.querySelector(".live-preview script")'), true);
   assert.match(await evaluate('document.querySelector(".live-phase").textContent'), /正在生成/);
+  assert.equal(await evaluate('document.querySelector(".live-reply").open'), false);
+  await evaluate(`state.runs[0].progress.activities = [
+    {kind:'framework',tool_name:'framework_harness_models',label:'查询可用模型',status:'running',started_at:Date.now()-2000,updated_at:Date.now()},
+    {kind:'mcp',tool_name:'search',status:'running',started_at:Date.now()-1000,updated_at:Date.now()},
+    {kind:'framework',tool_name:'framework_harness_session_configure',summary:'会话模型已更新',status:'completed',started_at:Date.now()-5000,updated_at:Date.now()-4000}
+  ]; renderActivity();`);
+  assert.match(await evaluate('document.querySelector(".live-phase").textContent'), /正在执行 2 项操作/);
   await click('.live-reply summary');
+  assert.match(await evaluate('document.querySelector(".harness-activity").textContent'), /framework_harness_models/);
+  assert.match(await evaluate('document.querySelector(".harness-activity").textContent'), /会话模型已更新/);
+  assert.match(await evaluate('activityTimeline([{kind:"framework",status:"unknown",started_at:1,updated_at:2}])'), /状态待确认/);
+
   await evaluate('window.liveSummary = document.querySelector(".live-reply summary"); liveSummary.focus(); renderActivity();');
-  assert.equal(await evaluate('document.activeElement === liveSummary && !liveSummary.parentElement.open'), true);
+  assert.equal(await evaluate('document.activeElement === liveSummary && liveSummary.parentElement.open'), true);
   for (const width of [1280, 768, 390, 360]) {
     await cdp('Emulation.setDeviceMetricsOverride', {width, height:900, deviceScaleFactor:1, mobile:width<761});
     await evaluate('liveSummary.parentElement.open = true');

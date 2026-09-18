@@ -639,6 +639,14 @@ function runLabel(r) {
   return ({ completed: r.tool_failures ? '回复结束，部分操作未完成' : '本次回复已结束', running: '正在准备回复', failed: '暂时无法回复', canceled: '回复已取消' })[r.state] || '等待处理';
 }
 const progressLabels = { preparing: '准备上下文与工具', waiting: '等待模型输出', reasoning: '模型处理中', generating: '正在生成', tool_pending: '准备工具调用', tool_running: '正在执行工具', compacting: '正在压缩上下文', retrying: '连接异常，正在重试', input_required: '执行器需要交互' };
+const toolLabels={harness_models:'查询可用模型',harness_session_models:'查询会话可用模型',harness_session_get:'读取执行会话',harness_session_configure:'修改会话模型',resource_list:'查看资源',resource_read:'读取资源配置',resource_write:'配置资源',agent_bind:'绑定并启用 Agent',agent_set_enabled:'调整 Agent 启用状态',task_request:'安排协作任务',task_get:'查看任务进度',message_send:'发送协作消息'};
+function activityTitle(a) { return a.label || toolLabels[a.tool_name?.replace(/^framework_/, '')] || ({command:'执行命令',files:'修改文件',mcp:'调用 MCP 工具',framework:'调用框架工具',input:'等待交互'})[a.kind] || '执行工具'; }
+function activityTimeline(activities) {
+  return `<ol class="task-timeline tool-activity-list">${activities.map(a=>{
+    const seconds=Math.max(0,((a.status==='running'?Date.now():a.updated_at)-a.started_at)/1000);
+    return `<li><div><span>${esc(activityTitle(a))}</span>${a.tool_name?`<code>${esc(a.tool_name)}</code>`:''}${a.summary?`<small>${esc(a.summary)}</small>`:''}</div><small>${esc(({running:'进行中',completed:'成功',failed:'失败',canceled:'已取消',unsupported:'不支持',unknown:'状态待确认'})[a.status]||a.status)} · ${seconds.toFixed(1)} 秒 · ${esc(({framework:'框架',mcp:'MCP',command:'Codex',files:'Codex',input:'引擎'})[a.kind]||'工具')}</small></li>`;
+  }).join('')}</ol>`;
+}
 function renderLiveReplies() {
   const box = $('#live-replies');
   const runs = state.scheduler.online && state.conversation?.state === 'active' && currentEntry()?.left_message_seq == null
@@ -648,12 +656,13 @@ function renderLiveReplies() {
     const p = run.progress;
     let node = previous.get(run.id); previous.delete(run.id);
     if (!node) {
-      node = document.createElement('details'); node.className = 'live-reply'; node.dataset.run = run.id; node.open = true;
+      node = document.createElement('details'); node.className = 'live-reply'; node.dataset.run = run.id; node.open = false;
       node.innerHTML = '<summary><span class="live-dot" aria-hidden="true"></span><strong></strong><span class="live-phase"></span><small></small></summary><div class="live-body"><p class="live-preview"></p><span class="live-caption"></span><div class="harness-activity"></div></div>';
     }
     const set = (selector, text) => { const target = node.querySelector(selector); if (target.textContent !== text) target.textContent = text; };
     set('strong', nameOf(p.principal) || run.agent.split('/').at(-1));
-    set('.live-phase', progressLabels[p.phase] || '正在处理');
+    const activeTools=(p.activities||[]).filter(a=>a.status==='running');
+    set('.live-phase', activeTools.length>1?`正在执行 ${activeTools.length} 项操作`:activeTools.length?activityTitle(activeTools[0]):p.phase==='tool_running' && p.activities?.length?'整理工具结果':progressLabels[p.phase] || '正在处理');
     const seconds = Math.max(0, Math.floor((Date.now() - p.started_at) / 1000));
     set('small', `${seconds < 60 ? seconds + ' 秒' : Math.floor(seconds / 60) + ' 分 ' + seconds % 60 + ' 秒'}${p.attempt > 1 ? ' · 第 ' + p.attempt + '/10 次尝试' : ''}`);
     const preview = node.querySelector('.live-preview');
@@ -662,10 +671,8 @@ function renderLiveReplies() {
     preview.hidden = !p.preview;
     set('.live-caption', p.preview ? '生成预览 · 仅显示最近片段，完成后发布正式消息' : p.phase === 'retrying' ? '本次预览已清除，正在重新请求。' : '收到正文后会在这里预览；模型处理期间可能暂时没有文字。');
     const timeline = node.querySelector('.harness-activity');
-    if (p.protocol_at) {
-      const age = Math.max(0, Math.floor((Date.now() - p.protocol_at) / 1000));
-      timeline.innerHTML = `<div class="progress-clocks"><span>最近协议 ${esc(dateTime(p.protocol_at))}</span><span>最近进展 ${p.meaningful_at ? esc(dateTime(p.meaningful_at)) : '等待中'}</span><span>本地检查 ${p.local_checked_at ? esc(dateTime(p.local_checked_at)) : '—'}</span></div>${age > 30 ? '<p class="form-note">暂未收到新进度，执行结果尚未确认。</p>' : ''}<ol class="task-timeline">${(p.activities || []).slice(-6).map(a => `<li><span>${esc(({command:'执行命令',files:'修改文件',mcp:'调用 MCP',framework:'框架工具',input:'交互请求'})[a.kind] || '工具')}</span><small>${esc(({running:'进行中',completed:'已结束',failed:'失败',unsupported:'不支持的交互'})[a.status] || a.status)} · ${esc(dateTime(a.updated_at))}</small></li>`).join('')}</ol>`;
-    } else timeline.innerHTML = '';
+    const age=p.protocol_at?Math.max(0,Math.floor((Date.now()-p.protocol_at)/1000)):0;
+    timeline.innerHTML=(p.protocol_at?`<div class="progress-clocks"><span>最近协议 ${esc(dateTime(p.protocol_at))}</span><span>最近进展 ${p.meaningful_at?esc(dateTime(p.meaningful_at)):'等待中'}</span></div>${age>30?'<p class="form-note">暂未收到新进度，执行结果尚未确认。</p>':''}`:'')+activityTimeline([...(p.activities||[]).filter(a=>a.status!=='running').slice(-8),...(p.activities||[]).filter(a=>a.status==='running')]);
     if (box.children[index] !== node) box.insertBefore(node, box.children[index] || null);
     if (following) preview.scrollTop = preview.scrollHeight;
   }
@@ -692,7 +699,11 @@ async function showCalls(id) {
   if (!debugMode) {
     if (!run) { dialog('回复说明', '<p class="run-summary">这条较早的记录不在最近动态中，可开启调试模式查看详情。</p>'); return; }
     const description = run.state === 'completed' ? (run.tool_failures ? 'Agent 已结束回复，但部分操作没有完成。请查看聊天内容确认结果。' : 'Agent 已完成本次处理。回复内容可在对应会话中查看；如果它选择不发言，聊天中不会新增消息。') : run.state === 'running' ? 'Agent 正在处理消息，完成后会显示在会话中。' : friendlyFailure(run.error);
-    dialog('回复说明', `<div class="run-summary"><h3>${esc(run.agent.split('/').at(-1))}</h3><p>${esc(runLabel(run))}</p><p>${esc(description)}</p></div>`);
+    dialog('回复说明', `<div class="run-summary"><h3>${esc(run.agent.split('/').at(-1))}</h3><p>${esc(runLabel(run))}</p><p>${esc(description)}</p><div id="completed-tool-activity"></div></div>`);
+    const generation = modalGeneration;
+    let rows;
+    try { rows = await api('calls', {id, after:0}); } catch(e) { if (generation === modalGeneration) modalError(e); return; }
+    if (generation === modalGeneration && $('#completed-tool-activity')) $('#completed-tool-activity').innerHTML = activityTimeline(rows.filter(c=>c.tool_name).slice(-40).map(c=>({kind:c.kind==='framework'||c.tool_name.startsWith('framework_')?'framework':'mcp',tool_name:c.tool_name,label:c.public_label,summary:c.public_summary,status:({started:run.state==='running'?'running':'unknown',succeeded:'completed',failed:'failed',canceled:'canceled'})[c.state],started_at:c.started_at,updated_at:c.finished_at||c.started_at})));
     return;
   }
   dialog('调用记录', `<p class="form-note">${esc(id)}<br>仅保存参数形状与安全错误，不保存原始参数、模型推理或工具返回正文。</p><div id="calls-list"></div><button id="more-calls" class="quiet">加载调用</button>`);

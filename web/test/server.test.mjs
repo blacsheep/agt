@@ -361,6 +361,7 @@ test('context reset is confirmed and uses the fixed operator through runtime', a
 test('live drafts are allowlisted and scoped to current membership and task version', async t => {
   const scheduler = { online: true, tasks: [{id:'task', version:3, state:'responding', principal:'a', conversation:'one', discussion:'round'}], discussions:[{id:'round', state:'active'}] };
   const progress = {task:'task', task_version:3, phase:'generating', preview:'visible draft', attempt:2, started_at:123, updated_at:456, reasoning:'PRIVATE', tool_arguments:'PRIVATE'};
+  progress.activities=[{kind:'framework',status:'running',tool_name:'framework_harness_models',label:'查询可用模型',started_at:123,updated_at:456,arguments:'PRIVATE',output:'PRIVATE'},{kind:'mcp',status:'completed',tool_name:'invalid name PRIVATE',started_at:123,updated_at:456}];
   const live = { id:'run', request:{agent:'a', trigger:{conversation_id:'one',principal:'a'}, input:'PRIVATE'}, state:'running', progress, output:'PRIVATE' };
   let members = [{principal_id:'operator',left_message_seq:null}];
   const {request} = await fixture(t, async args => args[0] === 'schedule' ? scheduler : args.includes('member_list') ? members : [live]);
@@ -370,6 +371,8 @@ test('live drafts are allowlisted and scoped to current membership and task vers
   const draft = await get('?conversation=one');
   assert.equal(draft.preview, 'visible draft');
   assert.equal(draft.principal, 'a');
+  assert.equal(draft.activities[0].tool_name,'framework_harness_models');
+  assert.equal(draft.activities[1].tool_name,undefined);
   assert.doesNotMatch(JSON.stringify(draft), /PRIVATE|tool_arguments|reasoning/);
   progress.task_version = 2; assert.equal(await get('?conversation=one'), null);
   progress.task_version = 3;
@@ -520,9 +523,11 @@ test('Harness operations validate membership, current session and fixed identity
   assert.equal((await send({operation:'arbitrary-rpc'})).status,400);
   assert.equal(calls.filter(a=>a[0]==='harness' && a[2]==='models').length,0);
   assert.equal((await send({})).status,200);
-  assert.deepEqual(calls.at(-1),['harness','session','models','current-session']);
+  assert.equal(calls.at(-1)[5], 'harness_session_models');
+  assert.deepEqual(JSON.parse(calls.at(-1).at(-1)),{conversation:'chat',target:'a',session:'current-session'});
   assert.equal((await send({operation:'configure',model:'fixture-model',effort:'xhigh'})).status,200);
-  assert.deepEqual(calls.at(-1),['harness','session','configure','current-session','--model','fixture-model','--effort','xhigh']);
+  assert.equal(calls.at(-1)[5], 'harness_session_configure');
+  assert.deepEqual(JSON.parse(calls.at(-1).at(-1)),{conversation:'chat',target:'a',session:'current-session',model:'fixture-model',effort:'xhigh'});
   for(const operation of ['compact','cancel','skills','mcp'])assert.equal((await send({operation})).status,200);
   assert.equal((await send({operation:'rename',title:'Review session'})).status,200);
 });

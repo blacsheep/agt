@@ -165,7 +165,10 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
           if (!round || !['active', 'paused'].includes(round.state)) return null;
           return { phase: p.phase, attempt: p.attempt, preview: typeof p.preview === 'string' ? p.preview.slice(-4096) : '', started_at: p.started_at, updated_at: p.updated_at, principal: task.principal,
             ...(Number.isFinite(p.protocol_at) ? { protocol_at: p.protocol_at, local_checked_at: p.local_checked_at, meaningful_at: p.meaningful_at,
-              activities: (Array.isArray(p.activities) ? p.activities : []).slice(-40).filter(a => ['command','files','mcp','framework','input'].includes(a.kind) && ['running','completed','failed','unsupported'].includes(a.status)).map(a => ({kind:a.kind,status:a.status,started_at:a.started_at,updated_at:a.updated_at})) } : {}) };
+              } : {}),
+            activities: (Array.isArray(p.activities) ? p.activities : []).slice(-40).filter(a => ['command','files','mcp','framework','input'].includes(a.kind) && ['running','completed','failed','canceled','unsupported','unknown'].includes(a.status)).map(a => ({kind:a.kind,status:a.status,started_at:a.started_at,updated_at:a.updated_at,
+              ...(typeof a.tool_name==='string' && /^[a-zA-Z0-9_.:/-]{1,128}$/.test(a.tool_name) ? {tool_name:a.tool_name}:{}),
+              ...(typeof a.label==='string'?{label:a.label.slice(0,80)}:{}),...(typeof a.summary==='string'?{summary:a.summary.slice(0,120)}:{})})) };
         };
         // Never serialize private Run input, final output, tool arguments or summaries.
         send(200, { scheduler, runs: runs.map(r => ({ id: r.id, agent: r.request.agent, conversation: r.request.trigger?.conversation_id, state: r.state, model_steps: r.model_steps, tool_failures: r.tool_failures, error: r.error ? '执行失败，请查看消息投递了解原因。' : null, progress: progress(r) })) });
@@ -173,7 +176,7 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         const data = await body(req), operation = str(data.operation);
         if ('viewer' in data || 'actor' in data || 'principal' in data) throw new ApiError(403, 'identity_fixed', '操作身份由启动者固定。');
         if (operation === 'capabilities') { send(200, await run(['harness','capabilities'])); return; }
-        if (operation === 'resource-models') { send(200,await run(['harness','models',str(data.reference)])); return; }
+        if (operation === 'resource-models') { send(200,await tool('harness_models',{reference:str(data.reference)})); return; }
         if (operation === 'resource-sessions') {
           const reference = str(data.reference);
           const records = await run(['harness','session','list']);
@@ -190,12 +193,14 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         const session = await run(['harness','session','current','--principal',target,'--conversation',conversation]);
         if (operation === 'current') { send(200,session); return; }
         if (str(data.session) !== session.id) throw new ApiError(409,'session_changed','执行会话已变化，请刷新后重试。');
+        if (operation === 'models' || operation === 'configure') {
+          send(200,await tool(operation === 'models' ? 'harness_session_models' : 'harness_session_configure',{
+            conversation,target,session:session.id,...(operation === 'configure' ? {model:str(data.model),...(data.effort?{effort:str(data.effort)}:{})}:{})
+          })); return;
+        }
         const args = ['harness','session'];
-        if (['models','skills','mcp','compact','cancel'].includes(operation)) args.push(operation,session.id);
-        else if (operation === 'configure') {
-          args.push('configure',session.id,'--model',str(data.model));
-          if (data.effort) args.push('--effort',str(data.effort));
-        } else if (operation === 'rename') args.push('rename',session.id,str(data.title));
+        if (['skills','mcp','compact','cancel'].includes(operation)) args.push(operation,session.id);
+        else if (operation === 'rename') args.push('rename',session.id,str(data.title));
         else throw new ApiError(400,'unsupported_operation','尚未接入此 Harness 操作。');
         send(200,await run(args));
       } else if (req.method === 'POST' && url.pathname === '/api/chat-status') {
