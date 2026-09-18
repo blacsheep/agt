@@ -18,35 +18,14 @@ pub struct HarnessSession {
     pub title: String,
     pub session_id: Option<String>,
     pub busy: bool,
+    pub execution: Option<SessionExecution>,
 }
 pub struct HarnessSessions {
     pub(crate) db: Connection,
+    home: std::path::PathBuf,
 }
-/// Before submission, errors cannot leave an active external turn behind.
-/// After submission, only explicit rejection or durable completion may unlock.
-pub(crate) struct ExecutionLock<'a> {
-    sessions: &'a HarnessSessions,
-    id: &'a str,
-    submitted: std::cell::Cell<bool>,
-}
-impl ExecutionLock<'_> {
-    pub(crate) fn rejected(&self) {
-        self.submitted.set(false);
-    }
-    pub(crate) fn submitted(&self) {
-        self.submitted.set(true);
-    }
-}
-impl Drop for ExecutionLock<'_> {
-    fn drop(&mut self) {
-        if !self.submitted.get() {
-            let _ = self.sessions.db.execute(
-                "UPDATE harness_sessions SET dirty=0 WHERE scope=?1",
-                [self.id],
-            );
-        }
-    }
-}
+mod lifecycle;
+pub use lifecycle::{ExecutionState, SessionExecution};
 impl HarnessSessions {
     pub fn open(home: &Path) -> Result<Self> {
         let db = Connection::open(crate::store::database_path(
@@ -56,7 +35,11 @@ impl HarnessSessions {
         )?)?;
         db.busy_timeout(std::time::Duration::from_secs(5))?;
         db.execute_batch("CREATE TABLE IF NOT EXISTS harness_sessions(scope TEXT PRIMARY KEY,principal TEXT NOT NULL,conversation TEXT NOT NULL,agent TEXT NOT NULL,harness TEXT NOT NULL,config TEXT NOT NULL,title TEXT NOT NULL DEFAULT '',thread TEXT,through_seq INTEGER NOT NULL DEFAULT 0,source_hash TEXT NOT NULL DEFAULT '',dirty INTEGER NOT NULL DEFAULT 0,cancel INTEGER NOT NULL DEFAULT 0);")?;
-        Ok(Self { db })
+        lifecycle::migrate(&db)?;
+        Ok(Self {
+            db,
+            home: home.into(),
+        })
     }
     pub(crate) fn ensure(
         &self,
@@ -121,7 +104,13 @@ impl HarnessSessions {
         )
     }
     pub fn get(&self, id: &str) -> Result<HarnessSession> {
-        let row = self.db.query_row("SELECT principal,conversation,agent,harness,config,title,thread,dirty FROM harness_sessions WHERE scope=?1",[id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,r.get::<_,Option<String>>(6)?,r.get::<_,bool>(7)?)))?;
+        let execution = self.execution(id)?;
+        let owned: bool = self.db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM harness_operations WHERE scope=?1 AND owner IS NOT NULL)",
+            [id],
+            |r| r.get(0),
+        )?;
+        let row = self.db.query_row("SELECT principal,conversation,agent,harness,config,title,thread,0 FROM harness_sessions WHERE scope=?1",[id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,r.get::<_,Option<String>>(6)?,r.get::<_,bool>(7)?)))?;
         Ok(HarnessSession {
             id: id.into(),
             principal: row.0,
@@ -131,7 +120,8 @@ impl HarnessSessions {
             config: serde_json::from_str(&row.4)?,
             title: row.5,
             session_id: row.6,
-            busy: row.7,
+            busy: owned || execution.as_ref().is_some_and(|e| e.state.blocks()),
+            execution,
         })
     }
     /// Pin inherited defaults once the engine reports them, without replacing explicit selections.
@@ -162,26 +152,8 @@ impl HarnessSessions {
             .map(|id| self.get(&id?))
             .collect()
     }
-    pub(crate) fn lock(&self, id: &str) -> Result<()> {
-        if self.db.execute(
-            "UPDATE harness_sessions SET dirty=1,cancel=0 WHERE scope=?1 AND dirty=0",
-            [id],
-        )? != 1
-        {
-            bail!("session is running or interrupted; stop and reset it before retrying");
-        }
-        Ok(())
-    }
-    pub(crate) fn execution_lock<'a>(&'a self, id: &'a str) -> Result<ExecutionLock<'a>> {
-        self.lock(id)?;
-        Ok(ExecutionLock {
-            sessions: self,
-            id,
-            submitted: std::cell::Cell::new(false),
-        })
-    }
     pub fn configure(&self, id: &str, model: &str, effort: Option<&str>) -> Result<HarnessSession> {
-        self.lock(id)?;
+        let lease = self.execution_lock(id)?;
         let result = (|| {
             let mut session = self.get(id)?;
             let catalog = Codex::models(&session.config)?;
@@ -201,57 +173,58 @@ impl HarnessSessions {
             }
             session.config.model = Some(model.into());
             session.config.reasoning_effort = effort.map(str::to_owned);
-            self.db.execute(
-                "UPDATE harness_sessions SET config=?2 WHERE scope=?1",
-                params![id, serde_json::to_string(&session.config)?],
-            )?;
+            lease.fenced(|| {
+                self.db.execute(
+                    "UPDATE harness_sessions SET config=?2 WHERE scope=?1",
+                    params![id, serde_json::to_string(&session.config)?],
+                )?;
+                Ok(())
+            })?;
             Ok(())
         })();
-        self.db
-            .execute("UPDATE harness_sessions SET dirty=0 WHERE scope=?1", [id])?;
         result?;
+        lease.finish(ExecutionState::Succeeded, None)?;
         self.get(id)
     }
     pub fn rename(&self, id: &str, title: &str) -> Result<HarnessSession> {
         if title.trim().is_empty() || title.len() > 256 {
             bail!("title must be 1–256 bytes");
         }
-        self.lock(id)?;
+        let lease = self.execution_lock(id)?;
         let result: Result<()> = (|| {
             let session = self.get(id)?;
             // No engine thread exists before first execution; apply the saved title on creation.
             if let Some(thread) = &session.session_id {
                 Codex::rename(&session.config, thread, title)?;
             }
-            self.db.execute(
-                "UPDATE harness_sessions SET title=?2 WHERE scope=?1",
-                params![id, title],
-            )?;
+            lease.fenced(|| {
+                self.db.execute(
+                    "UPDATE harness_sessions SET title=?2 WHERE scope=?1",
+                    params![id, title],
+                )?;
+                Ok(())
+            })?;
             Ok(())
         })();
-        self.db
-            .execute("UPDATE harness_sessions SET dirty=0 WHERE scope=?1", [id])?;
         result?;
+        lease.finish(ExecutionState::Succeeded, None)?;
         self.get(id)
     }
     pub fn cancel_conversation(&self, conversation: &str) -> Result<()> {
-        self.db.execute(
-            "UPDATE harness_sessions SET cancel=1 WHERE conversation=?1 AND dirty=1",
-            [conversation],
-        )?;
+        self.db.execute("UPDATE harness_operations SET cancel=1,state='canceling' WHERE scope IN (SELECT scope FROM harness_sessions WHERE conversation=?1) AND state IN ('preparing','running','canceling')", [conversation])?;
         Ok(())
     }
     pub fn cancel(&self, id: &str) -> Result<()> {
         self.get(id)?;
         self.db.execute(
-            "UPDATE harness_sessions SET cancel=1 WHERE scope=?1 AND dirty=1",
+            "UPDATE harness_operations SET cancel=1,state='canceling' WHERE scope=?1 AND state IN ('preparing','running','canceling')",
             [id],
         )?;
         Ok(())
     }
     pub(crate) fn canceled(&self, id: &str) -> Result<bool> {
         Ok(self.db.query_row(
-            "SELECT cancel FROM harness_sessions WHERE scope=?1",
+            "SELECT COALESCE((SELECT cancel FROM harness_operations WHERE scope=?1),0)",
             [id],
             |r| r.get(0),
         )?)
@@ -265,18 +238,22 @@ impl HarnessSessions {
         let thread = session.session_id.context("session has not started yet")?;
         // Keep submitted compactions fenced unless the engine explicitly rejects them.
         Codex::compact(&session.config, &thread, &mut |event| {
-            if token.is_canceled() || self.canceled(id)? {
+            execution_lock.check()?;
+            if !matches!(event, agt_harness::Event::Settled(_))
+                && (token.is_canceled() || self.canceled(id)?)
+            {
+                execution_lock.canceling()?;
                 bail!("compaction canceled");
             }
             match event {
-                agt_harness::Event::Submitted => execution_lock.submitted(),
-                agt_harness::Event::Settled("rejected") => execution_lock.rejected(),
+                agt_harness::Event::Submitted => execution_lock.submitted()?,
+                agt_harness::Event::Accepted => execution_lock.running()?,
+                agt_harness::Event::Settled(status) => execution_lock.settled(status)?,
                 _ => {}
             }
             Ok(())
         })?;
-        self.db
-            .execute("UPDATE harness_sessions SET dirty=0 WHERE scope=?1", [id])?;
+        execution_lock.finish(ExecutionState::Succeeded, None)?;
         Ok(())
     }
 }

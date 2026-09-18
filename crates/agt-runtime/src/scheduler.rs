@@ -537,6 +537,7 @@ impl Scheduler {
     }
 
     fn scan(&mut self) -> Result<()> {
+        crate::HarnessSessions::open(&self.home)?.reconcile()?;
         let im = im(&self.home)?;
         for binding in BindingStore::open(&self.home)?.list()? {
             let mut after = 0;

@@ -202,16 +202,16 @@ pub(crate) fn execute(
     };
     record.config_fingerprint = fingerprint_for(&harness)?;
     let session_db = &sessions.db;
-    let saved: Option<(Option<String>, i64, String, bool)> = session_db
+    let saved: Option<(Option<String>, i64, String)> = session_db
         .query_row(
-            "SELECT thread,through_seq,source_hash,dirty FROM harness_sessions WHERE scope=?1",
+            "SELECT thread,through_seq,source_hash FROM harness_sessions WHERE scope=?1",
             [&scope],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional()?;
     let mut thread = None;
     let mut after = cutoff;
-    if let Some((saved_thread, through, source, _)) = saved {
+    if let Some((saved_thread, through, source)) = saved {
         let prefix: Vec<_> = history
             .iter()
             .filter(|v| v["seq"].as_i64().unwrap_or(0) <= through)
@@ -270,7 +270,9 @@ pub(crate) fn execute(
         ));
     }
     let check = || -> Result<()> {
+        execution_lock.check().map_err(error)?;
         if token.is_canceled() || sessions.canceled(&scope).map_err(error)? {
+            execution_lock.canceling().map_err(error)?;
             return Err(RuntimeError::Canceled);
         }
         if let Some(task) = task {
@@ -296,7 +298,12 @@ pub(crate) fn execute(
         .as_ref()
         .map(|t| t.conversation_id.to_string());
     let mut event = |event: Event<'_>| -> anyhow::Result<()> {
-        check()?;
+        // A cancellation acknowledgement must still be processed after cancellation.
+        if matches!(event, Event::Settled(_)) {
+            execution_lock.check()?;
+        } else {
+            check()?;
+        }
         crate::progress::harness_event(record, store, &event)?;
         match event {
             Event::Text(text) => {
@@ -306,38 +313,49 @@ pub(crate) fn execute(
             Event::Thread(id) => {
                 record.execution.as_mut().unwrap()["thread_id"] = json!(id);
                 store.save(record)?;
-                session_db.execute(
-                    "UPDATE harness_sessions SET thread=?2 WHERE scope=?1",
-                    params![scope, id],
-                )?;
+                execution_lock.fenced(|| {
+                    session_db.execute(
+                        "UPDATE harness_sessions SET thread=?2 WHERE scope=?1",
+                        params![scope, id],
+                    )?;
+                    Ok(())
+                })?;
             }
             Event::Turn(id) => {
+                execution_lock.running()?;
                 record.execution.as_mut().unwrap()["turn_id"] = json!(id);
                 store.save(record)?;
             }
             Event::ReasoningEffort(effort) => {
-                sessions.resolve_default(&scope, None, Some(effort))?;
+                execution_lock.fenced(|| sessions.resolve_default(&scope, None, Some(effort)))?;
                 record.execution.as_mut().unwrap()["reasoning_effort"] = json!(effort);
                 store.save(record)?;
             }
             Event::Model(model) => {
-                sessions.resolve_default(&scope, Some(model), None)?;
+                execution_lock.fenced(|| sessions.resolve_default(&scope, Some(model), None))?;
                 record.execution.as_mut().unwrap()["model"] = json!(model);
                 store.save(record)?;
             }
             Event::Submitted => {
                 record.execution.as_mut().unwrap()["outcome_unknown"] = json!(true);
                 store.save(record)?;
-                execution_lock.submitted();
+                execution_lock.submitted()?;
             }
             Event::Settled(status) => {
                 record.execution.as_mut().unwrap()["outcome_unknown"] = json!(false);
                 record.execution.as_mut().unwrap()["turn_status"] = json!(status);
                 store.save(record)?;
-                if status == "rejected" {
-                    execution_lock.rejected();
+                if matches!(status, "failed" | "interrupted") {
+                    // Advance acknowledged input before releasing the execution fence.
+                    execution_lock.fenced(|| {
+                        session_db.execute("UPDATE harness_sessions SET through_seq=?2,source_hash=?3 WHERE scope=?1",
+                            params![scope, task.map(|t| t.through_seq).unwrap_or(0), crate::fingerprint(&serde_json::to_vec(&history)?)])?;
+                        Ok(())
+                    })?;
                 }
+                execution_lock.settled(status)?;
             }
+            Event::Accepted => execution_lock.running()?,
             Event::Protocol | Event::Activity { .. } => {}
             Event::Completed => completed.set(true),
             Event::Tick => {}
@@ -449,7 +467,18 @@ pub(crate) fn execute(
             }
         }
     }
-    let result = check().and_then(|_| {
+    // A completed result may win the race against a cancellation request.
+    let completion_won = result.is_ok()
+        && record
+            .execution
+            .as_ref()
+            .is_some_and(|e| e["turn_status"] == "completed");
+    let result = (if completion_won {
+        execution_lock.check().map_err(error)
+    } else {
+        check()
+    })
+    .and_then(|_| {
         if awaiting.get() && completed.get() {
             Ok(String::new())
         } else {
@@ -470,15 +499,19 @@ pub(crate) fn execute(
     record.tool_failures = failures.get();
     let output = result?;
     let save = || {
-        session_db.execute(
-            "UPDATE harness_sessions SET dirty=0,through_seq=?2,source_hash=?3 WHERE scope=?1",
-            params![
-                scope,
-                task.map(|t| t.through_seq).unwrap_or(0),
-                crate::fingerprint(&serde_json::to_vec(&history)?)
-            ],
-        )?;
-        Ok(())
+        execution_lock
+            .fenced(|| {
+                session_db.execute(
+                    "UPDATE harness_sessions SET through_seq=?2,source_hash=?3 WHERE scope=?1",
+                    params![
+                        scope,
+                        task.map(|t| t.through_seq).unwrap_or(0),
+                        crate::fingerprint(&serde_json::to_vec(&history)?)
+                    ],
+                )?;
+                Ok(())
+            })
+            .map_err(error)
     };
     if let Some(t) = task {
         crate::scheduler::guarded(home, t, save)?;
@@ -500,7 +533,19 @@ pub(crate) fn execute(
                 config_fingerprint: record.config_fingerprint.clone(),
             },
         )?;
+        execution_lock
+            .finish(
+                crate::harness_sessions::ExecutionState::Succeeded,
+                Some(&output),
+            )
+            .map_err(error)?;
         return Ok(String::new());
     }
+    execution_lock
+        .finish(
+            crate::harness_sessions::ExecutionState::Succeeded,
+            Some(&output),
+        )
+        .map_err(error)?;
     Ok(output)
 }

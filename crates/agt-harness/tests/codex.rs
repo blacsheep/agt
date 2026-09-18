@@ -209,3 +209,6 @@ fn activity_is_structured_and_disconnect_has_no_confirmed_terminal_event() {
         }
     }
 }
+
+#[path = "codex/cancellation.rs"]
+mod cancellation;

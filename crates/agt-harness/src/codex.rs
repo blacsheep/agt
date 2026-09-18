@@ -21,6 +21,7 @@ pub enum Event<'a> {
     Tick,
     Protocol,
     Submitted,
+    Accepted,
     Settled(&'static str),
     Activity {
         id: &'a str,
@@ -246,22 +247,94 @@ impl Codex {
         event(Event::Submitted)?;
         client
             .send(json!({"id":id,"method":"thread/compact/start","params":{"threadId":thread}}))?;
-        loop {
-            let value = client.receive(event)?;
-            if value["id"] == id && value.get("error").is_some() {
-                event(Event::Settled("rejected"))?;
-                bail!("Codex compaction rejected: {}", value["error"]["message"]);
-            }
-            if value["params"]["threadId"] == thread && value["method"] == "turn/completed" {
-                if value["params"]["turn"]["status"] == "completed" {
-                    return Ok(());
+        let mut turn = None;
+        let mut terminal = false;
+        let result = (|| {
+            loop {
+                let value = client.receive(event)?;
+                if value["id"] == id && value.get("method").is_none() {
+                    if value.get("error").is_some() {
+                        terminal = true;
+                        event(Event::Settled("rejected"))?;
+                        bail!("Codex compaction rejected: {}", value["error"]["message"]);
+                    }
+                    event(Event::Accepted)?;
                 }
-                bail!("Codex compaction did not complete");
+                let p = &value["params"];
+                if p["threadId"] == thread && value["method"] == "turn/started" {
+                    turn = p["turn"]["id"].as_str().map(str::to_owned);
+                }
+                if p["threadId"] == thread && value["method"] == "turn/completed" {
+                    if turn.as_deref().is_some_and(|id| p["turn"]["id"] != id) {
+                        continue;
+                    }
+                    terminal = true;
+                    let status = match p["turn"]["status"].as_str() {
+                        Some("completed") => "completed",
+                        Some("interrupted") => "interrupted",
+                        Some("failed") => "failed",
+                        _ => bail!("unknown compaction status"),
+                    };
+                    event(Event::Settled(status))?;
+                    if status == "completed" {
+                        return Ok(());
+                    }
+                    bail!("Codex compaction did not complete");
+                }
+                if value.get("method").is_some() && value.get("id").is_some() {
+                    bail!("Codex compaction requested unsupported interaction");
+                }
             }
-            if value.get("method").is_some() && value.get("id").is_some() {
-                bail!("Codex compaction requested unsupported interaction");
+        })();
+        if result.is_err()
+            && !terminal
+            && let Some(turn) = turn
+        {
+            client.interrupt_and_confirm(thread, &turn, event);
+        }
+        result
+    }
+    /// Cancellation is a request; only the matching terminal event confirms it.
+    fn interrupt_and_confirm(
+        &mut self,
+        thread: &str,
+        turn: &str,
+        event: &mut dyn FnMut(Event<'_>) -> Result<()>,
+    ) -> Option<String> {
+        self.next_id += 1;
+        if self.send(json!({"id":self.next_id,"method":"turn/interrupt","params":{"threadId":thread,"turnId":turn}})).is_err() { return None; }
+        let mut output = None;
+        self.deadline = Instant::now() + Duration::from_secs(2);
+        while let Ok(value) = self.receive(&mut |_| Ok(())) {
+            let p = &value["params"];
+            if p["threadId"] == thread
+                && p["turnId"] == turn
+                && value["method"] == "item/completed"
+                && p["item"]["type"] == "agentMessage"
+                && p["item"]["phase"] != "commentary"
+            {
+                output = p["item"]["text"]
+                    .as_str()
+                    .filter(|s| !s.trim().is_empty())
+                    .map(str::to_owned);
+            }
+            if value["method"] == "turn/completed"
+                && p["threadId"] == thread
+                && p["turn"]["id"] == turn
+            {
+                let status = match p["turn"]["status"].as_str() {
+                    Some("interrupted") => "interrupted",
+                    Some("failed") => "failed",
+                    Some("completed") => "completed",
+                    _ => return None,
+                };
+                if event(Event::Settled(status)).is_err() {
+                    return None;
+                }
+                return if status == "completed" { output } else { None };
             }
         }
+        None
     }
     pub fn execute(
         &mut self,
@@ -302,11 +375,13 @@ impl Codex {
         self.send(json!({"id":start_id,"method":"turn/start","params":{"threadId":thread,"input":[{"type":"text","text":execution.input}],"model":harness.model,"effort":harness.reasoning_effort}}))?;
         let mut turn = None;
         let mut final_text = String::new();
+        let mut terminal = false;
         let result = (|| {
             loop {
                 let value = self.receive(event)?;
                 if value["id"] == start_id && value.get("method").is_none() {
                     if value.get("error").is_some() {
+                        terminal = true;
                         event(Event::Settled("rejected"))?;
                         bail!(
                             "Codex turn/start rejected: {}",
@@ -408,8 +483,10 @@ impl Codex {
                     let status = match p["turn"]["status"].as_str() {
                         Some("completed") => "completed",
                         Some("interrupted") => "interrupted",
-                        _ => "failed",
+                        Some("failed") => "failed",
+                        _ => bail!("unknown Codex turn status"),
                     };
+                    terminal = true;
                     event(Event::Settled(status))?;
                     match p["turn"]["status"].as_str() {
                         Some("completed") => {
@@ -433,9 +510,11 @@ impl Codex {
             }
         })();
         if result.is_err()
+            && !terminal
             && let Some(turn) = turn
+            && let Some(output) = self.interrupt_and_confirm(&thread, &turn, event)
         {
-            let _ = self.send(json!({"id":self.next_id+1,"method":"turn/interrupt","params":{"threadId":thread,"turnId":turn}}));
+            return Ok(output);
         }
         result
     }

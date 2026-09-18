@@ -9,7 +9,9 @@ mod engine;
 mod harness;
 mod harness_input;
 mod harness_sessions;
-pub use harness_sessions::{HarnessSession, HarnessSessions};
+pub use harness_sessions::{
+    ExecutionState as HarnessExecutionState, HarnessSession, HarnessSessions, SessionExecution,
+};
 mod model;
 mod model_stream;
 mod participation;

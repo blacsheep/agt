@@ -1455,7 +1455,7 @@ fn harness_session_snapshots_models_names_and_compaction_are_isolated() {
         log.iter().filter(|v| v["method"] == "thread/start").count(),
         1
     );
-    store.lock(&session.id).unwrap();
+    let _lease = store.execution_lock(&session.id).unwrap();
     assert!(store.configure(&session.id, "fixture-model", None).is_err());
     assert!(store.rename(&session.id, "busy").is_err());
     reset_conversation_context(path, &chat, "user").unwrap();

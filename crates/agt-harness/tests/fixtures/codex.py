@@ -45,7 +45,9 @@ for line in sys.stdin:
   turn='turn-'+str(time.time_ns());reply(id,{'turn':{'id':turn,'status':'inProgress'}})
   note('turn/started',{'threadId':thread,'turn':{'id':turn}})
   text=p['input'][0]['text']
-  if 'HANG' in text:
+  if 'CANCELABLE' in text:
+   (root/'started').write_text('1')
+  elif 'HANG' in text:
    (root/'started').write_text(str(__import__('os').getpid()));time.sleep(60)
   elif 'DISCONNECT' in text:sys.exit(0)
   elif 'FAIL' in text:note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'failed','error':{'message':'fixture failed'}}})
@@ -61,4 +63,7 @@ for line in sys.stdin:
     emit({'id':'tool','method':'item/tool/call','params':{'threadId':thread,'turnId':turn,'tool':'framework_resource_list','arguments':{'kind':'agent'}}})
    else:finish(thread,turn,'fixture final answer')
  elif id=='tool':finish(thread,turn,'tool completed')
- elif method=='turn/interrupt':reply(id,{});note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'interrupted'}})
+ elif method=='turn/interrupt':
+  reply(id,{})
+  if (root/'wrong-turn-interrupt').exists():note('turn/completed',{'threadId':thread,'turn':{'id':'unrelated','status':'completed'}})
+  note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'interrupted'}})
