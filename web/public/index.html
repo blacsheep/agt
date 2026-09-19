@@ -8,6 +8,7 @@
     <script src="/commands.js" defer></script>
     <script src="/app.js" defer></script>
     <script src="/tasks.js" defer></script>
+    <script src="/settings.js" defer></script>
   </head>
   <body class="workspace-page">
     <aside class="rail" id="workspace-nav">
@@ -23,6 +24,7 @@
         <button class="nav" data-page="agents" aria-label="Agent 团队" title="Agent 团队"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2"/></svg></span><span class="nav-label">Agent 团队</span><span id="agent-count" class="count">0</span></button>
         <button class="nav" data-page="observer" aria-label="Agent 会话" title="Agent 会话"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="14" rx="3"/><path d="M12 3v3M8 11h.01M16 11h.01M8 16h8"/></svg></span><span class="nav-label">Agent 会话</span></button>
         <button class="nav" data-page="resources" aria-label="资源库" title="资源库"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="nav-label">资源库</span></button>
+        <button class="nav" data-page="settings" aria-label="运行设置" title="运行设置"><span aria-hidden="true">⚙</span><span class="nav-label">运行设置</span></button>
       </nav>
       <div class="rail-bottom">
         <div class="avatar user">你</div>
@@ -228,6 +230,10 @@
           实验空间</span
         ><span id="home-path" class="debug-only" title="资源目录"></span>
       </footer>
+      <section id="page-settings" class="page hidden">
+        <div class="section-heading"><div><div class="eyebrow">WORKSPACE / SETTINGS</div><h1>运行设置</h1><p>控制任务容量、历史记忆与本机执行能力。</p></div><button id="reload-settings" class="secondary" type="button">重新读取</button></div>
+        <div id="runtime-settings" class="runtime-settings" aria-live="polite"></div>
+      </section>
     </main>
     <dialog id="group-drawer" class="group-drawer" aria-labelledby="group-title"><div class="modal-head"><h2 id="group-title">群信息</h2><button id="close-group" class="icon-button" aria-label="关闭群信息">×</button></div><div id="group-content"></div></dialog>
     <dialog id="modal">

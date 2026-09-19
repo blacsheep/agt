@@ -585,3 +585,13 @@ test('task queries use observer identity while task controls fix the human opera
   assert.equal((await request('/api/tool',{name:'task_reply',args:{task_id:'id',expected_revision:3,answer:'ok'}})).status,200);
   assert.deepEqual(seen[1].slice(0,6),['tool','call','--principal','operator','--manager','task_reply']);
 });
+
+test('workspace config uses validated CLI contract and rejects identity injection',async t=>{
+  const calls=[];
+  const {request}=await fixture(t,async args=>{calls.push(args);return args[1]==='describe'?{fields:[]}:{scheduler:{concurrency:3}};});
+  const response=await request('/api/config');assert.equal(response.status,200);
+  assert.deepEqual(calls.slice(0,2),[['config','show'],['config','describe']]);
+  assert.equal((await request('/api/config',{config:{},expected:{},viewer:'a'})).status,400);
+  assert.equal((await request('/api/config',{config:{scheduler:{concurrency:null}},expected:{scheduler:{concurrency:3}}})).status,200);
+  assert.deepEqual(calls.at(-1),['config','update','--value','{"scheduler":{"concurrency":null}}','--expected','{"scheduler":{"concurrency":3}}']);
+});

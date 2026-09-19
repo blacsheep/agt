@@ -11,7 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const readTools = new Set(['conversation_list', 'member_list', 'message_history', 'message_status', 'message_inbox', 'task_get', 'task_list', 'task_attention']);
 const writeTools = new Set(['direct_create', 'group_create', 'message_send', 'member_add', 'member_remove', 'resource_write', 'principal_create', 'agent_bind', 'agent_unbind', 'agent_set_enabled', 'task_cancel', 'task_reply', 'task_reprioritize', 'task_defer', 'task_resolve', 'task_retry', 'task_report']);
 const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent', 'harness'];
-const assets = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
+const assets = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/settings.js', ['settings.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
 
 export class ApiError extends Error {
   constructor(status, code, message, field) { super(message); Object.assign(this, { status, code, field }); }
@@ -142,6 +142,13 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
           if (res.destroyed || !res.write(`event: ${page.event}\ndata: ${JSON.stringify(page)}\n\n`)) res.destroy();
         }, () => res.end());
         if (res.destroyed) cleanup();
+      } else if (url.pathname === '/api/config' && req.method === 'GET') {
+        const [config, schema] = await Promise.all([run(['config','show']),run(['config','describe'])]);
+        send(200,{config,schema});
+      } else if (url.pathname === '/api/config' && req.method === 'POST') {
+        const data=await body(req);
+        if (Object.keys(data).some(k=>!['config','expected'].includes(k))) throw new ApiError(400,'invalid_config','配置请求包含未知字段。');
+        send(200,await run(['config','update','--value',JSON.stringify(object(data.config)),'--expected',JSON.stringify(object(data.expected))]));
       } else if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
         const [principals, bindings, ...resources] = await Promise.all([
           tool('principal_list', { include_deleted: true }), tool('binding_list'), ...kinds.map(kind => tool('resource_list', { kind })),

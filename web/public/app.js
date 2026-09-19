@@ -687,7 +687,7 @@ function renderActivity() {
   const rounds = state.scheduler.discussions.filter(d => state.conversation ? d.conversation === state.conversation.id : state.conversations.some(c => c.conversation.id === d.conversation));
   $('#scheduler-state').textContent = state.scheduler.online ? '调度服务在线' : '调度服务离线';
   $('.execution-top').classList.toggle('offline', !state.scheduler.online);
-  $('#scheduler-detail').textContent = debugMode ? rounds.slice(0, 3).map(d => d.state + ' · 模型调用 ' + d.calls + ' 次 · 每位 Agent 回复上限 ' + d.max_replies).join('；') || '尚未授权讨论轮次' : '当前进度与模型决定，分开查看。';
+  $('#scheduler-detail').textContent = debugMode ? rounds.slice(0, 3).map(d => d.state + ' · 模型调用 ' + d.calls + ' 次 · 每位 Agent 回复上限 ' + (d.max_replies ?? '不限')).join('；') || '尚未授权讨论轮次' : '当前进度与模型决定，分开查看。';
   renderPresence(tasks);
   const runs = debugMode ? state.runs : state.runs.filter(r => state.conversation ? r.conversation === state.conversation.id : state.conversations.some(c => c.conversation.id === r.conversation));
   $('#run-count').textContent = runs.length; $('#failure-count').textContent = runs.reduce((n,r) => n + r.tool_failures,0);
@@ -722,7 +722,7 @@ async function showCalls(id) {
 }
 function showReplyControls() {
   const conversation = state.conversation?.id; if (!conversation) return;
-  dialog('继续这个会话的回复', `<form id="modal-form"><p>处理当前会话尚未完成的消息，会调用模型并可能产生费用。</p><p class="form-note">消息合并至安静满 5 秒后处理。不同 Agent 可并行判断，自主接话依次开始；明确请求可并行回复。每位 Agent 最多回复 100 次，新的用户消息获准自动回复后计数归零；继续讨论不会重置计数。失败或中断的操作不会自动重跑。</p><div class="check-list"><label><input name="mcp" type="checkbox">本轮允许已在运行设置中授权的外部 MCP</label></div><div class="form-actions"><button class="primary" type="submit">开始回复</button></div></form>`);
+  dialog('继续这个会话的回复', `<form id="modal-form"><p>处理当前会话尚未完成的消息，会调用模型并可能产生费用。</p><p class="form-note">消息合并至安静满 5 秒后处理。不同 Agent 可并行判断，自主接话依次开始；明确请求可并行回复。每位 Agent 的回复额度由全局运行设置决定，新的用户消息获准自动回复后计数归零；继续讨论不会重置计数。失败或中断的操作不会自动重跑。</p><div class="check-list"><label><input name="mcp" type="checkbox">本轮允许已在运行设置中授权的外部 MCP</label></div><div class="form-actions"><button class="primary" type="submit">开始回复</button></div></form>`);
   formHandler(async data => { await api('reply', { conversation, action: 'start', allow_mcp: data.has('mcp'), confirm: true }); $('#modal').close(); await activity(); });
 }
 function showNewChat() {
@@ -790,7 +790,7 @@ function renderAgentSelection() {
 }
 function changeAgentEnabled(references, enabled) {
   const names = [...references]; if (!names.length || agentBatchBusy) return;
-  dialog(enabled ? '启用 Agent' : '停用 Agent', `<form id="modal-form"><p>${enabled ? '启用后会按响应策略处理消息，已有待处理消息可能触发模型调用。未配置的 Agent 使用默认运行设置：被提及时回应、模型调用轮数不限、不允许 MCP。' : '停止这些 Agent 在所有会话中的自动工作，并取消后续任务。身份、历史和运行设置保留；已发出的外部请求可能仍会完成。'}</p><p class="form-note">同一 Agent 的所有聊天身份都会${enabled ? '启用' : '停用'}。</p><ul>${names.map(n=>`<li>${esc(n)}</li>`).join('')}</ul><div class="form-actions"><button class="primary" type="submit">确认${enabled ? '启用' : '停用'} ${names.length} 位 Agent</button></div></form>`);
+  dialog(enabled ? '启用 Agent' : '停用 Agent', `<form id="modal-form"><p>${enabled ? '启用后会按响应策略处理消息，已有待处理消息可能触发模型调用。未配置的 Agent 使用默认运行设置：被提及时回应、执行额度遵循全局设置、不允许 MCP。' : '停止这些 Agent 在所有会话中的自动工作，并取消后续任务。身份、历史和运行设置保留；已发出的外部请求可能仍会完成。'}</p><p class="form-note">同一 Agent 的所有聊天身份都会${enabled ? '启用' : '停用'}。</p><ul>${names.map(n=>`<li>${esc(n)}</li>`).join('')}</ul><div class="form-actions"><button class="primary" type="submit">确认${enabled ? '启用' : '停用'} ${names.length} 位 Agent</button></div></form>`);
   formHandler(async () => {
     agentBatchBusy = true; renderAgents();
     const failures = []; let success = 0;
@@ -831,7 +831,8 @@ function renderAgents() {
   $$('[data-direct]').forEach(b => b.onclick = async () => { try { const c = await tool('direct_create', { principal: b.dataset.direct }); if (c.state !== 'active') { showRestoreChat(c); return; } switchPage('chat'); await api('conversation', {action:'show',conversation:c.id}); await conversations(); await selectConversation(c.id); } catch (e) { notify(errorText(e), true); } });
 }
 function builtinFields(selected = []) {
-  return `<fieldset class="builtin-tools"><legend>框架内置工具</legend><label><input type="checkbox" name="builtin_tools" value="resource_management" ${selected.includes('resource_management') ? 'checked' : ''}><span><strong>资源管理</strong><small>允许管理当前资源库的六类资源，包括修改其他 Agent 和按计划删除依赖资源。还可创建 Agent 聊天身份、管理运行设置及启用／停用其他 Agent。无需配置外部 MCP；不能创建普通用户身份。</small></span></label></fieldset>`;
+  const groups=[['resource_management','资源管理','创建和修改资源、绑定 Agent 并启用或停用。不自动获得本机命令权限。'],['task_collaboration','任务协作','委派可追踪任务、处理结果、安排依赖和并行策略。显式任务支持检查点等待。'],['local_execution','本机命令 · 原生 Agent','允许执行 Bash，另需在运行设置开启本机执行。命令具有服务账号权限，工作目录不是沙箱；Codex 使用自己的执行权限。']];
+  return `<fieldset class="builtin-tools"><legend>框架内置工具</legend>${groups.map(([key,title,description])=>`<label><input type="checkbox" name="builtin_tools" value="${key}" ${selected.includes(key)?'checked':''}><span><strong>${title}</strong><small>${description}</small></span></label>`).join('')}<p class="form-note">Memory 默认可用：Agent 可查询自己的历史、保存带来源的主题摘要；全局运行设置可关闭。</p></fieldset>`;
 }
 async function showAgentEdit(reference) {
   dialog(`编辑 Agent · ${reference}`, '<p class="form-note">正在读取角色配置…</p>');
@@ -855,7 +856,7 @@ async function showAgentEdit(reference) {
   } catch (error) { if (generation === modalGeneration && $('#modal').open) { $('#modal-body').innerHTML = ''; modalError(error); } }
 }
 function bindingFields(binding = {}) {
-  return `<p class="form-note">模型调用轮数不限，任务完成后结束；可随时停止讨论或停用 Agent。</p><div class="form-grid">${field('响应策略', `<select name="policy">${options([['mentioned', '私聊 / 群内被提及'], ['all', '所有消息'], ['manual', '不自动回应']], binding.policy || 'mentioned')}</select>`)}</div><div class="form-grid">${field('执行工作目录', `<input name="cwd" value="${esc(binding.working_directory || state.boot.home)}" required>`)}</div><div class="check-list"><label><input type="checkbox" name="allow_mcp" ${binding.allow_mcp ? 'checked' : ''}>允许挂载 MCP（执行批次时仍需再次授权）</label></div>`;
+  return `<p class="form-note">模型步数默认不限，可在全局运行设置中调整；可随时停止讨论或停用 Agent。</p><div class="form-grid">${field('响应策略', `<select name="policy">${options([['mentioned', '私聊 / 群内被提及'], ['all', '所有消息'], ['manual', '不自动回应']], binding.policy || 'mentioned')}</select>`)}</div><div class="form-grid">${field('执行工作目录', `<input name="cwd" value="${esc(binding.working_directory || state.boot.home)}" required>`)}</div><div class="check-list"><label><input type="checkbox" name="allow_mcp" ${binding.allow_mcp ? 'checked' : ''}>允许挂载 MCP（执行批次时仍需再次授权）</label></div>`;
 }
 const bindingData = (data, principal, agent) => ({ principal, agent, working_directory: data.get('cwd'), policy: data.get('policy'), allow_mcp: data.has('allow_mcp') });
 function showBinding(agent) {
@@ -940,7 +941,7 @@ async function showResourceDetail(kind, reference) {
     if (kind === 'provider') pairs.push(['Base URL', r.base_url], ['密钥', r.api_key_configured ? '已配置' : '未配置']);
     if (kind === 'model') pairs.push(['Provider', ref(r.provider)], ['模型名称', r.model], ['API 协议', r.api_format], ['推理强度', r.params.reasoning_effort || '未指定'], ['温度', r.params.reasoning_effort ? '指定推理强度时不发送' : r.params.temperature], ['输出上限', r.params.max_tokens ?? '未指定'], ['上下文窗口', `${r.capabilities.context_window ?? 272000} tokens`], ['超时', `${r.params.timeout} 秒`], ['工具调用', r.capabilities.tool_call ? '开启' : '关闭']);
     if (kind === 'harness') pairs.push(['执行引擎', 'Codex'], ['可执行文件', r.executable], ['工作目录', r.working_directory], ['默认模型', r.model || '使用 Codex 默认配置'], ['默认思考档位', r.reasoning_effort || '沿用默认'], ['文件权限', r.sandbox === 'workspace_write' ? '工作区可写' : '只读'], ['超时', `${r.timeout_seconds} 秒`]);
-    if (kind === 'agent') pairs.push([r.harness ? 'Harness' : '模型', ref(r.harness || r.model)], ['Prompt', ref(r.prompt)], ['Skills', r.skills.join('、') || '无'], ['MCP', r.mcps.map(ref).join('、') || '无'], ['内置工具', r.builtin_tools?.includes('resource_management') ? '资源管理' : '无']);
+    if (kind === 'agent') pairs.push([r.harness ? 'Harness' : '模型', ref(r.harness || r.model)], ['Prompt', ref(r.prompt)], ['Skills', r.skills.join('、') || '无'], ['MCP', r.mcps.map(ref).join('、') || '无'], ['内置工具', (r.builtin_tools||[]).map(k=>({resource_management:'资源管理',task_collaboration:'任务协作',local_execution:'本机命令'})[k]||k).join('、') || '无']);
     if (kind === 'mcp') pairs.push(['连接方式', r.transport], ['目标', r.target || '未指定']);
     const details = `<dl class="resource-details">${pairs.map(([label, text]) => `<dt>${esc(label)}</dt><dd>${esc(text)}</dd>`).join('')}</dl>`;
     const promptCharacters = kind === 'prompt' ? Array.from(value.content) : [];
@@ -1054,7 +1055,8 @@ function switchPage(page) {
   const previous = state.page; state.page = page;
   $$('.page').forEach(p => p.classList.toggle('hidden', p.id !== `page-${page}`));
   $$('.nav').forEach(b => { b.classList.toggle('active', b.dataset.page === page); if (b.dataset.page === page) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-  $('#page-label').textContent = { chat: '会话空间', observer: 'Agent 会话', agents: 'Agent 团队', resources: '资源库' }[page];
+  $('#page-label').textContent = { chat: '会话空间', observer: 'Agent 会话', agents: 'Agent 团队', resources: '资源库', settings: '运行设置' }[page];
+  if (page === 'settings') window.AgtSettings?.open();
   if (['chat', 'observer'].includes(page)) {
     const observer = page === 'observer';
     const viewer = observer ? selectedObserver || state.boot.principal : state.boot.principal;
@@ -1067,7 +1069,7 @@ function switchPage(page) {
     if (!choosingIdentity) conversations().then(activity).catch(e => notify(errorText(e),true));
   }
 }
-function help() { dialog('从这里开始你的实验', `<div class="guide"><p>这是通用的多 Agent 工作台。讨论、审查、博弈，都是同一套会话能力的用法。</p><ol><li><strong>准备模型。</strong>资源库会读取启动时的 home。支持已有的 Chat Completions / Responses 模型，请确认配置与 Provider 接口一致。</li><li><strong>创建角色。</strong>在 Agent 团队中设置角色 Prompt、模型、挂载资源和响应策略。</li><li><strong>建立会话。</strong>私聊选一人，群聊选多人。输入 @ 选择需要回应的成员，@all 提及所有人。</li><li><strong>发送与回复。</strong>默认发送后自动回复，会调用模型。可暂停后续回复，或关闭自动回复只保存消息；需要时点击「继续回复」。</li><li><strong>观察与推进。</strong>进入“Agent 会话”选择 Agent，只读查看其对话；“会话空间”始终使用你自己的身份。点击消息投递或运行条目检查错误。</li></ol><h3>几个重要边界</h3><p>界面是可信主机管理工具。观察身份不是多用户登录。阶段仍由你组织，没有游戏专属逻辑。自动消息不限制深度；每位 Agent 最多回复 100 次，新用户输入可重置。关闭服务可能中断调用；不要盲目重放结果不确定的操作。</p><h3>资源目录</h3><p>${esc(state.boot.home)}</p></div>`); }
+function help() { dialog('从这里开始你的实验', `<div class="guide"><p>这是通用的多 Agent 工作台。讨论、审查、博弈，都是同一套会话能力的用法。</p><ol><li><strong>准备模型。</strong>资源库会读取启动时的 home。支持已有的 Chat Completions / Responses 模型，请确认配置与 Provider 接口一致。</li><li><strong>创建角色。</strong>在 Agent 团队中设置角色 Prompt、模型、挂载资源和响应策略。</li><li><strong>建立会话。</strong>私聊选一人，群聊选多人。输入 @ 选择需要回应的成员，@all 提及所有人。</li><li><strong>发送与回复。</strong>默认发送后自动回复，会调用模型。可暂停后续回复，或关闭自动回复只保存消息；需要时点击「继续回复」。</li><li><strong>观察与推进。</strong>进入“Agent 会话”选择 Agent，只读查看其对话；“会话空间”始终使用你自己的身份。点击消息投递或运行条目检查错误。</li></ol><h3>几个重要边界</h3><p>界面是可信主机管理工具。观察身份不是多用户登录。阶段仍由你组织，没有游戏专属逻辑。自动消息不限制深度；每位 Agent 的回复额度由全局运行设置决定，新用户输入可重置。关闭服务可能中断调用；不要盲目重放结果不确定的操作。</p><h3>资源目录</h3><p>${esc(state.boot.home)}</p></div>`); }
 
 $('#close-modal').onclick = closeModal;
 $('#modal').addEventListener('cancel', e => { if (state.modalBusy) e.preventDefault(); });
