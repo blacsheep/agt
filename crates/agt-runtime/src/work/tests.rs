@@ -230,7 +230,7 @@ fn migration_preserves_scheduler_data_and_rejects_future_schema() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
             .unwrap(),
-        15
+        16
     );
     ledger
         .store
@@ -281,7 +281,7 @@ fn version_five_upgrade_preserves_existing_work() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        15
+        16
     );
 }
 

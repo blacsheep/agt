@@ -11,6 +11,7 @@ name = "agt"
 path = "src/main.rs"
 
 [dependencies]
+serde_yaml.workspace = true
 agt-harness.workspace = true
 agt-agent.workspace = true
 agt-config.workspace = true

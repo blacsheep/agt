@@ -1045,3 +1045,6 @@ fn deleted_agent_identity_keeps_history_but_cannot_join_new_conversations() {
             .any(|d| d.principal_id.as_str() == "a")
     );
 }
+
+#[path = "memory/recall.rs"]
+mod memory_tests;

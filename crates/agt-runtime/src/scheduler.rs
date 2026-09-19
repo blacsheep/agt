@@ -294,8 +294,8 @@ pub struct Scheduler {
 
 impl Scheduler {
     pub fn open(home: &Path, concurrency: usize) -> Result<Self> {
-        if !(1..=16).contains(&concurrency) {
-            bail!("concurrency must be in 1..=16");
+        if concurrency == 0 {
+            bail!("concurrency must be positive");
         }
         let lease = HomeLease::acquire(home)?;
         let store = ScheduleStore::open(home)?;

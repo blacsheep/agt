@@ -48,6 +48,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tempfile",
  "thiserror",
 ]
@@ -58,6 +59,11 @@ version = "0.1.0"
 dependencies = [
  "agt-core",
  "agt-storage",
+ "anyhow",
+ "libc",
+ "serde",
+ "serde_json",
+ "serde_yaml",
  "thiserror",
 ]
 
@@ -177,6 +183,7 @@ dependencies = [
  "agt-skill",
  "agt-storage",
  "anyhow",
+ "libc",
  "reqwest",
  "rusqlite",
  "serde",

@@ -10,3 +10,10 @@ version.workspace = true
 agt-core.workspace = true
 agt-storage.workspace = true
 thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+anyhow.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

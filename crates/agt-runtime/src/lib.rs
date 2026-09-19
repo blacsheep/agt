@@ -12,6 +12,8 @@ mod harness_sessions;
 pub use harness_sessions::{
     ExecutionState as HarnessExecutionState, HarnessSession, HarnessSessions, SessionExecution,
 };
+mod local_execution;
+pub use local_execution::LocalExecution;
 mod model;
 mod model_stream;
 mod participation;

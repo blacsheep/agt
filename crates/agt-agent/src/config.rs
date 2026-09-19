@@ -14,12 +14,14 @@ pub const AGENT_FILE: &str = "agent.yaml";
 pub enum BuiltinTool {
     ResourceManagement,
     TaskCollaboration,
+    LocalExecution,
 }
 impl std::fmt::Display for BuiltinTool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::ResourceManagement => "resource_management",
             Self::TaskCollaboration => "task_collaboration",
+            Self::LocalExecution => "local_execution",
         })
     }
 }
@@ -29,8 +31,9 @@ impl std::str::FromStr for BuiltinTool {
         match value {
             "resource_management" => Ok(Self::ResourceManagement),
             "task_collaboration" => Ok(Self::TaskCollaboration),
+            "local_execution" => Ok(Self::LocalExecution),
             _ => Err(AgentError::InvalidConfig {
-                message: "内置工具组无效，可选值为 resource_management、task_collaboration".into(),
+                message: "内置工具组无效，可选值为 resource_management、task_collaboration、local_execution".into(),
             }),
         }
     }

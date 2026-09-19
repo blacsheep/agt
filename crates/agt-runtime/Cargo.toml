@@ -6,6 +6,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+libc = "0.2"
+agt-config.workspace = true
 agt-harness.workspace = true
 agt-agent.workspace = true
 agt-core.workspace = true
@@ -27,5 +29,4 @@ thiserror.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-agt-config.workspace = true
 tempfile.workspace = true

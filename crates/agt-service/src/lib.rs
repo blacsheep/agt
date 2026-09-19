@@ -3,6 +3,7 @@ pub mod deletion;
 mod error;
 mod harness_tools;
 pub mod mcp_server;
+mod memory;
 mod messaging;
 mod resources;
 mod tools;
@@ -36,4 +37,8 @@ pub trait WorkControl {
 /// Runtime owns conversation session storage; service exposes the shared tool contract.
 pub trait HarnessControl {
     fn call(&self, name: &str, args: serde_json::Value) -> anyhow::Result<serde_json::Value>;
+}
+
+pub trait ExecutionControl {
+    fn call(&self, args: serde_json::Value) -> anyhow::Result<serde_json::Value>;
 }

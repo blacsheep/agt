@@ -51,7 +51,8 @@ impl TaskControl {
                 bail!("queue changes require a hosted task or human Manager");
             }
             if self.actor.principal.as_str() != item.request.assignee
-                && !(human && self.actor.principal.as_str() == item.request.requester)
+                && !((human || name == "task_execution_policy")
+                    && self.actor.principal.as_str() == item.request.requester)
             {
                 bail!("only assignee or requesting human Manager can manage this queue");
             }
@@ -72,6 +73,12 @@ impl TaskControl {
             }
             queue::ensure_queued(&store.connection, &item, revision)?;
             match name {
+                "task_execution_policy" => {
+                    let mut policy: super::execution_policy::Policy =
+                        serde_json::from_value(args["execution_policy"].clone())?;
+                    policy.validate()?;
+                    super::execution_policy::set(&store.connection, &item.id, &policy)?;
+                }
                 "task_reprioritize" => {
                     let priority: Priority = serde_json::from_value(args["priority"].clone())?;
                     if !human && (priority == Priority::Urgent || item.priority == Priority::Urgent)
@@ -149,7 +156,9 @@ impl TaskControl {
             queue::save(
                 &store.connection,
                 &mut item,
-                if name == "task_defer" {
+                if name == "task_execution_policy" {
+                    "execution_policy_changed"
+                } else if name == "task_defer" {
                     "deferred"
                 } else {
                     "reprioritized"
@@ -182,8 +191,11 @@ impl TaskControl {
             source_message: Option<String>,
             #[serde(default)]
             priority: Priority,
+            #[serde(default)]
+            execution_policy: super::execution_policy::Policy,
         }
-        let input: Input = serde_json::from_value(args)?;
+        let mut input: Input = serde_json::from_value(args)?;
+        input.execution_policy.validate()?;
         let operation = |store: &ScheduleStore| -> Result<Value> {
             let im = open_im(&self.home)?;
             let (origin, discussion) = if let Some(task) = &self.task {
@@ -262,6 +274,7 @@ impl TaskControl {
                 priority: input.priority,
             };
             let item = WorkLedger::enqueue_on(&store.connection, request)?;
+            super::execution_policy::create(&store.connection, &item.id, &input.execution_policy)?;
             view(&self.home, store, &item)
         };
         if let Some(task) = &self.task {
@@ -316,7 +329,10 @@ impl WorkControl for TaskControl {
                 },
             );
         }
-        if matches!(name, "task_reprioritize" | "task_defer") {
+        if matches!(
+            name,
+            "task_reprioritize" | "task_defer" | "task_execution_policy"
+        ) {
             return self.edit_queue(name, args);
         }
         if name == "task_request" {
@@ -499,11 +515,25 @@ pub(super) fn blocked(
 }
 pub(super) fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Result<Value> {
     let mut value = serde_json::to_value(item)?;
+    value["execution_policy"] =
+        serde_json::to_value(super::execution_policy::get(&store.connection, &item.id)?)?;
     value["report"] = super::reporting::status(&store.connection, &item.id)?;
     if item.state == WorkState::Queued {
         value["blocked_reason"] = json!(blocked(home, store, item, &item.request.assignee)?.or(
             queue::blocker(&store.connection, item, crate::schedule_store::now_ms())?
         ));
+    }
+    if item.state == WorkState::Queued
+        && value["blocked_reason"].is_null()
+        && let Ok(task) = store.get(&format!("work:{}", item.id))
+    {
+        value["blocked_reason"] = json!(super::execution_policy::blocker(
+            &store.connection,
+            &task,
+            agt_config::RuntimeConfig::load(home)?
+                .scheduler
+                .parallel_work
+        )?);
     }
     if let WorkState::WaitingDependency { dependency, .. } = &item.state {
         value["waiting_for_task"] = json!(dependency);

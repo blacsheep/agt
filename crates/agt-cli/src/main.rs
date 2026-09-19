@@ -26,6 +26,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 use serde_json::Value;
 
+mod config;
 mod events;
 mod framework;
 mod runtime;
@@ -60,6 +61,9 @@ enum OutputMode {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// 工作空间运行策略与配置说明
+    #[command(subcommand)]
+    Config(config::ConfigCommand),
     /// watch authorized durable changes as JSONL
     #[command(subcommand)]
     Events(events::EventCommand),
@@ -722,6 +726,7 @@ fn ensure_default_home_ready() -> Result<PathBuf> {
 
 fn dispatch(command: Command, home: &Path, output: OutputMode, yes: bool) -> Result<()> {
     match command {
+        Command::Config(command) => config::dispatch(command, home, output),
         Command::Events(command) => events::dispatch(command, home),
         Command::Tool(command) => framework::tool(command, home, output),
         Command::Serve(args) => framework::serve(args, home),

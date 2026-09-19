@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 
 pub(crate) const LEASE_MS: i64 = 15_000;
 pub(crate) const QUIET_MS: i64 = 5_000;
-pub(crate) const MAX_REPLIES: u32 = 100;
-pub(crate) const ROUND_MS: i64 = 30 * 60 * 1000;
 
 pub(crate) fn now_ms() -> i64 {
     SystemTime::now()
@@ -64,7 +62,7 @@ pub struct Discussion {
     pub conversation: String,
     pub state: String,
     pub calls: u32,
-    pub max_replies: u32,
+    pub max_replies: Option<u32>,
     pub expires_at: i64,
     pub allow_mcp: bool,
 }
@@ -86,6 +84,7 @@ pub struct ReplyUsage {
 
 pub struct ScheduleStore {
     pub(crate) home: std::path::PathBuf,
+    config: agt_config::RuntimeConfig,
     pub(crate) connection: Connection,
 }
 
@@ -130,7 +129,7 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3..=15 => {},
+            3..=16 => {},
             _ => bail!("unsupported scheduler database version"),
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
@@ -141,10 +140,17 @@ impl ScheduleStore {
                 CREATE TRIGGER context_reset_added AFTER INSERT ON context_reset_events BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'context_reset',NEW.created_at); END;
                 PRAGMA user_version=15;")?;
         }
+        if version < 16 {
+            tx.execute_batch("DROP INDEX IF EXISTS active_principal;
+                CREATE INDEX IF NOT EXISTS active_identity ON tasks(principal,state);
+                CREATE TABLE IF NOT EXISTS work_execution_policy(work_id TEXT PRIMARY KEY,policy TEXT NOT NULL,requested TEXT NOT NULL);
+                PRAGMA user_version=16;")?;
+        }
         tx.commit()?;
         Ok(Self {
             connection,
             home: home.into(),
+            config: agt_config::RuntimeConfig::load(home)?,
         })
     }
 
@@ -168,7 +174,7 @@ impl ScheduleStore {
         allow_mcp: bool,
         now: i64,
     ) -> Result<()> {
-        self.connection.execute("INSERT OR IGNORE INTO discussions(id,conversation,state,expires,allow_mcp) VALUES(?1,?2,'active',?3,?4)", params![id,conversation,now+ROUND_MS,allow_mcp])?;
+        self.connection.execute("INSERT OR IGNORE INTO discussions(id,conversation,state,expires,allow_mcp) VALUES(?1,?2,'active',?3,?4)", params![id,conversation,self.config.expires_at(now),allow_mcp])?;
         Ok(())
     }
 
@@ -199,14 +205,14 @@ impl ScheduleStore {
             [conversation], |r| Ok((r.get(0)?, r.get(1)?)),
         ).optional()?;
         let (discussion, previous_seq) = existing.unwrap_or_else(|| (message.into(), 0));
-        tx.execute("INSERT OR IGNORE INTO discussions(id,conversation,state,expires,allow_mcp) VALUES(?1,?2,'active',?3,?4)", params![discussion,conversation,now+ROUND_MS,allow_mcp])?;
+        tx.execute("INSERT OR IGNORE INTO discussions(id,conversation,state,expires,allow_mcp) VALUES(?1,?2,'active',?3,?4)", params![discussion,conversation,self.config.expires_at(now),allow_mcp])?;
         tx.execute(
             "INSERT INTO human_messages VALUES(?1,?2)",
             params![message, discussion],
         )?;
         if seq > previous_seq {
             tx.execute("DELETE FROM usage WHERE discussion=?1", [&discussion])?;
-            tx.execute("UPDATE discussions SET state='active',last_human_seq=?2,expires=?3,allow_mcp=MAX(allow_mcp,?4) WHERE id=?1", params![discussion,seq,now+ROUND_MS,allow_mcp])?;
+            tx.execute("UPDATE discussions SET state='active',last_human_seq=?2,expires=?3,allow_mcp=MAX(allow_mcp,?4) WHERE id=?1", params![discussion,seq,self.config.expires_at(now),allow_mcp])?;
             // A human turn wakes pending work, including cross-conversation waits.
             // Running snapshots and possible external effects remain untouched.
             for mut task in query_tasks(
@@ -261,7 +267,7 @@ impl ScheduleStore {
                 )?;
             }
             "resume" => {
-                tx.execute("UPDATE discussions SET state='active',expires=?2,allow_mcp=MAX(allow_mcp,?3) WHERE conversation=?1 AND state!='ended'",params![conversation,now+ROUND_MS,allow_mcp])?;
+                tx.execute("UPDATE discussions SET state='active',expires=?2,allow_mcp=MAX(allow_mcp,?3) WHERE conversation=?1 AND state!='ended'",params![conversation,self.config.expires_at(now),allow_mcp])?;
                 for mut task in query_tasks(
                     &tx,
                     "SELECT t.record FROM tasks t JOIN discussions d ON d.id=t.discussion WHERE t.state='blocked' AND d.state='active'",
@@ -292,7 +298,7 @@ impl ScheduleStore {
             .query_row(
                 "SELECT id,conversation,state,calls,expires,allow_mcp FROM discussions WHERE id=?1",
                 [id],
-                discussion_row,
+                |r| discussion_row(r, self.config.scheduler.replies_per_agent),
             )
             .optional()?)
     }
@@ -503,7 +509,12 @@ impl ScheduleStore {
             return Ok(None);
         }
         let replying = !task.decision_required || task.state == "ready_to_reply";
-        let busy=tx.query_row("SELECT 1 FROM tasks WHERE id!=?1 AND ((principal=?2 AND state IN ('evaluating','ready_to_reply','responding')) OR (?3 AND conversation=?4 AND state='responding')) LIMIT 1",params![task.id,task.principal,replying && task.decision_required,task.conversation], |_|Ok(())).optional()?.is_some();
+        if crate::work::execution_policy::blocker(&tx, &task, self.config.scheduler.parallel_work)?
+            .is_some()
+        {
+            return Ok(None);
+        }
+        let busy = replying && task.decision_required && tx.query_row("SELECT 1 FROM tasks WHERE id!=?1 AND conversation=?2 AND state='responding' LIMIT 1",params![task.id,task.conversation], |_|Ok(())).optional()?.is_some();
         if busy {
             return Ok(None);
         }
@@ -516,9 +527,17 @@ impl ScheduleStore {
             params![task.discussion, task.principal],
             |r| r.get(0),
         )?;
-        if replies >= MAX_REPLIES {
+        if self
+            .config
+            .scheduler
+            .replies_per_agent
+            .is_some_and(|limit| replies >= limit)
+        {
             task.state = "limited".into();
-            task.reason = Some("100 replies reached; send a new human message to reset".into());
+            task.reason = Some(format!(
+                "{} replies reached; send a new human message to reset",
+                self.config.scheduler.replies_per_agent.unwrap()
+            ));
             save_task(&tx, &task)?;
             tx.commit()?;
             agt_storage::wake::notify(&self.home);
@@ -671,7 +690,9 @@ impl ScheduleStore {
             .is_some();
         let mut statement=self.connection.prepare("SELECT id,conversation,state,calls,expires,allow_mcp FROM discussions WHERE id IN (SELECT discussion FROM tasks WHERE state IN ('queued','waiting','ready_to_reply','evaluating','responding','blocked','limited')) OR id IN (SELECT id FROM discussions ORDER BY rowid DESC LIMIT 100) ORDER BY rowid DESC")?;
         let discussions = statement
-            .query_map([], discussion_row)?
+            .query_map([], |r| {
+                discussion_row(r, self.config.scheduler.replies_per_agent)
+            })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(ScheduleStatus {
             online,
@@ -715,13 +736,13 @@ impl ScheduleStore {
     }
 }
 
-fn discussion_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Discussion> {
+fn discussion_row(r: &rusqlite::Row<'_>, max_replies: Option<u32>) -> rusqlite::Result<Discussion> {
     Ok(Discussion {
         id: r.get(0)?,
         conversation: r.get(1)?,
         state: r.get(2)?,
         calls: r.get(3)?,
-        max_replies: MAX_REPLIES,
+        max_replies,
         expires_at: r.get(4)?,
         allow_mcp: r.get(5)?,
     })
@@ -1098,4 +1119,5 @@ mod tests {
             thread.join().unwrap();
         }
     }
+    include!("tests/scheduling/policies.rs");
 }

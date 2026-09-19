@@ -123,6 +123,7 @@ pub(crate) fn execute(
             if record.request.trigger.is_none() {
                 return name.starts_with("resource_")
                     || name.starts_with("harness_")
+                    || name.starts_with("memory_")
                     || matches!(
                         name,
                         "provider_models"
@@ -420,6 +421,7 @@ pub(crate) fn execute(
                     | "task_list"
                     | "task_defer"
                     | "task_reprioritize"
+                    | "task_execution_policy"
                     | "task_cancel"
                     | "task_retry"
                     | "task_resolve"

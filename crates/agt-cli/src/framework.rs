@@ -78,8 +78,8 @@ pub(crate) enum ScheduleCommand {
     Run {
         #[arg(long)]
         watch: bool,
-        #[arg(long, default_value_t = 3)]
-        concurrency: usize,
+        #[arg(long)]
+        concurrency: Option<usize>,
     },
     /// Authorize a human message, or continue pending discussion work
     Start {
@@ -142,6 +142,9 @@ pub(crate) fn schedule(command: ScheduleCommand, home: &Path, output: OutputMode
     };
     match command {
         ScheduleCommand::Run { watch, concurrency } => {
+            let concurrency = concurrency
+                .or(agt_config::RuntimeConfig::load(home)?.scheduler.concurrency)
+                .unwrap_or(usize::MAX);
             let cancellation = crate::signals::cancellation();
             let mut scheduler = loop {
                 if cancellation.is_canceled() {

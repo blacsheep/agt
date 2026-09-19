@@ -59,6 +59,7 @@ impl CallRecord {
         self.public_label = match name {
             "harness_models" | "harness_session_models" => Some("查询可用模型"),
             "harness_session_get" => Some("读取执行会话"),
+            "local_exec" => Some("执行本机命令"),
             "harness_session_configure" => Some("修改会话模型"),
             "resource_write" => Some(match args["kind"].as_str() {
                 Some("harness") => "配置 Harness 连接",
@@ -67,6 +68,11 @@ impl CallRecord {
                 _ => "配置资源",
             }),
             "agent_bind" => Some("绑定并启用 Agent"),
+            "memory_search" => Some("检索历史记忆"),
+            "memory_save" => Some("记录主题记忆"),
+            "memory_read" => Some("读取记忆来源"),
+            "memory_forget" => Some("移除主题记忆"),
+            "task_execution_policy" => Some("安排任务并行与互斥"),
             "task_request" => Some("安排协作任务"),
             _ => None,
         }
