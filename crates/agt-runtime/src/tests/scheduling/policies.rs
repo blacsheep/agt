@@ -48,3 +48,17 @@ fn resource_claims_compete_across_connections_without_double_admission() {
     }).collect::<Vec<_>>();
     assert_eq!(jobs.into_iter().filter_map(|j|j.join().ok()).filter(|v|*v).count(),1);
 }
+
+#[test]
+fn unknown_results_keep_resources_until_reconciled() {
+    let (_home,mut store)=fixture();
+    let a=queued_work(&mut store,1,"a",true,"game:1");
+    let b=queued_work(&mut store,2,"b",true,"game:1");
+    let mut task=store.claim(&a,"scheduler:one",0).unwrap().unwrap();
+    let work=task.work_id.clone().unwrap();
+    task.state="interrupted".into();store.update(&task,0).unwrap();
+    store.connection.execute("UPDATE work_items SET record=json_set(record,'$.state','outcome_unknown','$.run_id','lost-run','$.reason','lost owner') WHERE id=?1",[&work]).unwrap();
+    assert!(store.claim(&b,"scheduler:one",0).unwrap().is_none());
+    store.connection.execute("UPDATE work_items SET record=json_set(record,'$.state','failed','$.error','confirmed stopped') WHERE id=?1",[&work]).unwrap();
+    assert!(store.claim(&b,"scheduler:one",0).unwrap().is_some());
+}

@@ -1,7 +1,9 @@
 mod delivery;
 mod error;
 mod model;
+mod search;
 mod sessions;
+pub use search::{MessageSearch, MessageSearchPage};
 mod store;
 
 pub use delivery::{Delivery, DeliveryState};

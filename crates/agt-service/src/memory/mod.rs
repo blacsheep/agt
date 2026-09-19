@@ -183,26 +183,21 @@ pub(crate) fn call(
                     }
                 }
             } else {
-                let history = Connection::open_with_flags(
-                    agt_storage::database_path(home, "im", "im.db")?,
-                    rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+                let page = im.search_messages(
+                    owner,
+                    agt_im::MessageSearch {
+                        query,
+                        conversation,
+                        day,
+                        since,
+                        until,
+                        before,
+                        limit: limit as usize,
+                    },
                 )?;
-                let mut stmt=history.prepare("SELECT rowid,id FROM messages WHERE rowid<?1 AND deleted_at IS NULL AND created_at>=?2 AND created_at<?3 AND (?4 IS NULL OR conversation_id=?4) AND instr(lower(body),lower(?5))>0 AND (?6 IS NULL OR date(created_at/1000,'unixepoch')=?6) ORDER BY rowid DESC LIMIT 500")?;
-                let rows = stmt.query_map(
-                    params![before, since, until, conversation, query, day],
-                    |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
-                )?;
-                for row in rows {
-                    let (position, id) = row?;
-                    cursor = Some(position);
-                    if let Ok(m) = im.visible_message(&MessageId::new(id), owner)
-                        && m.deleted_at.is_none()
-                    {
-                        items.push(json!({"kind":"message","message_id":m.id,"conversation":m.conversation_id,"sender":m.sender_id,"created_at":m.created_at,"excerpt":m.body.chars().take(600).collect::<String>(),"truncated":m.body.chars().count()>600}));
-                    }
-                    if items.len() >= limit as usize {
-                        break;
-                    }
+                cursor = page.next_cursor;
+                for m in page.messages {
+                    items.push(json!({"kind":"message","message_id":m.id,"conversation":m.conversation_id,"sender":m.sender_id,"created_at":m.created_at,"excerpt":m.body.chars().take(600).collect::<String>(),"truncated":m.body.chars().count()>600}));
                 }
             }
             Ok(
