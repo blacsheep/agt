@@ -651,7 +651,7 @@ impl ScheduleStore {
         if !valid {
             return Ok(false);
         }
-        let changed=tx.execute("UPDATE discussions SET calls=calls+1 WHERE id=?1 AND state IN ('active','paused') AND expires>?2",params![task.discussion,now])?;
+        let changed=tx.execute("UPDATE discussions SET calls=calls+1 WHERE id=?1 AND state IN ('active','paused','limited')",params![task.discussion])?;
         tx.commit()?;
         agt_storage::wake::notify(&self.home);
         Ok(changed == 1)
@@ -731,8 +731,10 @@ impl ScheduleStore {
             .is_some())
     }
 
+    // Execution fence after admission: natural expiry only gates new claims.
+    // Explicit end, task version changes and lease loss still revoke execution.
     pub(crate) fn authorized(&self, task: &ScheduledTask, now: i64) -> Result<bool> {
-        Ok(self.connection.query_row("SELECT 1 FROM tasks t JOIN coordinator c ON c.owner=t.owner JOIN discussions d ON d.id=t.discussion WHERE t.id=?1 AND t.version=?2 AND t.owner=?3 AND t.state IN ('evaluating','responding') AND c.expires>?4 AND d.state IN ('active','paused','limited') AND d.expires>?4",params![task.id,task.version,task.owner,now], |_|Ok(())).optional()?.is_some())
+        Ok(self.connection.query_row("SELECT 1 FROM tasks t JOIN coordinator c ON c.owner=t.owner JOIN discussions d ON d.id=t.discussion WHERE t.id=?1 AND t.version=?2 AND t.owner=?3 AND t.state IN ('evaluating','responding') AND c.expires>?4 AND d.state IN ('active','paused','limited')",params![task.id,task.version,task.owner,now], |_|Ok(())).optional()?.is_some())
     }
 }
 

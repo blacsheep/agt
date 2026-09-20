@@ -728,3 +728,6 @@ fn title_metadata_failure_does_not_reclassify_successful_codex_execution() {
 
 #[path = "tests/scheduling/tool_policy.rs"]
 mod execution_policy_tools;
+
+#[path = "tests/scheduling/expiry.rs"]
+mod expiry;
