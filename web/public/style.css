@@ -1806,3 +1806,14 @@ footer { color: var(--muted); }
 .setting-control{display:grid;gap:10px}.setting-control input[type=number]{width:100%;min-width:0}.setting-control label{font-size:13px;display:flex;align-items:center;gap:8px}.setting-control input[type=checkbox]{width:16px;height:16px;accent-color:var(--primary,#245dcc)}
 .settings-save{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 0 24px}.settings-save p{font-size:13px;line-height:1.6;color:var(--muted);margin:0}.settings-save button{flex-shrink:0}
 @media(max-width:600px){.setting-row{grid-template-columns:minmax(0,1fr);gap:14px;padding:18px}.settings-section>header{padding:18px}.setting-control{max-width:240px}.settings-save{align-items:flex-start;flex-direction:column}}
+
+/* Termination facts: one summary, confirmation alongside it, diagnostics on demand. */
+.work-state.canceling { background: #fff2dc; color: #875410; }
+.work-state.interrupted { background: #edf0f5; color: #445065; }
+.task-termination { border: 1px solid var(--line); border-left: 3px solid #73849d; border-radius: 4px; padding: 12px; display: grid; gap: 8px; font-size: 12px; }
+.task-termination > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; }
+.task-termination > div span { color: var(--muted); }
+.task-termination dl { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 8px 12px; }
+.task-termination dt { color: var(--muted); }
+.task-termination dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
+.task-timeline li { flex-wrap: wrap; }

@@ -57,6 +57,27 @@ try {
   await evaluate('document.querySelector(".task-action-form textarea").value="用户取消测试任务"; document.querySelector(".task-action-form").requestSubmit();');
   await wait('document.querySelector(".work-state.canceled") !== null');
   assert.equal((await call('task_get',{task_id:task.id})).state,'canceled');
+  assert.match(await evaluate('document.querySelector(".task-termination").textContent'), /任务被主动取消/);
+  assert.match(await evaluate('document.querySelector(".task-termination").textContent'), /尚未开始执行/);
+  assert.equal(await evaluate('document.querySelector(".work-detail").textContent.includes("正在确认执行状态")'),false);
+  await evaluate(`window.actualTaskApi=api;window.taskFixture=null;api=async (...args)=>args[0]==='read' && args[1]?.name==='task_get' && window.taskFixture ? window.taskFixture : window.actualTaskApi(...args);`);
+  const savedTask = await call('task_get',{task_id:task.id});
+  for (const [status,code,confirmation] of [['interrupted','engine_interrupted','engine_interrupted'],['outcome_unknown','connection_lost','unconfirmed'],['canceling','task_canceled','unconfirmed']]) {
+    const fixture = {...savedTask,state:status==='canceling'?'running':status,execution_status:status,cancellation_requested:status==='canceling'?'stop':null,termination:{code,source:'harness',observed_at:Date.now()-2000,interrupt_requested_at:Date.now()-1000,confirmed_at:confirmation==='unconfirmed'?null:Date.now(),confirmation,side_effects:'may_have_changes',actor:null},notification_blocked_reason:'discussion_expired'};
+    await evaluate(`window.taskFixture=${JSON.stringify(fixture)}`);
+    await click('#task-refresh');
+    await wait(`document.querySelector('.work-state.${status}') !== null`);
+    assert.match(await evaluate('document.querySelector(".work-detail").textContent'), /讨论授权已到期/);
+    assert.match(await evaluate('document.querySelector(".task-termination").textContent'), /可能已有文件/);
+    assert.match(await evaluate('document.querySelector(".task-timeline").textContent'), /向引擎请求停止/);
+    for (const width of [1280,390,360]) {
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<761});
+      assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'),true,'termination panel overflow '+width);
+    }
+  }
+  await evaluate('api=window.actualTaskApi;window.taskFixture=null');
+  await click('#task-refresh');
+  await wait('document.querySelector(".work-state.canceled") !== null');
   await click('[data-task-action=report]');
   await evaluate('document.querySelector(".task-action-form textarea").value="任务已按用户要求取消，未启动模型。";document.querySelector(".task-action-form").requestSubmit();');
   await wait('document.querySelector(".task-report").textContent.includes("待发布")');

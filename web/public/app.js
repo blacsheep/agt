@@ -429,7 +429,10 @@ function participationView(t) {
   if (!state.scheduler.online && active) return { label: '状态待确认', tone: 'attention', source: '服务连接', detail: '回复服务未连接，以下为最近保存的状态。' };
   if (active && ['paused', 'ended', 'limited'].includes(round?.state)) {
     const running = ['evaluating', 'responding'].includes(t.state);
-    return { label: round.state === 'paused' ? (running ? '正在暂停' : '已暂停') : round.state === 'ended' ? '讨论已结束' : '本轮已达上限', tone: round.state === 'limited' ? 'attention' : 'muted', source: round.state === 'paused' ? '用户操作' : '会话控制', detail: round.state === 'paused' ? (running ? '当前处理结束后，暂停后续回复。' : '讨论已暂停，继续回复后恢复调度。') : round.state === 'ended' ? '本轮讨论已结束。' : '本轮回复额度已用完。' };
+    if (round.state === 'ended') return {label:'正在停止',tone:'attention',source:'会话控制',detail:'停止已请求，等待执行器确认。'};
+    const expired = round.expires_at <= Date.now();
+    if (running) return {label:'继续执行中',tone:'active',source:'框架调度',detail:round.state === 'paused' ? '当前执行可完成；后续任务等待恢复调度。' : '当前执行可完成；后续任务等待授权续期。'};
+    return {label:round.state === 'paused' ? '已暂停' : expired ? '等待授权续期' : '本轮已达上限',tone:'muted',source:'会话控制',detail:round.state === 'paused' ? '恢复回复后继续调度。' : expired ? '讨论授权已到期，任务仍保留在队列。' : '本轮回复额度已用完。'};
   }
   const views = {
     queued: ['等待调度', 'muted', '框架调度', '等待消息安静期及可用处理机会。'],
@@ -441,6 +444,7 @@ function participationView(t) {
     skipped: ['无需处理', 'muted', '框架规则', '响应策略或消息状态不要求回复。'],
     completed: ['已完成回复', 'done', '处理结果', '本次处理已结束，可在聊天中查看回复。'],
     failed: ['处理失败', 'attention', '执行异常', '本次处理未完成，请检查配置或连接；调试模式可查看错误。'],
+    outcome_unknown: ['结果待核对', 'attention', '执行异常', '无法确认执行结果，请核对原始执行和文件改动。'],
     interrupted: ['回复已中断', 'attention', '执行异常', '回复中断，请查看运行记录。'],
     blocked: ['需要工具授权', 'attention', '框架规则', '外部工具尚未获得所需的执行授权。'],
     limited: ['本轮已达上限', 'attention', '框架规则', '已达到回复上限，发送新消息可重置。'],
@@ -503,9 +507,9 @@ function renderReplyStatus() {
   const current = rounds[0];
   $('#execute').disabled = !id || !own || state.conversation.state !== 'active' || running;
   $('#reply-status').classList.toggle('hidden', !id || isObserver() || currentEntry()?.left_message_seq != null || (!current && !tasks.length && state.scheduler.online));
-  $('#reply-status').classList.toggle('problem', !state.scheduler.online || tasks.some(t => ['failed', 'blocked', 'limited', 'interrupted'].includes(t.state)));
+  $('#reply-status').classList.toggle('problem', !state.scheduler.online || tasks.some(t => ['failed', 'blocked', 'limited', 'interrupted', 'outcome_unknown'].includes(t.state)));
   const pending = tasks.filter(t => ['evaluating', 'responding', 'ready_to_reply', 'waiting', 'queued'].includes(t.state));
-  $('#reply-detail').textContent = !state.scheduler.online ? '回复服务未连接 · 请重新启动服务；未完成的提醒会保留' : current?.state === 'paused' ? (running ? '正在暂停 · 当前回复结束后停止' : '已暂停 · 可点击「继续回复」') : current?.state === 'ended' ? '本轮讨论已结束 · 发送新消息可开始新一轮' : current?.state === 'limited' ? '本轮已达上限 · 可点击「继续回复」' : pending.length ? participationSummary(tasks) : tasks.some(t => ['failed', 'blocked', 'interrupted'].includes(t.state)) ? '部分回复未完成 · 请查看成员状态' : '本轮暂时没有新的发言';
+  $('#reply-detail').textContent = !state.scheduler.online ? '回复服务未连接 · 请重新启动服务；未完成的提醒会保留' : current?.state === 'paused' ? (running ? '正在暂停 · 当前回复结束后停止' : '已暂停 · 可点击「继续回复」') : current?.state === 'ended' ? '本轮讨论已结束 · 发送新消息可开始新一轮' : current?.state === 'limited' ? (running ? '当前执行继续 · 后续任务等待续期' : '等待授权或额度续期 · 可点击「继续回复」') : pending.length ? participationSummary(tasks) : tasks.some(t => ['failed', 'blocked', 'interrupted', 'outcome_unknown'].includes(t.state)) ? '部分回复未完成 · 请查看成员状态' : '本轮暂时没有新的发言';
   $('#pause-reply').classList.toggle('hidden', !own || !rounds.some(d => d.state === 'active'));
   $('#pause-reply').disabled = false;
   $('#end-reply').classList.toggle('hidden', isObserver());
@@ -1417,7 +1421,7 @@ async function showHarnessCommand(kind) {
       const session=await call('current');
       if(!active())return;
       const operate=(operation,extra={})=>call(operation,{session:session.id,...extra});
-      const executionLabels={preparing:'准备中',running:'执行中',canceling:'正在停止',reconciling:'正在恢复',succeeded:'已完成',failed:'已失败 · 可继续',canceled:'已取消 · 可继续',needs_review:'需要处理'};
+      const executionLabels={preparing:'准备中',running:'执行中',canceling:'正在停止',reconciling:'正在恢复',succeeded:'已完成',failed:'已失败 · 可继续',canceled:'已确认停止 · 可继续',interrupted:'引擎已中断 · 可继续',needs_review:'需要处理'};
       const canCancelExecution=['preparing','running','canceling'].includes(session.execution?.state);
       const executionLabel=executionLabels[session.execution?.state] || (session.busy?'暂不可用':'就绪');
       const info=`<div class="harness-session-summary"><strong>${esc(session.title||'未命名执行会话')}</strong><span class="tag">${esc(executionLabel)}</span><details class="session-metadata"><summary>连接详情</summary><dl class="resource-details"><dt>Harness</dt><dd>${esc(session.harness)}</dd><dt>项目目录</dt><dd>${esc(session.config.working_directory)}</dd><dt>Session ID</dt><dd>${esc(session.session_id||'首次执行时由 Codex 生成')}</dd></dl></details></div>`;
