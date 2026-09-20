@@ -39,8 +39,15 @@ Chat Completions 读取 total_tokens 或 prompt_tokens + completion_tokens；Res
 不把旧窗口的 token 数带到新窗口。计数元数据不写入模型输入。
 自动压缩阈值为模型窗口的 90%，有效输入窗口为 95%，与 Codex 默认比例一致；
 默认窗口 272000 对应 244800 开始压缩、258400 有效输入预算。没有 180000 的额外预算上限。
-请求字节保护随有效窗口扩展（约 4 bytes/token，至少 1 MiB），避免大窗口被旧字节限制卡住。
+不再将 token 预算乘以 4 当作传输字节上限。服务端 usage 尚未到阈值时，不因内部历史超过 1 MiB 而失败。
+无 usage 的 Responses 回退估算只计原始输出项，不重复计入用于工具执行的规范化副本。
 未知 tokenizer 不能保证完全避免上游 context-length 错误。
+HTTP JSON 和两种流协议明确返回 context_length_exceeded 时，记录 provider_context_exceeded，
+不走同一请求的普通网络重试。运行内有可压缩历史时强制摘要，然后重新采样一次；仍超限则失败，
+成功响应后才重置这次恢复额度。固定输入本身超限时不假装可以靠删除执行历史解决。
+HTTP 413 或未经结构化分类的错误不等同于 token 超窗，不自动触发压缩。
+摘要请求自身被明确判定超窗时，将当前分块减半后重试；保留未处理文本，直到全部处理完。
+分块无法继续合理缩减时明确失败，不删除原始聊天或重放已完成工具。
 固定指令、当前请求和工具 schema 本身过大时明确失败，不静默丢弃当前任务。
 
 单条工具结果保留预算内的首尾文本，标注截断并建议缩小查询；不修改 IM 消息。
@@ -58,6 +65,7 @@ Chat Completions 读取 total_tokens 或 prompt_tokens + completion_tokens；Res
 未成功压缩前不覆盖 checkpoint；失败后保留旧 checkpoint、原始 Run 请求与 IM 历史。
 Run `context` 保存最近摘要、压缩次数和输入计数（estimated_tokens 为兼容字段名）；
 `run calls` 单独记录 compaction、累计请求次数、压缩前后计数、预算和 count_source。
+trigger 区分 token_budget（正常阈值）和 provider_context_rejected（服务端拒绝后的补救）。
 count_source 区分服务端 usage + 本地增量与纯本地估算；request_attempts 包括分块调用和网络重试。
 model_steps 继续统计普通逻辑采样（含子 Run），压缩调用单列；调度器 calls 包含实际摘要请求。
 不持久化完整私有工具 transcript，不支持重启后自动恢复中断的工具循环。
@@ -100,3 +108,8 @@ Scheduler schema 从 v3 加法升级到 v4，保留现有讨论与任务；更�
 已有配置明确保存的 context_window（包括之前写入的 32768）保留，缺省配置和新建模型使用新默认值。
 要调整已保存的模型，请执行 `agt model update <model> --context-window 272000`。
 分块调用、多 Agent 会话分区仍属于 AGT 的适配，不宣称所有上下文策略与 Codex 完全相同。
+
+本次超限恢复参考 Codex `bba48e5ce8bbcaee4af0bb2c71ad2936e4e24ea9`：
+[请求发送无通用 1 MiB 限制](https://github.com/openai/codex/blob/bba48e5ce8bbcaee4af0bb2c71ad2936e4e24ea9/codex-rs/codex-api/src/endpoint/responses.rs#L70-L95)、
+[本地压缩超窗补救](https://github.com/openai/codex/blob/bba48e5ce8bbcaee4af0bb2c71ad2936e4e24ea9/codex-rs/core/src/compact.rs#L302-L345)。
+AGT 使用缩小分块而非删除最旧数据，保证待摘要的原始内容不会在补救时被跳过。

@@ -156,6 +156,9 @@ pub(crate) fn runtime_error(error: &crate::RuntimeError) -> Value {
     {
         return json!({"code":"context_overflow","stage":stage,"estimated_tokens":tokens,"available_tokens":budget,"message":error.to_string()});
     }
+    if matches!(error, ContextWindowRejected) {
+        return json!({"code":"provider_context_exceeded","message":error.to_string()});
+    }
     if let HttpStatus(status) = error {
         return json!({"code":"model_http_error","http_status":status,"message":format!("Model endpoint returned HTTP {status}.")});
     }

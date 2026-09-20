@@ -59,6 +59,10 @@ pub enum RuntimeError {
         tokens: usize,
         budget: usize,
     },
+    #[error(
+        "model rejected context as too large; shorten fixed input or verify model context_window"
+    )]
+    ContextWindowRejected,
     #[error("model HTTP status {0}")]
     HttpStatus(u16),
     #[error("model request failed after {attempts} attempts: {last}")]

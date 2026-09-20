@@ -1512,8 +1512,11 @@ fn auto_compaction_preserves_request_and_never_replays_delegation() {
             if self.parent == 1 {
                 let mut response = delegate();
                 response["content"] = json!("execution detail ".repeat(9000));
-                response["_responses_output"] =
-                    json!([{"type":"reasoning","encrypted_content":"opaque-private-reasoning"}]);
+                response["_responses_output"] = json!([
+                    {"type":"reasoning","encrypted_content":"opaque-private-reasoning"},
+                    {"type":"message","content":[{"type":"output_text","text":response["content"]}]},
+                    {"type":"function_call","name":"delegate","call_id":"delegate-1","arguments":response["tool_calls"][0]["function"]["arguments"]}
+                ]);
                 return Ok(response);
             }
             assert_eq!(messages[1]["content"], "original task");
@@ -1750,3 +1753,6 @@ fn live_progress_is_bounded_retry_replaces_draft_and_completion_clears_it() {
         2
     );
 }
+
+#[path = "context/recovery.rs"]
+mod context_recovery;

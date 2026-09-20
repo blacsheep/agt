@@ -119,6 +119,15 @@ fn check_retry_canceled(model: &dyn ModelClient, token: &CancellationToken) -> R
     }
     model.check_canceled()
 }
+/// Only explicit provider codes trigger compaction; HTTP 413 alone is not token overflow.
+pub(crate) fn context_rejected(value: &Value) -> bool {
+    [&value["error"], &value["response"]["error"], value]
+        .iter()
+        .any(|error| {
+            error["code"] == "context_length_exceeded" || error["type"] == "context_length_exceeded"
+        })
+}
+
 fn retryable(error: &RuntimeError) -> bool {
     matches!(
         error,
@@ -216,7 +225,17 @@ impl ModelClient for ChatCompletions {
             .send()
             .map_err(|_| RuntimeError::Model("HTTP request failed or timed out"))?;
         if !response.status().is_success() {
-            return Err(RuntimeError::HttpStatus(response.status().as_u16()));
+            let status = response.status().as_u16();
+            // Inspect a bounded structured error, never persist provider bodies or credentials.
+            let mut bytes = Vec::new();
+            if response.take(65537).read_to_end(&mut bytes).is_ok()
+                && bytes.len() <= 65536
+                && let Ok(body) = serde_json::from_slice::<Value>(&bytes)
+                && context_rejected(&body)
+            {
+                return Err(RuntimeError::ContextWindowRejected);
+            }
+            return Err(RuntimeError::HttpStatus(status));
         }
         if response
             .headers()
@@ -244,6 +263,9 @@ impl ModelClient for ChatCompletions {
         }
         let response: Value = serde_json::from_slice(&bytes)
             .map_err(|_| RuntimeError::Model("invalid JSON response"))?;
+        if context_rejected(&response) {
+            return Err(RuntimeError::ContextWindowRejected);
+        }
         if !response["error"].is_null() {
             return Err(RuntimeError::Model("model returned an error"));
         }
@@ -391,3 +413,7 @@ mod usage_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/context/provider_errors.rs"]
+mod provider_errors;

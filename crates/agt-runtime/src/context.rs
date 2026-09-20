@@ -9,7 +9,17 @@ pub(crate) fn estimate(text: &str) -> usize {
     text.len().div_ceil(4)
 }
 pub(crate) fn size(messages: &[Value], tools: &[Value]) -> usize {
-    estimate(&json!([messages, tools]).to_string()) + 32 * messages.len()
+    // Responses output is the canonical history sent by the adapter. Do not count
+    // its duplicate normalized content/tool_calls a second time when usage is absent.
+    let visible: Vec<_> = messages
+        .iter()
+        .map(|m| {
+            m.get("_responses_output")
+                .filter(|v| v.is_array())
+                .unwrap_or(m)
+        })
+        .collect();
+    estimate(&json!([visible, tools]).to_string()) + 32 * messages.len()
 }
 /// Codex usable_context_window: reserve 5% of the configured model window.
 pub(crate) fn input_budget(agent: &ResolvedAgent) -> usize {
@@ -18,10 +28,6 @@ pub(crate) fn input_budget(agent: &ResolvedAgent) -> usize {
 /// Codex auto_compact_token_limit default: begin compaction at 90%.
 pub(crate) fn auto_compact_limit(agent: &ResolvedAgent) -> usize {
     agent.model.capabilities.context_window as usize * 9 / 10
-}
-pub(crate) fn request_byte_limit(agent: &ResolvedAgent) -> usize {
-    // Keep an allocation guard without silently limiting large model windows to 1 MiB.
-    (input_budget(agent) * 4).max(1024 * 1024)
 }
 pub(crate) fn summary_target(agent: &ResolvedAgent) -> usize {
     (input_budget(agent) / 12).clamp(128, 2048)
@@ -117,7 +123,7 @@ pub(crate) fn summarize(
 ) -> Result<String> {
     let mut summary = previous.to_owned();
     let mut remaining = data;
-    let chunk_bytes = input_budget(agent) / 3; // UTF-8 byte bound is conservative for any text.
+    let mut chunk_bytes = input_budget(agent) / 3; // UTF-8 byte bound is conservative for any text.
     while !remaining.is_empty() {
         let mut end = remaining.len().min(chunk_bytes);
         while !remaining.is_char_boundary(end) {
@@ -139,7 +145,14 @@ pub(crate) fn summarize(
             &mut chunk_attempts,
         );
         *attempts = attempts.saturating_add(chunk_attempts);
-        let reply = response?;
+        let reply = match response {
+            Err(RuntimeError::ContextWindowRejected) if end > 128 => {
+                // Retry only the summary input, preserving all source data for later chunks.
+                chunk_bytes = end / 2;
+                continue;
+            }
+            other => other?,
+        };
         if token.is_canceled() {
             return Err(RuntimeError::Canceled);
         }
@@ -191,6 +204,17 @@ mod accounting_tests {
             assert_eq!(estimate(text), expected, "{text}");
         }
     }
+    #[test]
+    fn responses_fallback_counts_canonical_output_once() {
+        let output =
+            json!([{"type":"message","content":[{"type":"output_text","text":"x".repeat(10000)}]}]);
+        let first =
+            json!({"role":"assistant","content":"normalized duplicate","_responses_output":output});
+        let mut duplicate = first.clone();
+        duplicate["content"] = json!("x".repeat(100000));
+        assert_eq!(size(&[first], &[]), size(&[duplicate], &[]));
+    }
+
     #[test]
     fn reported_usage_adds_only_new_tool_results_and_resets_after_compaction() {
         let mut usage = ContextUsage::default();

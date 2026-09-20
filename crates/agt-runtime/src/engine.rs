@@ -331,6 +331,7 @@ impl<'a> Runtime<'a> {
             .scheduler
             .model_steps;
         let initial_steps = *step_count;
+        let mut context_recovery = false;
         loop {
             check_canceled(cancellation)?;
             self.check_schedule()?;
@@ -341,8 +342,9 @@ impl<'a> Runtime<'a> {
             }
             let budget = crate::context::input_budget(agent);
             if messages.len() > 2
-                && usage.tokens(&messages, &tools.schemas)
-                    >= crate::context::auto_compact_limit(agent)
+                && (context_recovery
+                    || usage.tokens(&messages, &tools.schemas)
+                        >= crate::context::auto_compact_limit(agent))
             {
                 // Keep the configured instructions and current user request verbatim.
                 if crate::context::size(&messages[..2], &tools.schemas) + 128 > budget {
@@ -383,7 +385,7 @@ impl<'a> Runtime<'a> {
                 {
                     result = Err(error);
                 }
-                call.argument_summary = json!({"request_attempts":attempts,"tokens_before":tokens_before,"tokens_after_estimate":tokens_after,"available_tokens":budget,"auto_compact_tokens":crate::context::auto_compact_limit(agent),"count_source":usage.source()});
+                call.argument_summary = json!({"trigger":if context_recovery {"provider_context_rejected"} else {"token_budget"},"request_attempts":attempts,"tokens_before":tokens_before,"tokens_after_estimate":tokens_after,"available_tokens":budget,"auto_compact_tokens":crate::context::auto_compact_limit(agent),"count_source":usage.source()});
                 match &result {
                     Ok(_) => call.finish(CallState::Succeeded, None),
                     Err(error) => call.finish(
@@ -405,11 +407,6 @@ impl<'a> Runtime<'a> {
             }
             record.context.estimated_tokens = usage.tokens(&messages, &tools.schemas);
             crate::context::ensure_fits(record.context.estimated_tokens, budget, "model request")?;
-            if serde_json::to_vec(&(&messages, &tools.schemas))?.len()
-                > crate::context::request_byte_limit(agent)
-            {
-                return Err(RuntimeError::Model("context exceeds transport byte limit"));
-            }
             *step_count = step_count.saturating_add(1);
             record.model_steps = *step_count - initial_steps;
             self.store.save(record)?;
@@ -491,7 +488,15 @@ impl<'a> Runtime<'a> {
                 ),
             }
             self.store.finish_call(&model_call)?;
+            if matches!(&response, Err(RuntimeError::ContextWindowRejected))
+                && !context_recovery
+                && messages.len() > 2
+            {
+                context_recovery = true;
+                continue;
+            }
             let (mut message, calls) = response?;
+            context_recovery = false;
             let reported_tokens = message
                 .as_object_mut()
                 .and_then(|m| m.remove("_agt_total_tokens"))

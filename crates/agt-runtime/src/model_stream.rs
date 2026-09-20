@@ -50,6 +50,9 @@ pub(crate) fn read(
         }
         let value: Value = serde_json::from_str(&event)
             .map_err(|_| RuntimeError::Model("invalid JSON response"))?;
+        if super::model::context_rejected(&value) {
+            return Err(RuntimeError::ContextWindowRejected);
+        }
         if !value["error"].is_null() || value["type"] == "error" {
             return Err(RuntimeError::Model("model returned an error"));
         }
@@ -250,3 +253,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/context/stream_errors.rs"]
+mod context_errors;
