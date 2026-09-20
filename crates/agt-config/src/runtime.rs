@@ -137,7 +137,7 @@ impl RuntimeConfig {
             {"key":"scheduler.parallel_work","default":false,"description":"允许双方显式声明 parallel 的独立工作任务在同一身份并行；普通聊天仍串行，共享资源声明仍互斥。模型需为会写入的同一资源使用一致的资源键。","effective":"调度器重启"},
             {"key":"scheduler.concurrency","default":3,"description":"同时执行的任务总数；不含保存检查点后的等待。增大可减少排队，但增加模型与本机负载。null 不限。","effective":"调度器重启；CLI --concurrency 可覆盖"},
             {"key":"scheduler.replies_per_agent","default":100,"description":"每个身份在同一讨论中允许进入回复执行的次数，不是工具调用次数。null 不限。","effective":"调度器重启；已用次数保留"},
-            {"key":"scheduler.discussion_seconds","default":1800,"description":"一次讨论授权的有效秒数，子任务共享授权。到期会阻止新执行并撤销在途执行授权；长流程可设 null。","effective":"新授权或显式续期；不追改已有到期时间"},
+            {"key":"scheduler.discussion_seconds","default":1800,"description":"一次讨论授权的有效秒数，子任务共享授权。到期只阻止新执行（包括子任务、挂起恢复及通知处理），已经运行的任务可完成并投递结果；长流程可设 null。","effective":"新授权或显式续期；不追改已有到期时间"},
             {"key":"scheduler.model_steps","default":null,"description":"原生执行器每个 Run 的模型步数上限；不限制 Codex 内部步骤。null 不限。","effective":"新 Run"},
             {"key":"memory.enabled","default":true,"description":"允许按当前身份搜索可见历史和保存带来源的私有主题摘要；不自动共享他人私聊。","effective":"下次工具调用"},
             {"key":"execution.enabled","default":false,"description":"允许挂载 local_execution 的原生 Agent 执行宿主机命令。工作目录不是沙箱，命令拥有服务账号的操作权限。","effective":"新 Run"},

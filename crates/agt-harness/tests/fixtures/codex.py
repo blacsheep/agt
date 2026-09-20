@@ -49,7 +49,13 @@ for line in sys.stdin:
    (root/'started').write_text('1')
   elif 'HANG' in text:
    (root/'started').write_text(str(__import__('os').getpid()));time.sleep(60)
-  elif 'DISCONNECT' in text:sys.exit(0)
+  elif 'DISCONNECT' in text:
+   print('api_key=fixture-secret',file=sys.stderr,flush=True)
+   print('fixture transport exited',file=sys.stderr,flush=True)
+   sys.exit(7)
+  elif 'INTERRUPTED' in text:note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'interrupted'}})
+  elif 'DELAYED' in text:
+   (root/'started').write_text('1');time.sleep(0.4);finish(thread,turn,'completed after expiry')
   elif 'FAIL' in text:note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'failed','error':{'message':'fixture failed'}}})
   elif 'EMPTY' in text:note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'completed'}})
   elif 'APPROVE' in text:emit({'id':'approval','method':'item/commandExecution/requestApproval','params':{'threadId':thread,'turnId':turn}})

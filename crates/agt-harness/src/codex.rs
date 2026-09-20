@@ -1,4 +1,5 @@
-use crate::HarnessConfig;
+use crate::diagnostics::StderrTail;
+use crate::{Failure, FailureCode, HarnessConfig, ProcessDiagnostics};
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -19,6 +20,8 @@ pub struct Execution<'a> {
 }
 pub enum Event<'a> {
     Tick,
+    Stopping(&'a anyhow::Error),
+    InterruptRequested,
     Protocol,
     Submitted,
     Accepted,
@@ -44,8 +47,25 @@ pub struct Codex {
     messages: Receiver<Result<Value>>,
     next_id: u64,
     deadline: Instant,
+    stderr: StderrTail,
 }
 impl Codex {
+    pub fn diagnostics(&mut self) -> ProcessDiagnostics {
+        let status = self.child.try_wait().ok().flatten();
+        #[cfg(unix)]
+        let signal = {
+            use std::os::unix::process::ExitStatusExt;
+            status.as_ref().and_then(|s| s.signal())
+        };
+        #[cfg(not(unix))]
+        let signal = None;
+        ProcessDiagnostics {
+            exit_code: status.and_then(|s| s.code()),
+            signal,
+            stderr_tail: self.stderr.redacted(),
+        }
+    }
+
     pub fn connect(
         harness: &HarnessConfig,
         event: &mut dyn FnMut(Event<'_>) -> Result<()>,
@@ -69,8 +89,16 @@ impl Codex {
         let input = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
         let mut stderr = child.stderr.take().unwrap();
+        let stderr_tail = StderrTail::default();
+        let tail = stderr_tail.clone();
         std::thread::spawn(move || {
-            let _ = std::io::copy(&mut stderr, &mut std::io::sink());
+            let mut bytes = [0; 2048];
+            while let Ok(n) = stderr.read(&mut bytes) {
+                if n == 0 {
+                    break;
+                }
+                tail.append(&bytes[..n]);
+            }
         });
         let (sender, messages) = mpsc::sync_channel(64);
         std::thread::spawn(move || {
@@ -100,6 +128,7 @@ impl Codex {
             input,
             messages,
             next_id: 0,
+            stderr: stderr_tail,
             deadline: Instant::now() + Duration::from_secs(15),
         };
         client.request("initialize", json!({"clientInfo":{"name":"agt","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":true}}), event)?;
@@ -117,7 +146,7 @@ impl Codex {
         loop {
             event(Event::Tick)?;
             if Instant::now() >= self.deadline {
-                bail!("Codex execution timed out; inspect the run before retrying");
+                return Err(Failure::new(FailureCode::Timeout, "Codex execution timed out").into());
             }
             match self.messages.recv_timeout(Duration::from_millis(50)) {
                 Ok(value) => {
@@ -127,7 +156,13 @@ impl Codex {
                     return value;
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
-                Err(_) => bail!("Codex app-server disconnected; task outcome may be incomplete"),
+                Err(_) => {
+                    return Err(Failure::new(
+                        FailureCode::Disconnected,
+                        "Codex app-server disconnected",
+                    )
+                    .into());
+                }
             }
         }
     }
@@ -287,6 +322,9 @@ impl Codex {
                 }
             }
         })();
+        if let Err(error) = &result {
+            event(Event::Stopping(error))?;
+        }
         if result.is_err()
             && !terminal
             && let Some(turn) = turn
@@ -302,6 +340,9 @@ impl Codex {
         turn: &str,
         event: &mut dyn FnMut(Event<'_>) -> Result<()>,
     ) -> Option<String> {
+        if event(Event::InterruptRequested).is_err() {
+            return None;
+        }
         self.next_id += 1;
         if self.send(json!({"id":self.next_id,"method":"turn/interrupt","params":{"threadId":thread,"turnId":turn}})).is_err() { return None; }
         let mut output = None;
@@ -501,23 +542,36 @@ impl Codex {
                         Some("completed") => {
                             event(Event::Completed)?;
                             if final_text.trim().is_empty() {
-                                bail!(
-                                    "Codex completed without a final response; task was not replayed"
-                                );
+                                return Err(Failure::new(FailureCode::ResultMissing, "Codex completed without a final response; task was not replayed").into());
                             }
                             return Ok(final_text);
                         }
-                        Some("interrupted") => bail!("Codex turn interrupted"),
-                        _ => bail!(
-                            "Codex turn failed: {}",
-                            p["turn"]["error"]["message"]
-                                .as_str()
-                                .unwrap_or("unknown error")
-                        ),
+                        Some("interrupted") => {
+                            return Err(Failure::new(
+                                FailureCode::Interrupted,
+                                "Codex turn interrupted",
+                            )
+                            .into());
+                        }
+                        _ => {
+                            return Err(Failure::new(
+                                FailureCode::EngineFailed,
+                                format!(
+                                    "Codex turn failed: {}",
+                                    p["turn"]["error"]["message"]
+                                        .as_str()
+                                        .unwrap_or("unknown error")
+                                ),
+                            )
+                            .into());
+                        }
                     }
                 }
             }
         })();
+        if let Err(error) = &result {
+            event(Event::Stopping(error))?;
+        }
         if result.is_err()
             && !terminal
             && let Some(turn) = turn

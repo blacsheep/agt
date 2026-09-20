@@ -498,6 +498,13 @@ pub(super) fn blocked(
     if check_scope(home, store, item).is_err() {
         return Ok(Some("authorization_changed"));
     }
+    if open_im(home)?
+        .get_principal(&PrincipalId::new(recipient))?
+        .kind
+        == agt_im::PrincipalKind::User
+    {
+        return Ok(None);
+    }
     let bindings = BindingStore::open(home)?;
     let Some(binding) = bindings.get(&PrincipalId::new(recipient))? else {
         return Ok(Some("disabled_or_unbound"));
@@ -508,13 +515,33 @@ pub(super) fn blocked(
         return Ok(Some("manual"));
     }
     let round = store.discussion(&item.request.discussion)?.unwrap();
-    if round.state != "active" || round.expires_at <= crate::schedule_store::now_ms() {
-        return Ok(Some("discussion_paused_or_expired"));
+    if round.expires_at <= crate::schedule_store::now_ms() {
+        return Ok(Some("discussion_expired"));
+    }
+    if round.state != "active" {
+        return Ok(Some("discussion_paused"));
     }
     Ok(None)
 }
 pub(super) fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Result<Value> {
     let mut value = serde_json::to_value(item)?;
+    value["execution_status"] = if matches!(item.state, WorkState::Running { .. })
+        && item.cancellation_requested.is_some()
+    {
+        json!("canceling")
+    } else {
+        value["state"].clone()
+    };
+    if let Some(round) = store.discussion(&item.request.discussion)? {
+        value["discussion_expires_at"] = json!(round.expires_at);
+    }
+    if value["run_id"].is_null()
+        && let Some(run) =
+            crate::RunStore::open(home)?.by_request_key(&super::execution_key(item))?
+    {
+        value["run_id"] = json!(run.id);
+    }
+
     value["execution_policy"] =
         serde_json::to_value(super::execution_policy::get(&store.connection, &item.id)?)?;
     value["report"] = super::reporting::status(&store.connection, &item.id)?;
@@ -559,7 +586,7 @@ pub(super) fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Resul
     let publication: Option<Option<String>> = store.connection.query_row("SELECT p.message_id FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE e.work_id=?1 ORDER BY e.seq DESC LIMIT 1", [&item.id], |r| r.get(0)).optional()?;
     let error: Option<String> = store.connection.query_row("SELECT p.error FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE e.work_id=?1 ORDER BY e.seq DESC LIMIT 1",[&item.id],|r| r.get(0)).optional()?.flatten();
     value["publication_error"] = json!(error);
-    let notification: Option<String> = store.connection.query_row("SELECT i.state FROM work_inbox i JOIN work_outbox e ON i.event_seq=e.seq WHERE e.work_id=?1 AND i.recipient=?2 AND e.kind IN ('succeeded','failed','canceled','outcome_unknown','resolved') ORDER BY e.seq DESC LIMIT 1",params![item.id,item.request.requester],|r|r.get(0)).optional()?;
+    let notification: Option<String> = store.connection.query_row("SELECT i.state FROM work_inbox i JOIN work_outbox e ON i.event_seq=e.seq WHERE e.work_id=?1 AND i.recipient=?2 AND e.kind IN ('succeeded','failed','canceled','interrupted','outcome_unknown','resolved') ORDER BY e.seq DESC LIMIT 1",params![item.id,item.request.requester],|r|r.get(0)).optional()?;
     value["requester_notification"] = json!(notification);
     if notification.as_deref() == Some("pending") {
         value["notification_blocked_reason"] =
@@ -578,6 +605,20 @@ pub(super) fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Resul
     if let Some(run_id) = value["run_id"].as_str()
         && let Ok(run) = crate::RunStore::open(home).and_then(|s| s.get(run_id))
     {
+        if value["termination"].is_null() {
+            value["termination"] = json!(run.termination);
+        }
+        if matches!(item.state, WorkState::Running { .. })
+            && run
+                .termination
+                .as_ref()
+                .is_some_and(|t| t.interrupt_requested_at.is_some())
+        {
+            value["execution_status"] = json!("canceling");
+        }
+        if let Some(execution) = &run.execution {
+            value["execution_ids"] = json!({"run_id":run.id,"thread_id":execution["thread_id"],"turn_id":execution["turn_id"],"session_record":execution["session_record"]});
+        }
         if let Some(progress) = &run.progress {
             value["activity"] = json!(progress.activities);
         } else if let Some(execution) = &run.execution {

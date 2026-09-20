@@ -275,13 +275,21 @@ pub(crate) fn execute(
         ));
     }
     let check = || -> Result<()> {
-        execution_lock.check().map_err(error)?;
-        if token.is_canceled() || sessions.canceled(&scope).map_err(error)? {
-            execution_lock.canceling().map_err(error)?;
-            return Err(RuntimeError::Canceled);
-        }
+        execution_lock
+            .check()
+            .map_err(|_| RuntimeError::Stopped(crate::StopCode::HarnessLeaseLost))?;
         if let Some(task) = task {
             crate::scheduler::guarded(home, task, || Ok(()))?;
+        }
+        if sessions.canceled(&scope).map_err(error)? {
+            execution_lock.canceling().map_err(error)?;
+            return Err(RuntimeError::Stopped(
+                crate::StopCode::CancellationRequested,
+            ));
+        }
+        if token.is_canceled() {
+            execution_lock.canceling().map_err(error)?;
+            return Err(RuntimeError::Stopped(crate::StopCode::token(token)));
         }
         Ok(())
     };
@@ -295,14 +303,31 @@ pub(crate) fn execute(
     let failures = std::cell::Cell::new(0u32);
     let awaiting = std::cell::Cell::new(false);
     let completed = std::cell::Cell::new(false);
-    record.execution =
-        Some(json!({"engine":"codex","harness":reference.to_string(),"session_record":scope}));
+    record.execution = Some(
+        json!({"engine":"codex","harness":reference.to_string(),"session_record":scope,"timeout_seconds":harness.timeout_seconds}),
+    );
     let current_chat = record
         .request
         .trigger
         .as_ref()
         .map(|t| t.conversation_id.to_string());
     let mut event = |event: Event<'_>| -> anyhow::Result<()> {
+        // Diagnostic events must survive the fence that initiated cancellation.
+        if let Event::Stopping(error) = &event {
+            record
+                .termination
+                .get_or_insert_with(|| crate::Termination::from_error(error));
+            store.save(record)?;
+            return Ok(());
+        }
+        if matches!(event, Event::InterruptRequested) {
+            execution_lock.canceling()?;
+            if let Some(termination) = &mut record.termination {
+                termination.interrupt_requested_at = Some(crate::schedule_store::now_ms());
+            }
+            store.save(record)?;
+            return Ok(());
+        }
         // A cancellation acknowledgement must still be processed after cancellation.
         if matches!(event, Event::Settled(_)) {
             execution_lock.check()?;
@@ -342,12 +367,15 @@ pub(crate) fn execute(
                 store.save(record)?;
             }
             Event::Submitted => {
-                record.execution.as_mut().unwrap()["outcome_unknown"] = json!(true);
+                record.execution.as_mut().unwrap()["submitted"] = json!(true);
                 store.save(record)?;
                 execution_lock.submitted()?;
             }
             Event::Settled(status) => {
-                record.execution.as_mut().unwrap()["outcome_unknown"] = json!(false);
+                if let Some(termination) = &mut record.termination {
+                    termination.confirmation = format!("engine_{status}");
+                    termination.confirmed_at = Some(crate::schedule_store::now_ms());
+                }
                 record.execution.as_mut().unwrap()["turn_status"] = json!(status);
                 store.save(record)?;
                 if matches!(status, "failed" | "interrupted") {
@@ -363,16 +391,19 @@ pub(crate) fn execute(
             Event::Accepted => execution_lock.running()?,
             Event::Protocol | Event::Activity { .. } => {}
             Event::Completed => completed.set(true),
-            Event::Tick => {}
+            Event::Tick | Event::Stopping(_) | Event::InterruptRequested => {}
         }
         Ok(())
     };
     let mut client = match Codex::connect(&harness, &mut event) {
         Ok(client) => client,
         Err(e) => {
+            record
+                .termination
+                .get_or_insert_with(|| crate::Termination::from_error(&e));
             let e = check().err().unwrap_or_else(|| error(e));
             invocation.finish(
-                if matches!(e, RuntimeError::Canceled) {
+                if matches!(e, RuntimeError::Canceled | RuntimeError::Stopped(_)) {
                     crate::CallState::Canceled
                 } else {
                     crate::CallState::Failed
@@ -466,6 +497,12 @@ pub(crate) fn execute(
         &mut event,
         &mut call,
     );
+    if let Err(error) = &result {
+        record
+            .termination
+            .get_or_insert_with(|| crate::Termination::from_error(error));
+        record.execution.as_mut().unwrap()["diagnostics"] = json!(client.diagnostics());
+    }
     drop(client);
     if let Some(progress) = &record.progress {
         record.execution.as_mut().unwrap()["activity"] = json!({"items":progress.activities,"local_checked_at":progress.local_checked_at,"protocol_at":progress.protocol_at,"meaningful_at":progress.meaningful_at});
@@ -501,7 +538,10 @@ pub(crate) fn execute(
     invocation.finish(
         if result.is_ok() {
             crate::CallState::Succeeded
-        } else if matches!(result, Err(RuntimeError::Canceled)) {
+        } else if matches!(
+            result,
+            Err(RuntimeError::Canceled | RuntimeError::Stopped(_))
+        ) {
             crate::CallState::Canceled
         } else {
             crate::CallState::Failed
@@ -526,12 +566,12 @@ pub(crate) fn execute(
             })
             .map_err(error)
     };
-    if let Some(t) = task {
-        crate::scheduler::guarded(home, t, save)?;
-    } else {
-        save()?;
-    }
+    // Preserve the engine's confirmed result even if publication authorization was revoked.
+    save()?;
     if awaiting.get() {
+        if let Some(t) = task {
+            crate::scheduler::guarded(home, t, || Ok(()))?;
+        }
         let session = sessions.get(&scope).map_err(error)?;
         record.config_fingerprint = fingerprint_for(&session.config)?;
         record.state = crate::RunState::Suspended;

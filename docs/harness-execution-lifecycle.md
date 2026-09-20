@@ -14,7 +14,8 @@
 | reconciling | 执行者租约过期，检查持久状态 | 否 |
 | succeeded | 结果已保存 | 是，原持有者已释放时 |
 | failed | 提交前失败、明确拒绝或引擎确认失败 | 是，原持有者已释放时 |
-| canceled | 提交前取消，或引擎确认中断 | 是，原持有者已释放时 |
+| canceled | 提交前取消，或请求停止后引擎确认中断 | 是，原持有者已释放时 |
+| interrupted | 引擎主动确认中断，未收到本地停止请求 | 是，原持有者已释放时 |
 | needs_review | 已提交但无法确认结果，或未能可靠保存结果 | 否；先检查原线程及副作用 |
 
 失败和取消不回滚项目文件，不自动重做旧任务。界面 busy 是状态与持有者的派生值，不是另一套持久状态。
@@ -59,3 +60,22 @@ SIGKILL 不运行析构函数。过期租约由 scheduler 的修复扫描、会�
 `crates/agt-runtime/src/tests/harness/session_lock.rs` 集中覆盖启动失败、明确拒绝、失败后继续、
 取消确认、压缩取消、真实子进程强杀、租约到期、旧归属隔离和旧数据迁移。
 协议桩位于 `crates/agt-harness/tests/fixtures/codex.py`，不调用真实模型。
+
+## 任务终止诊断
+
+讨论期限只限制新的 admission（包括子任务、恢复片段和通知模型调用）。在途执行继续；
+自然到期不能撤销其运行权限、调用计数或结果投递。停止、上下文重置、权限变化仍撤销执行权限。
+对账单独检查执行归属，允许仍持有有效租约的执行者完成停止确认。
+
+Run 与 Work 使用 succeeded/failed/canceled/interrupted/outcome_unknown 对应的明确终态
+（Run 成功名为 completed）。超时且确认中断为 failed；主动取消且确认停止为 canceled；
+引擎自行中断为 interrupted；提交后断线、失去归属或缺失可保存结果为 outcome_unknown。
+取消请求期间 execution_status=canceling；该值由取消意图与运行事实派生，不新增独立任务状态机。
+
+termination 保存 code/source/observed_at/interrupt_requested_at/confirmed_at/confirmation/side_effects/actor。
+首个原因保留，不用清理错误覆盖；副作用可能存在与停止是否确认分开表达。task_get 提供安全诊断
+和 run/thread/turn/session 标识，不携带进程 stderr。主机 run info 的 execution.diagnostics
+可查看子进程退出码、信号和最多 8 KiB 的 stderr 尾部；常见凭据行被过滤，仍按主机私有日志处理。
+已有已完成结果不会因迟到取消丢失，但向失效上下文的发布仍受权限检查。
+
+验证位于 tests/scheduling/expiry.rs、tests/harness/termination.rs 和 session_lock.rs。

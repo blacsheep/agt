@@ -22,6 +22,8 @@ mod resolve;
 mod schedule_store;
 mod scheduler;
 mod store;
+mod termination;
+pub use termination::{StopCode, Termination};
 pub mod work;
 pub use audit::{CallRecord, CallState};
 pub use schedule_store::{Discussion, ScheduleStatus, ScheduleStore, ScheduledTask};
@@ -74,6 +76,8 @@ pub enum RuntimeError {
     NotFound,
     #[error("run is still running or was interrupted; inspect it before a new attempt")]
     Busy,
+    #[error("execution stopped: {0}")]
+    Stopped(StopCode),
     #[error("execution canceled")]
     Canceled,
     #[error("shared model-step budget exhausted")]

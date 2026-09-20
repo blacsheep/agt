@@ -731,3 +731,6 @@ mod execution_policy_tools;
 
 #[path = "tests/scheduling/expiry.rs"]
 mod expiry;
+
+#[path = "tests/harness/termination.rs"]
+mod termination;

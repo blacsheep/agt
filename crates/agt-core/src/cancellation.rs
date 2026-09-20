@@ -1,10 +1,9 @@
 use std::fmt;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 
 #[derive(Clone, Default)]
 pub struct CancellationToken {
-    canceled: Arc<AtomicBool>,
+    reason: Arc<OnceLock<&'static str>>,
 }
 
 impl CancellationToken {
@@ -13,11 +12,20 @@ impl CancellationToken {
     }
 
     pub fn cancel(&self) -> bool {
-        !self.canceled.swap(true, Ordering::AcqRel)
+        self.cancel_with_reason("cancellation_requested")
+    }
+
+    /// First cause wins across all token clones; later cleanup cannot overwrite it.
+    pub fn cancel_with_reason(&self, reason: &'static str) -> bool {
+        self.reason.set(reason).is_ok()
+    }
+
+    pub fn reason(&self) -> Option<&'static str> {
+        self.reason.get().copied()
     }
 
     pub fn is_canceled(&self) -> bool {
-        self.canceled.load(Ordering::Acquire)
+        self.reason.get().is_some()
     }
 }
 
@@ -63,6 +71,14 @@ mod tests {
 
         assert_eq!(first_callers, 1);
         assert!(token.is_canceled());
+    }
+
+    #[test]
+    fn first_reason_survives_later_cleanup() {
+        let token = CancellationToken::new();
+        assert!(token.cancel_with_reason("scheduler_lease_lost"));
+        assert!(!token.clone().cancel_with_reason("service_shutdown"));
+        assert_eq!(token.reason(), Some("scheduler_lease_lost"));
     }
 
     #[test]

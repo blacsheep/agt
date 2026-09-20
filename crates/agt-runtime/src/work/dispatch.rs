@@ -118,18 +118,43 @@ fn finish(ledger: &mut WorkLedger, item: &WorkItem, run: &RunRecord) -> Result<(
                 WorkOutcome::Succeeded(output.into())
             }
         }
-        RunState::Failed if run.execution.as_ref().is_some_and(|e|e["outcome_unknown"]==true || e["turn_status"]=="completed") => WorkOutcome::Unknown(
-            "External execution did not produce a confirmed durable result; inspect side effects before retrying.".into(),
-        ),
         RunState::Failed => WorkOutcome::Failed(
-            "Agent execution failed; inspect the associated Run for diagnostics.".into(),
+            run.termination
+                .as_ref()
+                .map(|t| {
+                    format!(
+                        "Execution failed: {}. Inspect the Run for diagnostics.",
+                        t.code
+                    )
+                })
+                .unwrap_or_else(|| {
+                    "Agent execution failed; inspect the associated Run for diagnostics.".into()
+                }),
         ),
         RunState::Suspended => bail!("suspended run requires continuation reconciliation"),
-        RunState::Canceled | RunState::Running => WorkOutcome::Unknown(
-            "Execution stopped or ownership was lost; inspect side effects before retrying.".into(),
+        RunState::Canceled => WorkOutcome::Canceled(format!(
+            "Execution stopped and confirmed: {}. Existing external changes are not rolled back.",
+            run.termination
+                .as_ref()
+                .map(|t| t.code.to_string())
+                .unwrap_or_else(|| "cancellation_requested".into())
+        )),
+        RunState::Interrupted => WorkOutcome::Interrupted(
+            "Engine confirmed interruption; inspect existing changes before continuing.".into(),
         ),
+        RunState::OutcomeUnknown | RunState::Running => WorkOutcome::Unknown(format!(
+            "Execution result is unconfirmed: {}. Inspect the original execution and side effects before retrying.",
+            run.termination
+                .as_ref()
+                .map(|t| t.code.to_string())
+                .unwrap_or_else(|| "execution_ownership_lost".into())
+        )),
     };
-    ledger.record_outcome(&item.id, item.revision, &run.id, outcome)?;
+    let termination = run.termination.clone().or_else(|| {
+        (run.state == RunState::Running)
+            .then(|| crate::Termination::new(crate::StopCode::ExecutionOwnerLost))
+    });
+    ledger.record_diagnosed_outcome(&item.id, item.revision, &run.id, outcome, termination)?;
     Ok(())
 }
 
@@ -142,7 +167,7 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
         let live = adapter.as_ref().is_some_and(|t| {
             ledger
                 .store
-                .authorized(t, crate::schedule_store::now_ms())
+                .owns_execution(t, crate::schedule_store::now_ms())
                 .unwrap_or(false)
         });
         let run = runs.by_request_key(&execution_key(&item))?;
@@ -244,7 +269,8 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                         WorkState::WaitingInput { question, .. } => question.as_str(),
                         WorkState::Succeeded { output, .. } => output.as_str(),
                         WorkState::Failed { error, .. } => error.as_str(),
-                        WorkState::OutcomeUnknown { reason, .. }
+                        WorkState::Interrupted { reason, .. }
+                        | WorkState::OutcomeUnknown { reason, .. }
                         | WorkState::Canceled { reason } => reason.as_str(),
                         _ => bail!("result not ready"),
                     }
@@ -286,6 +312,7 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                             WorkState::Succeeded { .. } => "succeeded",
                             WorkState::Failed { .. } => "failed",
                             WorkState::Canceled { .. } => "canceled",
+                            WorkState::Interrupted { .. } => "interrupted",
                             _ => "outcome_unknown",
                         }
                     },

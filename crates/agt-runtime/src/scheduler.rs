@@ -123,10 +123,9 @@ pub(crate) fn guarded_store<T>(
                     .is_ok_and(|m| m.deleted_at.is_none() && m.seq > cutoff)
         });
     if !valid {
-        return Err(RuntimeError::Canceled);
-    }
-    if let Some(id) = &task.work_id {
-        crate::work::check_task_scope(home, &store, id).map_err(|_| RuntimeError::Canceled)?;
+        return Err(RuntimeError::Stopped(crate::termination::guard_cause(
+            &store, task,
+        )?));
     }
     if !task.work_notification
         && let Some(id) = &task.work_id
@@ -135,7 +134,14 @@ pub(crate) fn guarded_store<T>(
             .cancellation_requested
             .is_some()
     {
-        return Err(RuntimeError::Canceled);
+        return Err(RuntimeError::Stopped(crate::StopCode::TaskCanceled));
+    }
+    if let Some(id) = &task.work_id
+        && crate::work::check_task_scope(home, &store, id).is_err()
+    {
+        return Err(RuntimeError::Stopped(crate::termination::guard_cause(
+            &store, task,
+        )?));
     }
     let changes = store.connection.total_changes();
     let result = operation(&store)?;
@@ -315,7 +321,7 @@ impl Scheduler {
         loop {
             if token.is_canceled() {
                 for (_, cancel, _) in &self.jobs {
-                    cancel.cancel();
+                    cancel.cancel_with_reason("service_shutdown");
                 }
             }
             self.tick(!token.is_canceled())?;
@@ -384,7 +390,7 @@ impl Scheduler {
     fn tick(&mut self, dispatch: bool) -> Result<()> {
         if !self.store.heartbeat(&self.owner, now_ms())? {
             for (_, token, _) in &self.jobs {
-                token.cancel();
+                token.cancel_with_reason("scheduler_lease_lost");
             }
             bail!("scheduler lease lost; active work requires inspection");
         }
@@ -411,7 +417,11 @@ impl Scheduler {
                 if item.cancellation_requested.is_some()
                     || crate::work::check_task_scope(&self.home, &self.store, work_id).is_err()
                 {
-                    token.cancel();
+                    token.cancel_with_reason(if item.cancellation_requested.is_some() {
+                        "task_canceled"
+                    } else {
+                        "authorization_revoked"
+                    });
                 }
             }
         }
@@ -448,14 +458,14 @@ impl Scheduler {
                 self.store.cancel_pending(&task.id)?;
                 for (id, token, _) in &self.jobs {
                     if id == &task.id {
-                        token.cancel();
+                        token.cancel_with_reason("authorization_revoked");
                     }
                 }
             }
             if !bound && task.work_id.is_some() {
                 for (id, token, _) in &self.jobs {
                     if id == &task.id {
-                        token.cancel();
+                        token.cancel_with_reason("authorization_revoked");
                     }
                 }
             }
@@ -463,7 +473,7 @@ impl Scheduler {
             let state = match task.state.as_str() {
                 "completed" => Some(DeliveryState::Completed),
                 "silent" | "skipped" | "canceled" => Some(DeliveryState::Skipped),
-                "failed" | "interrupted" => Some(DeliveryState::Failed),
+                "failed" | "interrupted" | "outcome_unknown" => Some(DeliveryState::Failed),
                 _ => None,
             };
             if let Some(state) = state {
@@ -471,7 +481,7 @@ impl Scheduler {
                     im.update_delivery(*id, state, task.run_id.as_deref(), task.reason.as_deref())?;
                 }
                 if task.work_notification && task.state == "completed" {
-                    self.store.connection.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?2 AND kind IN ('succeeded','failed','canceled','outcome_unknown','resolved','dependency_expired'))",rusqlite::params![task.principal,task.work_id])?;
+                    self.store.connection.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?2 AND kind IN ('succeeded','failed','canceled','interrupted','outcome_unknown','resolved','dependency_expired'))",rusqlite::params![task.principal,task.work_id])?;
                 }
                 self.store.mark_reconciled(&task.id)?;
             }
@@ -675,7 +685,7 @@ fn quiet_ready(task: &ScheduledTask, last_message_at: i64, now: i64) -> bool {
 impl Drop for Scheduler {
     fn drop(&mut self) {
         for (_, token, _) in &self.jobs {
-            token.cancel();
+            token.cancel_with_reason("service_shutdown");
         }
         // Do not release the lease while detached threads may still be running.
         self.lease.release = self.jobs.is_empty();
@@ -691,7 +701,7 @@ struct ScheduledModel<'a> {
 impl ModelClient for ScheduledModel<'_> {
     fn check_canceled(&self) -> crate::Result<()> {
         if self.token.is_canceled() {
-            Err(RuntimeError::Canceled)
+            Err(RuntimeError::Stopped(crate::StopCode::token(&self.token)))
         } else {
             Ok(())
         }
@@ -712,7 +722,7 @@ impl ModelClient for ScheduledModel<'_> {
         progress: &mut dyn FnMut(crate::ModelEvent<'_>) -> crate::Result<()>,
     ) -> crate::Result<Value> {
         if self.token.is_canceled() {
-            return Err(RuntimeError::Canceled);
+            return Err(RuntimeError::Stopped(crate::StopCode::token(&self.token)));
         }
         guarded(&self.home, &self.task, || Ok(()))?;
         let mut store = ScheduleStore::open(&self.home)
@@ -721,18 +731,18 @@ impl ModelClient for ScheduledModel<'_> {
             .debit(&self.task, now_ms())
             .map_err(|_| RuntimeError::Configuration("scheduler call accounting unavailable"))?
         {
-            return Err(RuntimeError::Canceled);
+            return Err(RuntimeError::Stopped(crate::StopCode::token(&self.token)));
         }
         let response = self
             .inner
             .complete_stream(agent, messages, tools, &mut |event| {
                 if self.token.is_canceled() {
-                    return Err(RuntimeError::Canceled);
+                    return Err(RuntimeError::Stopped(crate::StopCode::token(&self.token)));
                 }
                 progress(event)
             })?;
         if self.token.is_canceled() {
-            return Err(RuntimeError::Canceled);
+            return Err(RuntimeError::Stopped(crate::StopCode::token(&self.token)));
         }
         guarded(&self.home, &self.task, || Ok(response))
     }
@@ -885,12 +895,13 @@ pub(crate) fn execute(
         ) {
             Ok(context) => context,
             Err(error) => {
-                task.state = if matches!(error, RuntimeError::Canceled) {
-                    "canceled"
-                } else {
-                    "failed"
-                }
-                .into();
+                task.state =
+                    if matches!(error, RuntimeError::Canceled | RuntimeError::Stopped(_)) {
+                        "canceled"
+                    } else {
+                        "failed"
+                    }
+                    .into();
                 task.reason = Some(format!("conversation context: {error}"));
                 store.update(&task, now_ms())?;
                 return Ok(());
@@ -1044,9 +1055,10 @@ pub(crate) fn execute(
         task.state = match record.state {
             RunState::Completed => "completed",
             RunState::Suspended => "suspended",
-            RunState::Running => "interrupted",
+            RunState::Running | RunState::Interrupted => "interrupted",
             RunState::Canceled => "canceled",
             RunState::Failed => "failed",
+            RunState::OutcomeUnknown => "outcome_unknown",
         }
         .into();
         task.reason = record.error.clone();
@@ -1108,8 +1120,9 @@ pub(crate) fn execute(
         .into();
     } else {
         task.state = match record.state {
-            RunState::Running => "interrupted",
+            RunState::Running | RunState::Interrupted => "interrupted",
             RunState::Canceled => "canceled",
+            RunState::OutcomeUnknown => "outcome_unknown",
             _ => "failed",
         }
         .into();

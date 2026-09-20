@@ -40,7 +40,12 @@ impl TaskControl {
             }
             match name {
                 "task_cancel" => {
-                    cancel_tree(&store.connection, &item.id, text)?;
+                    cancel_tree(
+                        &store.connection,
+                        &item.id,
+                        text,
+                        self.actor.principal.as_str(),
+                    )?;
                     item = read(&store.connection, id)?;
                 }
                 "task_resolve" => {
@@ -75,7 +80,9 @@ impl TaskControl {
                     }
                     if !matches!(
                         item.state,
-                        WorkState::Failed { .. } | WorkState::Canceled { .. }
+                        WorkState::Failed { .. }
+                            | WorkState::Canceled { .. }
+                            | WorkState::Interrupted { .. }
                     ) && !item
                         .resolution
                         .as_ref()
@@ -135,7 +142,7 @@ pub(super) fn save_event(
         notify,
     )
 }
-fn cancel_tree(c: &Connection, id: &str, reason: &str) -> Result<()> {
+fn cancel_tree(c: &Connection, id: &str, reason: &str, actor: &str) -> Result<()> {
     let ids = {
         let mut stmt=c.prepare("WITH RECURSIVE owned(id) AS (SELECT ?1 UNION SELECT w.id FROM work_items w JOIN owned p ON json_extract(w.record,'$.request.parent_id')=p.id) SELECT id FROM owned")?;
         stmt.query_map([id], |r| r.get::<_, String>(0))?
@@ -170,7 +177,20 @@ fn cancel_tree(c: &Connection, id: &str, reason: &str) -> Result<()> {
                     "responding" | "evaluating" | "ready_to_reply"
                 )
             });
+        if item.cancellation_requested.is_some() {
+            continue;
+        }
         item.cancellation_requested = Some(reason.into());
+        let mut termination = crate::Termination::new(crate::StopCode::TaskCanceled);
+        termination.actor = Some(actor.into());
+        if !in_flight {
+            termination.confirmation = "not_running".into();
+            termination.confirmed_at = Some(crate::schedule_store::now_ms());
+            if item.resume_from.is_none() {
+                termination.side_effects = "not_started".into();
+            }
+        }
+        item.termination = Some(termination);
         if in_flight {
             save_event(c, &mut item, "cancellation_requested", false)?;
         } else {

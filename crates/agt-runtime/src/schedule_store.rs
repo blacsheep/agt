@@ -731,6 +731,12 @@ impl ScheduleStore {
             .is_some())
     }
 
+    /// Ownership remains valid while a live executor is confirming cancellation.
+    /// Discussion controls revoke permission, not the ability to report a terminal fact.
+    pub(crate) fn owns_execution(&self, task: &ScheduledTask, now: i64) -> Result<bool> {
+        Ok(self.connection.query_row("SELECT 1 FROM tasks t JOIN coordinator c ON c.owner=t.owner WHERE t.id=?1 AND t.version=?2 AND t.owner=?3 AND t.state IN ('evaluating','responding') AND c.expires>?4", params![task.id,task.version,task.owner,now], |_| Ok(())).optional()?.is_some())
+    }
+
     // Execution fence after admission: natural expiry only gates new claims.
     // Explicit end, task version changes and lease loss still revoke execution.
     pub(crate) fn authorized(&self, task: &ScheduledTask, now: i64) -> Result<bool> {

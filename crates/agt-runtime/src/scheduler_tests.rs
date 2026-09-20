@@ -1232,7 +1232,11 @@ fn external_group_requires_mention_and_reset_cancels_without_publication() {
     reset_conversation_context(path, &chat, "user").unwrap();
     handle.join().unwrap().unwrap();
     let runs = crate::RunStore::open(path).unwrap().list(10).unwrap();
-    assert_eq!(runs[0].state, RunState::Canceled);
+    assert_eq!(runs[0].state, RunState::OutcomeUnknown);
+    assert_eq!(
+        runs[0].termination.as_ref().unwrap().code,
+        crate::StopCode::ContextReset
+    );
     assert_ne!(scheduler.store.get(&task_id).unwrap().state, "completed");
     let messages = user
         .call("message_history", json!({"conversation":chat}))

@@ -311,7 +311,7 @@ pub(super) fn reconcile(
             notice.version += 1;
             crate::schedule_store::save_task(&tx, &notice)?;
         }
-        tx.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?2 AND kind IN ('succeeded','failed','canceled','outcome_unknown'))",params![current.request.assignee,dependency_id])?;
+        tx.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT seq FROM work_outbox WHERE work_id=?2 AND kind IN ('succeeded','failed','canceled','interrupted','outcome_unknown'))",params![current.request.assignee,dependency_id])?;
     }
     tx.commit()?;
     Ok(())

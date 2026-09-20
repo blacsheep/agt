@@ -14,6 +14,8 @@ pub enum RunState {
     Completed,
     Failed,
     Canceled,
+    Interrupted,
+    OutcomeUnknown,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -25,6 +27,7 @@ pub struct RunRecord {
     pub config_fingerprint: Option<String>,
     pub output: Option<String>,
     pub error: Option<String>,
+    pub termination: Option<crate::Termination>,
     /// Includes child model calls for parent runs.
     pub model_steps: u32,
     /// Local failed tool invocations, even when the model subsequently finishes.
@@ -181,6 +184,7 @@ impl RunStore {
             config_fingerprint: None,
             output: None,
             error: None,
+            termination: None,
             model_steps: 0,
             tool_failures: 0,
             context: Default::default(),

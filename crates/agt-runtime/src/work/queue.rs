@@ -70,7 +70,10 @@ pub(crate) fn blocker(c: &Connection, item: &WorkItem, now: i64) -> Result<Optio
     }
     if matches!(
         dependency.state,
-        WorkState::Succeeded { .. } | WorkState::Failed { .. } | WorkState::Canceled { .. }
+        WorkState::Succeeded { .. }
+            | WorkState::Failed { .. }
+            | WorkState::Canceled { .. }
+            | WorkState::Interrupted { .. }
     ) || dependency.resolution.is_some()
     {
         return Ok(None);

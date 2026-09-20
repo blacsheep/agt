@@ -116,11 +116,7 @@ impl<'a> Runtime<'a> {
                 record.output = Some(output);
             }
             Err(error) => {
-                record.state = if matches!(error, RuntimeError::Canceled) {
-                    RunState::Canceled
-                } else {
-                    RunState::Failed
-                };
+                record.state = crate::termination::finish(&mut record, &error);
                 record.error = Some(error.to_string());
             }
         }
@@ -391,7 +387,7 @@ impl<'a> Runtime<'a> {
                 match &result {
                     Ok(_) => call.finish(CallState::Succeeded, None),
                     Err(error) => call.finish(
-                        if matches!(error, RuntimeError::Canceled) {
+                        if matches!(error, RuntimeError::Canceled | RuntimeError::Stopped(_)) {
                             CallState::Canceled
                         } else {
                             CallState::Failed
@@ -486,7 +482,7 @@ impl<'a> Runtime<'a> {
             match &response {
                 Ok(_) => model_call.finish(CallState::Succeeded, None),
                 Err(error) => model_call.finish(
-                    if matches!(error, RuntimeError::Canceled) {
+                    if matches!(error, RuntimeError::Canceled | RuntimeError::Stopped(_)) {
                         CallState::Canceled
                     } else {
                         CallState::Failed
@@ -669,7 +665,7 @@ impl<'a> Runtime<'a> {
                         invocation.finish(CallState::Failed, Some(error.clone()))
                     }
                     Err(error) => invocation.finish(
-                        if matches!(error, RuntimeError::Canceled) {
+                        if matches!(error, RuntimeError::Canceled | RuntimeError::Stopped(_)) {
                             CallState::Canceled
                         } else {
                             CallState::Failed
@@ -757,6 +753,7 @@ impl<'a> Runtime<'a> {
             let result = match preparation.as_ref() {
                 Ok(_) => self.drive(&mut child, agents, step_count, cancellation),
                 Err(RuntimeError::Canceled) => Err(RuntimeError::Canceled),
+                Err(RuntimeError::Stopped(code)) => Err(RuntimeError::Stopped(*code)),
                 Err(_) => Err(RuntimeError::Im("cannot publish delegation input")),
             };
             child.model_steps = *step_count - initial_steps;
@@ -764,9 +761,11 @@ impl<'a> Runtime<'a> {
         }
         let input_message = preparation?;
         match child.state {
-            RunState::Running | RunState::Suspended => return Err(RuntimeError::Busy),
+            RunState::Running | RunState::Suspended | RunState::OutcomeUnknown => {
+                return Err(RuntimeError::Busy);
+            }
             RunState::Canceled => return Err(RuntimeError::Canceled),
-            RunState::Failed => {
+            RunState::Failed | RunState::Interrupted => {
                 return Err(RuntimeError::Tool(
                     "delegated run failed; inspect child run",
                 ));
@@ -800,7 +799,7 @@ impl<'a> Runtime<'a> {
 
 fn check_canceled(token: &CancellationToken) -> Result<()> {
     if token.is_canceled() {
-        Err(RuntimeError::Canceled)
+        Err(RuntimeError::Stopped(crate::StopCode::token(token)))
     } else {
         Ok(())
     }

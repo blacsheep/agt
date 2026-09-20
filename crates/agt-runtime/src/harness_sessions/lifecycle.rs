@@ -14,6 +14,7 @@ pub enum ExecutionState {
     Succeeded,
     Failed,
     Canceled,
+    Interrupted,
     NeedsReview,
 }
 impl ExecutionState {
@@ -36,6 +37,7 @@ impl ExecutionState {
             Self::Succeeded => "succeeded",
             Self::Failed => "failed",
             Self::Canceled => "canceled",
+            Self::Interrupted => "interrupted",
             Self::NeedsReview => "needs_review",
         }
     }
@@ -74,7 +76,7 @@ impl HarnessSessions {
     pub fn reconcile(&self) -> Result<()> {
         let before = self.db.total_changes();
         let now = crate::schedule_store::now_ms();
-        self.db.execute("UPDATE harness_operations SET state=CASE WHEN state IN ('failed','canceled','succeeded') THEN state WHEN submitted=0 THEN 'failed' ELSE 'reconciling' END,owner=NULL,expires=0,reason=CASE WHEN submitted=0 THEN 'Owner exited before submission' ELSE 'Execution owner lease expired; external result must be checked' END WHERE owner IS NOT NULL AND expires<=?1", [now])?;
+        self.db.execute("UPDATE harness_operations SET state=CASE WHEN state IN ('failed','canceled','interrupted','succeeded') THEN state WHEN submitted=0 THEN 'failed' ELSE 'reconciling' END,owner=NULL,expires=0,reason=CASE WHEN submitted=0 THEN 'Owner exited before submission' ELSE 'Execution owner lease expired; external result must be checked' END WHERE owner IS NOT NULL AND expires<=?1", [now])?;
         // This adapter cannot reattach a live external turn. Keep the original thread intact.
         self.db.execute("UPDATE harness_operations SET state='needs_review',reason='Connection lost; inspect the original Codex thread and its effects before starting a new context' WHERE state='reconciling' AND owner IS NULL", [])?;
         if self.db.total_changes() != before {
@@ -116,7 +118,7 @@ impl HarnessSessions {
             if !exists {
                 bail!("session does not exist");
             }
-            let changed = self.db.execute("INSERT INTO harness_operations(scope,id,state,owner,generation,expires) VALUES(?1,?2,'preparing',?2,1,?3) ON CONFLICT(scope) DO UPDATE SET id=excluded.id,state='preparing',owner=excluded.owner,generation=harness_operations.generation+1,expires=excluded.expires,submitted=0,cancel=0,reason=NULL,output=NULL WHERE harness_operations.owner IS NULL AND harness_operations.state IN ('succeeded','failed','canceled')",params![id,owner,now+LEASE_MS])?;
+            let changed = self.db.execute("INSERT INTO harness_operations(scope,id,state,owner,generation,expires) VALUES(?1,?2,'preparing',?2,1,?3) ON CONFLICT(scope) DO UPDATE SET id=excluded.id,state='preparing',owner=excluded.owner,generation=harness_operations.generation+1,expires=excluded.expires,submitted=0,cancel=0,reason=NULL,output=NULL WHERE harness_operations.owner IS NULL AND harness_operations.state IN ('succeeded','failed','canceled','interrupted')",params![id,owner,now+LEASE_MS])?;
             if changed != 1 {
                 bail!(
                     "session is active, recovering, or needs review; inspect its execution state"
@@ -225,7 +227,18 @@ impl ExecutionLock<'_> {
     pub(crate) fn settled(&self, status: &str) -> Result<()> {
         let state = match status {
             "rejected" | "failed" => ExecutionState::Failed,
-            "interrupted" => ExecutionState::Canceled,
+            "interrupted" => {
+                let requested: bool = self.sessions.db.query_row(
+                    "SELECT cancel FROM harness_operations WHERE scope=?1",
+                    [self.id],
+                    |r| r.get(0),
+                )?;
+                if requested {
+                    ExecutionState::Canceled
+                } else {
+                    ExecutionState::Interrupted
+                }
+            }
             _ => return Ok(()),
         };
         // Keep ownership until client cleanup; Drop releases after the operation unwinds.
@@ -248,7 +261,7 @@ impl Drop for ExecutionLock<'_> {
             let _ = thread.join();
         }
         let _ = self.fenced(|| {
-            self.sessions.db.execute("UPDATE harness_operations SET state=CASE WHEN state IN ('failed','canceled','succeeded') THEN state WHEN submitted=0 THEN CASE WHEN cancel=1 THEN 'canceled' ELSE 'failed' END ELSE 'needs_review' END,reason=COALESCE(reason,'Execution ended without a confirmed durable result'),owner=NULL,expires=0 WHERE scope=?1",[self.id])?;
+            self.sessions.db.execute("UPDATE harness_operations SET state=CASE WHEN state IN ('failed','canceled','interrupted','succeeded') THEN state WHEN submitted=0 THEN CASE WHEN cancel=1 THEN 'canceled' ELSE 'failed' END ELSE 'needs_review' END,reason=COALESCE(reason,'Execution ended without a confirmed durable result'),owner=NULL,expires=0 WHERE scope=?1",[self.id])?;
             Ok(())
         });
     }

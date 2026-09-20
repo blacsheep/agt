@@ -22,7 +22,7 @@ fn codex_startup_failure_does_not_poison_the_chat_session() {
         ("after-reject", "completed"),
         ("engine-failed", "failed"),
         ("after-failure", "completed"),
-        ("disconnect", "failed"),
+        ("disconnect", "outcome_unknown"),
     ] {
         if key == "reject" {
             std::fs::write(home.path().join("reject-start"), "1").unwrap();

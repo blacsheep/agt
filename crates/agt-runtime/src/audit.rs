@@ -159,6 +159,9 @@ pub(crate) fn runtime_error(error: &crate::RuntimeError) -> Value {
     if let HttpStatus(status) = error {
         return json!({"code":"model_http_error","http_status":status,"message":format!("Model endpoint returned HTTP {status}.")});
     }
+    if let Stopped(code) = error {
+        return json!({"code":code,"source":code.source(),"message":error.to_string()});
+    }
     let (code, message) = match error {
         Canceled => (
             "canceled",

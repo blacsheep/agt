@@ -87,7 +87,7 @@ pub(crate) fn migrate(c: &Connection) -> Result<()> {
 
     if version < 14 {
         c.execute_batch("CREATE TABLE IF NOT EXISTS work_reports(event_seq INTEGER PRIMARY KEY,work_id TEXT NOT NULL,body TEXT,actor TEXT,message_id TEXT,error TEXT,created_at INTEGER NOT NULL,attention_at INTEGER);
-            INSERT OR IGNORE INTO work_reports(event_seq,work_id,created_at) SELECT seq,work_id,created_at FROM work_outbox WHERE kind IN ('succeeded','failed','canceled','outcome_unknown','resolved');
+            INSERT OR IGNORE INTO work_reports(event_seq,work_id,created_at) SELECT seq,work_id,created_at FROM work_outbox WHERE kind IN ('succeeded','failed','canceled','interrupted','outcome_unknown','resolved');
             CREATE TRIGGER IF NOT EXISTS report_changed AFTER UPDATE ON work_reports WHEN OLD.message_id IS NOT NEW.message_id OR OLD.error IS NOT NEW.error OR OLD.body IS NOT NEW.body BEGIN
                 INSERT INTO change_outbox(conversation,kind,at) SELECT json_extract(record,'$.request.report_to'),'work',CAST(unixepoch('subsec')*1000 AS INTEGER) FROM work_items WHERE id=NEW.work_id;
             END;
@@ -176,6 +176,10 @@ pub enum WorkState {
         run_id: String,
         error: String,
     },
+    Interrupted {
+        run_id: String,
+        reason: String,
+    },
     OutcomeUnknown {
         run_id: String,
         reason: String,
@@ -188,6 +192,8 @@ pub enum WorkOutcome {
     Succeeded(String),
     Failed(String),
     Unknown(String),
+    Canceled(String),
+    Interrupted(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -199,6 +205,7 @@ pub struct WorkItem {
     pub state: WorkState,
     pub created_at: i64,
     pub updated_at: i64,
+    pub termination: Option<crate::Termination>,
     #[serde(default)]
     pub priority: Priority,
     #[serde(default)]
@@ -314,6 +321,7 @@ impl WorkLedger {
             deferred: None,
             resume_from: None,
             cancellation_requested: None,
+            termination: None,
             resolution: None,
             triage: None,
             request,
@@ -393,11 +401,33 @@ impl WorkLedger {
         run_id: &str,
         outcome: WorkOutcome,
     ) -> Result<WorkItem> {
+        self.record_diagnosed_outcome(id, revision, run_id, outcome, None)
+    }
+
+    pub(crate) fn record_diagnosed_outcome(
+        &mut self,
+        id: &str,
+        revision: i64,
+        run_id: &str,
+        outcome: WorkOutcome,
+        termination: Option<crate::Termination>,
+    ) -> Result<WorkItem> {
         self.change(id, revision, |item| {
             if !matches!(&item.state, WorkState::Running {run_id: active} if active == run_id) {
                 bail!("work attempt is not current");
             }
             let run_id = run_id.to_owned();
+            if let Some(mut termination) = termination {
+                if let Some(first) = &item.termination
+                    && first.observed_at <= termination.observed_at
+                {
+                    termination.code = first.code;
+                    termination.source = first.source.clone();
+                    termination.actor = first.actor.clone();
+                    termination.observed_at = first.observed_at;
+                }
+                item.termination = Some(termination);
+            }
             let kind = match outcome {
                 WorkOutcome::Succeeded(output) => {
                     if output.trim().is_empty() {
@@ -412,6 +442,14 @@ impl WorkLedger {
                     }
                     item.state = WorkState::Failed { run_id, error };
                     "failed"
+                }
+                WorkOutcome::Canceled(reason) => {
+                    item.state = WorkState::Canceled { reason };
+                    "canceled"
+                }
+                WorkOutcome::Interrupted(reason) => {
+                    item.state = WorkState::Interrupted { run_id, reason };
+                    "interrupted"
                 }
                 WorkOutcome::Unknown(reason) => {
                     if reason.trim().is_empty() {
@@ -557,7 +595,7 @@ fn append_event(
     let seq = c.last_insert_rowid();
     if matches!(
         kind,
-        "succeeded" | "failed" | "canceled" | "outcome_unknown" | "resolved"
+        "succeeded" | "failed" | "canceled" | "interrupted" | "outcome_unknown" | "resolved"
     ) {
         c.execute(
             "INSERT INTO work_reports(event_seq,work_id,created_at) VALUES(?1,?2,?3)",
@@ -580,7 +618,7 @@ fn append_event(
         );
         if !matches!(
             kind,
-            "succeeded" | "failed" | "canceled" | "outcome_unknown"
+            "succeeded" | "failed" | "canceled" | "interrupted" | "outcome_unknown"
         ) {
             key.push_str(&format!(":resolution:{}", item.revision));
         }
