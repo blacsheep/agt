@@ -1817,3 +1817,51 @@ footer { color: var(--muted); }
 .task-termination dt { color: var(--muted); }
 .task-termination dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .task-timeline li { flex-wrap: wrap; }
+
+/* Interaction observatory: an editorial timeline within the workspace palette. */
+.ix-heading {display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:24px}
+.ix-heading h1 {font-size:26px;letter-spacing:-.6px;margin:8px 0}
+.ix-heading p,.ix-note {color:var(--muted);font-size:12px;line-height:1.7}
+.ix-workspace {display:grid;grid-template-columns:200px minmax(260px,1fr) minmax(280px,340px);border:1px solid var(--line);border-radius:10px;background:var(--paper);min-height:620px;align-items:start}
+.ix-filters {padding:22px 18px;display:grid;gap:16px;min-width:0}
+.ix-filters label {display:grid;gap:8px;font-size:12px;font-weight:600}
+.ix-filters input,.ix-filters select {width:100%;min-width:0;background:var(--paper)}
+.ix-filters p {margin:0}
+.ix-legend {border-top:1px solid var(--line);margin-top:18px;padding-top:20px;font-size:12px;line-height:1.9;color:var(--muted)}
+.ix-legend p {margin-top:12px}
+.ix-stream {min-width:0;border-left:1px solid var(--line);border-right:1px solid var(--line);min-height:620px}
+.ix-stream-head {padding:22px 20px 12px;display:flex;justify-content:space-between;gap:8px}
+.ix-stream-head span {font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+#ix-status {padding:0 20px 16px;margin:0;color:var(--muted);font-size:11px;line-height:1.6;border-bottom:1px solid var(--line)}
+#ix-list {max-height:68vh;overflow:auto;padding:8px 0}
+.ix-row {width:100%;display:flex;align-items:start;gap:12px;text-align:left;padding:18px 18px;position:relative;border-bottom:1px solid var(--line);border-left:3px solid transparent;border-radius:0}
+.ix-row:hover,.ix-row:focus-visible {background:#f4f7fc}
+.ix-row.selected {background:var(--accent-light);border-left-color:var(--accent)}
+.ix-dot {flex:none;width:30px;height:30px;background:#e9edf4;color:#334d70;display:grid;place-items:center;border-radius:9px;font-size:12px;font-weight:600}
+.ix-row-main {min-width:0;flex:1}
+.ix-direction {display:block;font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.ix-direction>span {color:var(--muted)}
+.ix-preview {display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.7;font-size:13px;margin:7px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.ix-meta,.ix-row time {font-size:10px;color:var(--muted);line-height:1.6}
+.ix-row time {flex:none;max-width:66px}
+.ix-hover {display:none;position:absolute;z-index:5;left:15px;right:15px;top:32px;background:#243449;color:#fff;border-radius:7px;padding:16px;box-shadow:0 6px 20px #12233d25;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.8;pointer-events:none;max-height:200px;overflow:hidden}
+.ix-row:hover .ix-hover,.ix-row:focus-visible .ix-hover {display:block}
+.ix-load {display:flex;gap:8px;flex-wrap:wrap;padding:16px}
+.ix-detail {min-width:0;max-height:80vh;overflow:auto}
+.ix-detail-heading {padding:24px;border-bottom:1px solid var(--line)}
+.ix-detail-heading h2 {margin:12px 0;font-size:20px;overflow-wrap:anywhere}
+.ix-detail-heading p {font-size:12px;overflow-wrap:anywhere}
+.ix-detail-heading small,.ix-state small {color:var(--muted);font-size:11px}
+.ix-message,.ix-execution {padding:20px 24px;border-bottom:1px solid var(--line)}
+.ix-detail h3 {font-size:12px;margin:0 0 14px}
+.ix-body {white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.9}
+.ix-detail summary {cursor:pointer;color:#245bcc;font-size:12px;padding:10px 0}
+.ix-state {padding:16px 0;border-top:1px solid var(--line);font-size:12px}
+.ix-state>div {display:flex;justify-content:space-between;gap:8px;overflow-wrap:anywhere}
+.ix-state>div>span {color:#245bcc}
+.ix-detail-empty {padding:64px 28px;color:var(--muted);line-height:1.9}
+.ix-detail-empty>span {font-size:36px;color:var(--accent)}
+.ix-detail-empty h2 {font-size:17px;color:var(--ink)}
+.ix-detail-empty p {font-size:13px}
+@media(max-width:1200px) {.ix-workspace {grid-template-columns:175px minmax(240px,1fr)}.ix-detail {grid-column:1/-1;border-top:1px solid var(--line);max-height:none}.ix-stream {border-right:0}.ix-detail-empty {padding:24px}}
+@media(max-width:680px) {.ix-heading {align-items:start}.ix-heading h1 {font-size:22px}.ix-heading .eyebrow {font-size:9px}.ix-workspace {display:block;min-height:0}.ix-filters {grid-template-columns:1fr 1fr;padding:16px}.ix-filters .ix-note,.ix-legend {grid-column:1/-1}.ix-legend {display:none}.ix-stream {border-left:0;min-height:0;border-top:1px solid var(--line)}.ix-row {padding:14px 10px;gap:8px}.ix-row time {max-width:55px}.ix-detail-heading,.ix-message,.ix-execution {padding:18px}.ix-hover {display:none!important}}

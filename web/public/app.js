@@ -1059,7 +1059,9 @@ function switchPage(page) {
   const previous = state.page; state.page = page;
   $$('.page').forEach(p => p.classList.toggle('hidden', p.id !== `page-${page}`));
   $$('.nav').forEach(b => { b.classList.toggle('active', b.dataset.page === page); if (b.dataset.page === page) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-  $('#page-label').textContent = { chat: '会话空间', observer: 'Agent 会话', agents: 'Agent 团队', resources: '资源库', settings: '运行设置' }[page];
+  $('#page-label').textContent = { chat: '会话空间', observer: 'Agent 会话', agents: 'Agent 团队', resources: '资源库', settings: '运行设置', interactions: '交互观察' }[page];
+  if (previous === 'interactions') window.AgtInteractions?.close();
+  if (page === 'interactions') window.AgtInteractions?.open();
   if (page === 'settings') window.AgtSettings?.open();
   if (['chat', 'observer'].includes(page)) {
     const observer = page === 'observer';
@@ -1178,6 +1180,7 @@ function queueRefresh(directory = false) {
     try {
       if (directoryPending) { directoryPending = false; await bootstrap(); }
       await activity();
+      if (state.page === 'interactions') await window.AgtInteractions?.refresh();
       if (['chat', 'observer'].includes(state.page)) { await conversations(); await messages(); }
     } catch (e) { $('#connection').textContent = '同步失败'; if (e.code === 'unauthorized') notify(errorText(e), true); }
     finally { state.polling = false; if (refreshPending) queueRefresh(); }
