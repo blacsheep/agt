@@ -1865,3 +1865,73 @@ footer { color: var(--muted); }
 .ix-detail-empty p {font-size:13px}
 @media(max-width:1200px) {.ix-workspace {grid-template-columns:175px minmax(240px,1fr)}.ix-detail {grid-column:1/-1;border-top:1px solid var(--line);max-height:none}.ix-stream {border-right:0}.ix-detail-empty {padding:24px}}
 @media(max-width:680px) {.ix-heading {align-items:start}.ix-heading h1 {font-size:22px}.ix-heading .eyebrow {font-size:9px}.ix-workspace {display:block;min-height:0}.ix-filters {grid-template-columns:1fr 1fr;padding:16px}.ix-filters .ix-note,.ix-legend {grid-column:1/-1}.ix-legend {display:none}.ix-stream {border-left:0;min-height:0;border-top:1px solid var(--line)}.ix-row {padding:14px 10px;gap:8px}.ix-row time {max-width:55px}.ix-detail-heading,.ix-message,.ix-execution {padding:18px}.ix-hover {display:none!important}}
+
+/* Network observatory: a quiet drafting surface, with motion reserved for real activity. */
+#page-interactions .ix-workspace {grid-template-columns:minmax(0,1fr) 310px;overflow:hidden}
+.ix-filter-drawer {grid-column:1/-1;border-bottom:1px solid var(--line);background:#fff}
+.ix-filter-drawer>summary {padding:15px 22px;cursor:pointer;font-size:13px;font-weight:600}
+.ix-filter-drawer>summary span {color:var(--muted);font-size:11px;font-weight:400;margin-left:12px}
+#page-interactions .ix-filters {grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:4px 22px 20px}
+#page-interactions .ix-filters .ix-note {align-self:center}
+#page-interactions .ix-stream {border-left:0;min-height:0}
+.ix-graph-toolbar {display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.ix-graph-toolbar>div {display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ix-graph-toolbar strong {font-size:13px}
+#ix-graph-count {font-size:11px;color:var(--muted)}
+.ix-graph-toolbar button {font-size:11px;padding:7px 10px;min-height:30px}
+#ix-canvas {height:clamp(430px,65vh,740px);position:relative;background-color:#f8fafc;background-image:radial-gradient(#cdd8e6 .8px,transparent .8px);background-size:22px 22px;overflow:hidden}
+#ix-graph {width:100%;height:100%;touch-action:none;cursor:grab;display:block}
+#ix-graph:active {cursor:grabbing}
+.ix-world .dim {opacity:.15}
+.ix-node {cursor:grab;outline:none}
+.ix-node-face {fill:#fff;stroke:#9fb4cf;stroke-width:1.5;filter:drop-shadow(0 4px 6px #243f6410)}
+.ix-node.group .ix-node-face {fill:#edf1f8;stroke:#788dad}
+.ix-node-halo {fill:none;stroke:transparent;stroke-width:2}
+.ix-node.focused .ix-node-halo,.ix-node:focus-visible .ix-node-halo {stroke:#3370ff}
+.ix-node.focused .ix-node-face,.ix-node:hover .ix-node-face {stroke:#3370ff;stroke-width:2}
+.ix-node-initial {font-size:16px;font-weight:650;fill:#29496d;pointer-events:none}
+.ix-node-label {font-size:13px;font-weight:600;fill:#243b55;paint-order:stroke;stroke:#f8fafc;stroke-width:4px;pointer-events:none}
+.ix-node-caption {font-size:10px;fill:#607187;paint-order:stroke;stroke:#f8fafc;stroke-width:3px;pointer-events:none}
+.ix-node-state {fill:#a6b3c4;stroke:#fff;stroke-width:3}
+.ix-node.running .ix-node-state {fill:#16856c}
+.ix-node.running .ix-node-halo {stroke:#31a68c;animation:ix-breathe 2.2s ease-in-out infinite}
+.ix-node.fresh .ix-node-face {stroke:#3370ff;fill:#eaf1ff}
+.ix-edge {cursor:pointer;outline:none}
+.ix-edge-hit {fill:none;stroke:transparent;stroke-width:20}
+.ix-edge-line {fill:none;stroke:#9aaec7;stroke-width:1.5;pointer-events:none}
+.ix-edge.membership .ix-edge-line {stroke-dasharray:4 6;stroke:#bfccd9}
+.ix-edge:hover .ix-edge-line,.ix-edge:focus-visible .ix-edge-line,.ix-edge.chosen .ix-edge-line,.ix-edge.fresh .ix-edge-line {stroke:#3370ff;stroke-width:2.5}
+.ix-edge-count {fill:#6d819b;font-size:10px;paint-order:stroke;stroke:#f8fafc;stroke-width:5px;pointer-events:none}
+.ix-packet {fill:#3370ff;pointer-events:none}
+#ix-graph-tip {position:absolute;top:16px;left:16px;max-width:min(340px,calc(100% - 32px));padding:14px 16px;background:#fff;color:#253b55;border:1px solid #adc0d8;border-radius:8px;box-shadow:0 6px 24px #193b601a;white-space:pre-wrap;line-height:1.8;font-size:12px;pointer-events:none}
+#ix-graph-empty {position:absolute;top:45%;left:10%;width:80%;text-align:center;color:var(--muted);font-size:13px;pointer-events:none}
+.ix-graph-key {position:absolute;top:15px;right:15px;display:flex;gap:12px;flex-wrap:wrap;font-size:10px;color:#607187;pointer-events:none}
+.ix-key-live {color:#16856c}
+.ix-zoom {position:absolute;right:16px;bottom:18px;display:flex;align-items:center;border:1px solid #afbed0;border-radius:6px;background:#fff;overflow:hidden}
+.ix-zoom button {font-size:20px;min-width:34px;height:34px}
+.ix-zoom button:hover {background:#eaf1ff}
+.ix-zoom output {font-size:10px;min-width:42px;text-align:center;color:#607187}
+.ix-graph-hint {position:absolute;bottom:18px;left:18px;font-size:10px;color:#607187;max-width:calc(100% - 155px);margin:0;pointer-events:none}
+.ix-events {border-top:1px solid var(--line)}
+.ix-events>summary {padding:15px 20px;font-size:12px;font-weight:600;cursor:pointer}
+.ix-events>summary span {font-size:11px;color:var(--muted);font-weight:400;margin-left:10px}
+#page-interactions #ix-status {padding:12px 20px;border-top:1px solid var(--line);border-bottom:0}
+#page-interactions #ix-list {max-height:320px}
+#page-interactions .ix-detail {max-height:calc(100vh - 180px)}
+@keyframes ix-breathe {0%,100%{opacity:.4;stroke-width:1}50%{opacity:1;stroke-width:4}}
+@media(prefers-reduced-motion:reduce) {.ix-node.running .ix-node-halo {animation:none}.ix-packet {display:none}}
+@media(max-width:1200px) {
+  #page-interactions .ix-workspace {grid-template-columns:minmax(0,1fr) 260px}
+  #page-interactions .ix-detail {grid-column:auto;border-top:0}
+  .ix-graph-toolbar {align-items:start;flex-direction:column}
+}
+@media(max-width:900px) {
+  #page-interactions .ix-workspace {grid-template-columns:minmax(0,1fr)}
+  #page-interactions .ix-detail {grid-column:1/-1;border-top:1px solid var(--line);max-height:none}
+  #page-interactions .ix-filters {grid-template-columns:1fr 1fr}
+  #ix-canvas {height:480px}
+  .ix-graph-key {left:15px;right:auto}
+  .ix-filter-drawer>summary span {display:none}
+}
+.ix-node.waiting .ix-node-state {fill:#c08b29}
+.ix-node.failed .ix-node-state {fill:#cf4d51}

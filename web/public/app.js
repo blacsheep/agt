@@ -633,9 +633,9 @@ async function activity() {
   try {
     const query = state.conversation ? '?' + new URLSearchParams({conversation: state.conversation.id, viewer: state.viewer || state.boot.principal}) : '';
     const data = await api('activity' + query); if (generation !== state.generation) return;
-    state.runs = data.runs; state.scheduler = data.scheduler; renderReplyStatus(); renderActivity(); window.AgtTasks?.refresh();
+    state.runs = data.runs; state.scheduler = data.scheduler; window.AgtInteractions?.statusChanged(); renderReplyStatus(); renderActivity(); window.AgtTasks?.refresh();
   } catch (error) {
-    if (generation === state.generation) { state.scheduler.online = false; renderReplyStatus(); renderActivity(); }
+    if (generation === state.generation) { state.scheduler.online = false; window.AgtInteractions?.statusChanged(); renderReplyStatus(); renderActivity(); }
     throw error;
   }
 }

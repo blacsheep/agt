@@ -9,6 +9,7 @@
     <script src="/app.js" defer></script>
     <script src="/tasks.js" defer></script>
     <script src="/settings.js" defer></script>
+    <script src="/interaction-graph.js" defer></script>
     <script src="/interactions.js" defer></script>
   </head>
   <body class="workspace-page">
@@ -192,9 +193,9 @@
         </div></div>
       </section>
       <section id="page-interactions" class="page hidden">
-        <div class="ix-heading"><div><span class="eyebrow">INTERACTION OBSERVATORY</span><h1>交互观察</h1><p>沿着消息，看见协作如何发生。</p></div><button id="ix-refresh" class="secondary">刷新记录</button></div>
+        <div class="ix-heading"><div><span class="eyebrow">INTERACTION OBSERVATORY</span><h1>交互观察</h1><p>连接、协作与回应，在一张图里发生。</p></div><button id="ix-refresh" class="secondary">刷新记录</button></div>
         <div class="ix-workspace">
-          <aside class="ix-filters">
+          <details class="ix-filter-drawer"><summary>观察范围与筛选 <span>身份 · Agent · 会话 · 关键词</span></summary><div class="ix-filters">
             <label>观察身份<select id="ix-viewer" aria-label="观察身份"></select></label>
             <p class="ix-note">只读查看此身份可访问的会话。切换身份会清空当前记录。</p>
             <label>搜索内容<input id="ix-query" type="search" placeholder="消息、Agent 或关键词"></label>
@@ -202,13 +203,23 @@
             <label>会话<select id="ix-conversation"><option value="">已载入的会话</option></select></label>
             <label>内容类型<select id="ix-kind"><option value="">全部消息</option><option value="agent">Agent 消息</option><option value="human">用户消息</option></select></label>
             <button id="ix-clear" class="secondary">清除筛选</button>
-            <div class="ix-legend"><strong>阅读这条时间线</strong><p>→ 私聊对象或群聊<br>蓝色标记 · 当前选中<br>悬停预览 · 点击查看详情</p><p>公开决策理由可查；不展示模型内部思维链。</p></div>
-          </aside>
-          <section class="ix-stream" aria-label="交互时间线">
-            <div class="ix-stream-head"><strong>消息流</strong><span id="ix-count"></span></div>
+            </div></details>
+          <section class="ix-stream" aria-label="交互拓扑">
+            <div class="ix-graph-toolbar"><div><strong>协作网络</strong><span id="ix-graph-count"></span></div><div><button id="ix-unfocus" class="secondary">全部关系</button><button id="ix-fit" class="secondary">适应全图</button><button id="ix-layout" class="secondary">重置布局</button></div></div>
+            <div id="ix-canvas">
+              <svg id="ix-graph" viewBox="0 0 960 620" aria-label="Agent 协作拓扑，可拖动节点、平移和缩放" tabindex="0"></svg>
+              <div id="ix-graph-empty">正在读取协作网络…</div>
+              <div id="ix-graph-tip" class="hidden" role="status"></div>
+              <div class="ix-graph-key"><span>● Agent</span><span>◇ 群聊</span><span class="ix-key-live">● 执行中</span><span>虚线：成员关系</span></div>
+              <div class="ix-zoom"><button id="ix-zoom-out" aria-label="缩小拓扑">−</button><output id="ix-zoom-level">100%</output><button id="ix-zoom-in" aria-label="放大拓扑">+</button></div>
+              <p class="ix-graph-hint">拖动节点调整布局 · 拖动画布平移 · 滚轮缩放 · 点击聚焦关系</p>
+            </div>
             <p id="ix-status" role="status"></p>
+            <details class="ix-events"><summary>消息记录 <span>展开查看与筛选结果对应的交流内容</span></summary>
+            <div class="ix-stream-head"><strong>消息流</strong><span id="ix-count"></span></div>
+
             <div id="ix-list"></div>
-            <div class="ix-load"><button id="ix-more" class="secondary hidden">载入更多会话</button><button id="ix-earlier" class="secondary hidden">载入更早消息</button></div>
+            <div class="ix-load"><button id="ix-more" class="secondary hidden">载入更多会话</button><button id="ix-earlier" class="secondary hidden">载入更早消息</button></div></details>
           </section>
           <aside id="ix-detail" class="ix-detail" aria-label="交互详情"></aside>
         </div>

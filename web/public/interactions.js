@@ -1,6 +1,15 @@
 /* Read-only projection of identity-scoped messages and current execution snapshots. */
 (() => {
   const batchSize = 6;
+  const recent = new Map();
+  const graph = createInteractionGraph((id, node) => {
+    selected = id; detailSignature = ''; render();
+    if (id) showDetail();
+    else {
+      ++detailEpoch;
+      $('#ix-detail').innerHTML = `<div class="ix-detail-heading"><span class="eyebrow">NETWORK DETAIL</span><h2>${esc(node.label)}</h2><p>${esc(node.status)}</p></div><section class="ix-message"><p class="ix-body">${esc(node.reason || '当前筛选范围内没有相关消息。')}</p></section>`;
+    }
+  });
   let epoch = 0, viewer, entries = [], loaded = new Map(), selected = null;
   let busy = false, refreshPending = false, detailEpoch = 0, detailSignature = '', status = '';
   const stamp = value => new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -28,6 +37,7 @@
     const filtered = all.filter(({ item, message: m }) => (!agent || m.sender_id === agent) && (!conversation || item.conversation.id === conversation)
       && (!kind || (principalOf(m.sender_id)?.kind === 'agent' ? 'agent' : 'human') === kind)
       && (!query || `${m.body} ${nameOf(m.sender_id)} ${title(item)}`.toLowerCase().includes(query)));
+    graph.update(filtered, state.scheduler.tasks || [], state.scheduler.online, recent, selected);
     $('#ix-count').textContent = `${filtered.length} 条 / 已载入 ${all.length} 条`;
     $('#ix-status').textContent = status || `已载入 ${loaded.size}/${entries.length} 个会话，每个会话初次读取最近 30 条；执行状态为当前快照。`;
     $('#ix-refresh').disabled = busy;
@@ -51,9 +61,9 @@
       });
       if (focused) $$('#ix-list [data-ix-message]').find(b => b.dataset.ixMessage === focused)?.focus({ preventScroll: true });
     }
-    if (!selected) $('#ix-detail').innerHTML = '<div class="ix-detail-empty"><span aria-hidden="true">↗</span><h2>跟随一次交互</h2><p>选择消息，查看完整内容、公开决策理由与当前工具活动。</p></div>';
+    if (!selected) $('#ix-detail').innerHTML = '<div class="ix-detail-empty"><span aria-hidden="true">↗</span><h2>从一个节点开始</h2><p>点击 Agent 聚焦它的协作关系，点击连线查看最近交流。</p><p>悬停预览 · 拖动布局 · 滚轮缩放</p><p>执行光环来自当前运行状态；沿线流动表示刚收到新消息。</p></div>';
   }
-  async function fetchConversation(entry, generation, earlier = false) {
+  async function fetchConversation(entry, generation, earlier = false, live = false) {
     const id = entry.conversation.id, existing = loaded.get(id);
     const [history, members] = await Promise.all([
       read('message_history', { conversation: id, limit: 30, ...(earlier ? { before: existing.cursor } : {}) }, viewer),
@@ -61,7 +71,12 @@
     ]);
     if (!active(generation)) return;
     const messages = new Map((existing?.messages || []).map(m => [m.id, m]));
-    history.messages.forEach(m => messages.set(m.id, m));
+    const through = Math.max(0, ...(existing?.messages || []).map(m => m.seq));
+    history.messages.forEach(m => {
+      if (live && existing && m.seq > through && !messages.has(m.id)) recent.set(m.id, Date.now() + 6500);
+      messages.set(m.id, m);
+    });
+    for (const [id, until] of recent) if (until < Date.now()) recent.delete(id);
     loaded.set(id, { ...entry, members, messages: [...messages.values()], cursor: earlier || !existing ? history.next_cursor : existing.cursor });
   }
   async function load(mode = 'initial') {
@@ -85,7 +100,7 @@
       // Small batches bound concurrent CLI reads on large workspaces.
       let failures = 0;
       for (let i = 0; i < batch.length && active(generation); i += 3) {
-        const results = await Promise.allSettled(batch.slice(i, i + 3).map(entry => fetchConversation(entry, generation, mode === 'earlier')));
+        const results = await Promise.allSettled(batch.slice(i, i + 3).map(entry => fetchConversation(entry, generation, mode === 'earlier', mode === 'refresh')));
         failures += results.filter(r => r.status === 'rejected').length;
       }
       if (!active(generation)) return;
@@ -123,6 +138,7 @@
     } catch (e) { if (active(generation) && request === detailEpoch) $('#ix-execution-body').textContent = `状态读取失败：${e.message}`; }
   }
   function reset() {
+    graph.reset(); recent.clear();
     ++epoch; ++detailEpoch; loaded = new Map(); entries = []; selected = null; detailSignature = ''; status = ''; busy = false; refreshPending = false;
     for (const id of ['#ix-query', '#ix-agent', '#ix-conversation', '#ix-kind']) $(id).value = '';
     render();
@@ -146,6 +162,7 @@
       $('#ix-viewer').value = state.boot.principal; changeViewer();
     },
     close() { reset(); },
+    statusChanged() { if (state.page === 'interactions') render(); },
     refresh() { return load(loaded.size ? 'refresh' : 'initial'); }
   };
 })();

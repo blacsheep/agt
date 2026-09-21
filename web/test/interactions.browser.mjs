@@ -54,6 +54,21 @@ try {
   `);
   await wait('document.querySelectorAll(".ix-row").length === 2');
   assert.equal(await evaluate('window.injected'), undefined);
+  assert.equal(await evaluate('document.querySelectorAll(".ix-node").length'),2);
+  assert.equal(await evaluate('document.querySelectorAll(".ix-edge:not(.membership)").length'),2);
+  assert.equal(await evaluate('document.querySelectorAll(".ix-packet").length'),0);
+  await evaluate(`document.querySelector('[data-node="p:lead"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));`);
+  assert.equal(await evaluate('document.querySelectorAll(".ix-node.focused").length'),1);
+  await click('#ix-unfocus');
+  const beforeZoom = await evaluate('document.querySelector("#ix-zoom-level").textContent');
+  await click('#ix-zoom-in');
+  assert.notEqual(await evaluate('document.querySelector("#ix-zoom-level").textContent'),beforeZoom);
+  await click('#ix-fit');
+  const beforeMove = await evaluate(`document.querySelector('[data-node="p:lead"]').getAttribute('transform')`);
+  await evaluate(`document.querySelector('[data-node="p:lead"]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));`);
+  assert.notEqual(await evaluate(`document.querySelector('[data-node="p:lead"]').getAttribute('transform')`),beforeMove);
+  await evaluate('document.querySelector(".ix-events").open=true;');
+
   await click('[data-ix-message="team-1"]');
   await wait('document.querySelector("#ix-execution-body").textContent.includes("等待测试结果")');
   assert.equal(await evaluate('document.querySelector("#ix-execution-body").textContent.includes("secret")'),false);
@@ -104,6 +119,51 @@ try {
   `);
   assert.match(await evaluate('document.querySelector("#ix-status").textContent'),/测试读取失败/);
   assert.equal(await evaluate('document.querySelector("#ix-refresh").disabled'),false);
+
+  // Group conversations use explicit hubs; historical reads do not animate.
+  await evaluate(`
+    window.graphNewMessage = false;
+    state.boot.principals.push({id:'reviewer',name:'Reviewer',kind:'agent'},{id:'researcher',name:'Researcher',kind:'agent'});
+    state.scheduler = {online:true,tasks:[{id:'live',principal:'coder',conversation:'network',state:'responding',due_at:2000},{id:'hidden',principal:'outsider',conversation:'hidden',state:'responding',due_at:2000}]};
+    api = async (path,data) => {
+      if(path==='read'){
+        if(data.name==='conversation_list')return [{conversation:{id:'network',kind:'group',title:'产品研发协作',updated_at:3000}}];
+        if(data.name==='member_list')return ['lead','coder','reviewer','researcher'].map(principal_id=>({principal_id,left_message_seq:null}));
+        if(data.name==='message_history')return {messages:[
+          {id:'network-1',sender_id:'lead',seq:1,body:'请实现第一阶段功能，并完成测试。',created_at:1000},
+          {id:'network-2',sender_id:'reviewer',seq:2,body:'我会核验接口边界和测试覆盖。',created_at:2000},
+          ...(graphNewMessage?[{id:'network-3',sender_id:'coder',seq:3,body:'实现完成，开始运行测试。',created_at:3000}]:[])
+        ],next_cursor:null};
+      }
+      return currentApi(path,data);
+    };
+    document.querySelector('#ix-conversation').value='';
+    document.querySelector('.ix-events').open=false;
+    AgtInteractions.refresh();
+  `);
+  assert.equal(await evaluate('document.querySelectorAll(".ix-node.group").length'),1);
+  assert.equal(await evaluate('document.querySelectorAll(".ix-node").length'),5);
+  assert.equal(await evaluate('document.querySelectorAll(".ix-edge.membership").length'),4);
+  assert.equal(await evaluate('document.querySelectorAll(".ix-node.running").length'),1);
+  assert.equal(await evaluate('document.querySelectorAll(".ix-packet").length'),0);
+  await evaluate('graphNewMessage=true; AgtInteractions.refresh();');
+  assert.equal(await evaluate('document.querySelectorAll(".ix-packet").length'),1);
+  await click('#ix-layout');
+  await evaluate('document.querySelector("#ix-graph").scrollIntoView({block:"center"})');
+  const position = await evaluate(`(() => {const p=document.querySelector('[data-node="p:coder"]').getBoundingClientRect();return {x:p.x+p.width/2,y:p.y+25};})()`);
+  const initialPosition = await evaluate(`document.querySelector('[data-node="p:coder"]').getAttribute('transform')`);
+  await cdp('Input.dispatchMouseEvent',{type:'mousePressed',x:position.x,y:position.y,button:'left',clickCount:1});
+  await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:position.x+45,y:position.y+20,button:'left',buttons:1});
+  await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:position.x+45,y:position.y+20,button:'left',clickCount:1});
+  assert.notEqual(await evaluate(`document.querySelector('[data-node="p:coder"]').getAttribute('transform')`),initialPosition);
+  await evaluate('document.querySelector("#ix-graph").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+  const networkScreenshot=await cdp('Page.captureScreenshot',{format:'png'});
+  await writeFile('/tmp/agt-network.png',Buffer.from(networkScreenshot.data,'base64'));
+  await evaluate('state.scheduler.online=false; AgtInteractions.refresh();');
+  assert.equal(await evaluate('document.querySelectorAll(".ix-node.running").length'),0);
+  await new Promise(resolve=>setTimeout(resolve,6600));
+  assert.equal(await evaluate('document.querySelectorAll(".ix-packet").length'),0);
+
   assert.deepEqual(errors,[]);
   console.log('Interaction browser passed: scoped reads, filters, pagination, disclosure preservation, XSS, identity race and five viewport widths.');
 } finally {
