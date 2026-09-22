@@ -15,6 +15,52 @@ pub(super) fn status(c: &Connection, id: &str) -> Result<Value> {
         }
     })
 }
+/// Only the report attached to this authorized result notification is exposed.
+/// Tool reads and natural-language answers are not report acknowledgements.
+pub(crate) fn notification_obligation(
+    home: &Path,
+    store: &ScheduleStore,
+    task: &crate::ScheduledTask,
+) -> Result<Option<Value>> {
+    if !task.work_notification {
+        return Ok(None);
+    }
+    let Some(id) = &task.work_id else {
+        return Ok(None);
+    };
+    let item = read(&store.connection, id)?;
+    if item.request.requester != task.principal
+        || item.request.discussion != task.discussion
+        || item.request.report_to != task.conversation
+    {
+        bail!("notification does not belong to requester");
+    }
+    let im = open_im(home)?;
+    member(&im, &item.request.report_to, &task.principal)?;
+    member(&im, &item.request.origin_conversation, &task.principal)?;
+    let report: Option<(i64, bool, bool)> = store
+        .connection
+        .query_row(
+            "SELECT r.event_seq,r.body IS NOT NULL,r.message_id IS NOT NULL
+         FROM work_reports r JOIN work_publications p ON p.event_seq=r.event_seq
+         WHERE r.work_id=?1 AND p.message_id=?2",
+            params![id, task.message],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    Ok(report.map(|(seq, submitted, published)| {
+        json!({
+            "task_id": id,
+            "event_seq": seq,
+            "expected_revision": item.revision,
+            "origin_conversation": item.request.origin_conversation,
+            "report_required": !submitted && !published,
+            "report_submitted": submitted,
+            "report_published": published
+        })
+    }))
+}
+
 impl TaskControl {
     pub(super) fn report(&self, args: Value) -> Result<Value> {
         let operation = |store: &ScheduleStore| -> Result<Value> {
@@ -200,6 +246,10 @@ pub(super) fn publish(home: &Path, store: &ScheduleStore) -> Result<()> {
                 store.connection.execute(
                     "UPDATE work_reports SET message_id=?2,error=NULL WHERE event_seq=?1",
                     params![seq, message],
+                )?;
+                store.connection.execute(
+                    "UPDATE work_inbox SET state='handled' WHERE event_seq=?1 AND recipient=?2",
+                    params![seq, item.request.requester],
                 )?;
                 return Ok(true);
             }

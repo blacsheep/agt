@@ -366,7 +366,7 @@ fn native_tools_delegate_across_chats_and_report_back_to_origin() {
         .claim(&notice.id, &scheduler.owner, now_ms())
         .unwrap()
         .unwrap();
-    execute(home.path(),notice,&mut Script{step:0,operation:"framework_message_send",args:json!({"conversation":chat,"body":"The delegated fix is verified.","request_key":"report"})},&CancellationToken::new()).unwrap();
+    execute(home.path(),notice,&mut Script{step:0,operation:"framework_task_report",args:json!({"task_id":item.id,"expected_revision":WorkLedger::open(home.path()).unwrap().get(&item.id).unwrap().revision,"body":"The delegated fix is verified."})},&CancellationToken::new()).unwrap();
     scheduler.tick(false).unwrap();
 
     let messages = im(home.path())
@@ -734,3 +734,6 @@ mod expiry;
 
 #[path = "tests/harness/termination.rs"]
 mod termination;
+
+#[path = "tests/scheduler/notification_processing.rs"]
+mod notification_processing;

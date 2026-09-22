@@ -15,6 +15,7 @@ mod dispatch;
 pub(crate) mod execution_policy;
 pub(crate) mod queue;
 mod reporting;
+pub(crate) use reporting::notification_obligation;
 pub(crate) mod triage;
 pub(crate) mod wait;
 pub use control::TaskControl;

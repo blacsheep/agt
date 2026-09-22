@@ -588,9 +588,22 @@ pub(super) fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Resul
     value["publication_error"] = json!(error);
     let notification: Option<String> = store.connection.query_row("SELECT i.state FROM work_inbox i JOIN work_outbox e ON i.event_seq=e.seq WHERE e.work_id=?1 AND i.recipient=?2 AND e.kind IN ('succeeded','failed','canceled','interrupted','outcome_unknown','resolved') ORDER BY e.seq DESC LIMIT 1",params![item.id,item.request.requester],|r|r.get(0)).optional()?;
     value["requester_notification"] = json!(notification);
+    // Distinguish a completed notification Run from its unfulfilled report duty.
+    let report_required: bool = store.connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM tasks WHERE json_extract(record,'$.work_id')=?1
+         AND json_extract(record,'$.principal')=?2
+         AND json_extract(record,'$.work_notification')=1
+         AND state='failed' AND json_extract(record,'$.reason') LIKE 'task_report_required:%')",
+        params![item.id, item.request.requester],
+        |r| r.get(0),
+    )?;
+
     if notification.as_deref() == Some("pending") {
-        value["notification_blocked_reason"] =
-            json!(blocked(home, store, item, &item.request.requester)?);
+        value["notification_blocked_reason"] = json!(
+            blocked(home, store, item, &item.request.requester)?.or_else(|| (report_required
+                && value["report"]["state"] == "awaiting_report")
+                .then_some("task_report_required"))
+        );
     }
     value["publication"] = json!(match publication {
         None => "not_ready",
