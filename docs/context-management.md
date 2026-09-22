@@ -10,7 +10,7 @@
 | --- | --- |
 | agt-model | `capabilities.context_window` 配置、校验、资源读写摘要 |
 | runtime/context.rs | token 估算、输入预算、工具输出裁剪、无工具摘要调用 |
-| runtime/engine.rs | 在完整工具批次结束后压缩、保留固定指令与当前请求、Run 压缩诊断 |
+| runtime/engine/native/request.rs | 在完整工具批次结束后压缩、保留固定指令与当前请求、Run 压缩诊断 |
 | runtime/conversation_context.rs | 为一个 principal / conversation 组装可见历史、更新会话摘要 |
 | runtime/context_store.rs | `runtime/contexts.db` 的摘要持久化 |
 | runtime/scheduler.rs | 摘要调用的调度授权、重置权限、与旧任务发布之间的围栏；schedule_store 在 scheduler.db 保存重置起点 |

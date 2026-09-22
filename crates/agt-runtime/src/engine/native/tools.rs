@@ -1,0 +1,208 @@
+//! All calls follow batch validation -> prepare -> before -> execute -> after.
+//! Framework authorization remains in ToolService; hooks cannot bypass it.
+use super::*;
+use crate::audit::{argument_summary, runtime_error};
+use crate::engine::{Delegation, check_canceled};
+use crate::{CallRecord, CallState};
+
+impl NativeRun<'_, '_> {
+    /// Validate the complete batch before recording or executing any tool effect.
+    pub(super) fn prepare_tool_batch(&mut self, message: &Value) -> Result<Vec<ToolCall>> {
+        let calls = validate_message(message)?;
+        if calls.is_empty()
+            && message["content"]
+                .as_str()
+                .is_none_or(|s| s.trim().is_empty())
+        {
+            return Err(RuntimeError::Model("empty final response"));
+        }
+        if calls.len() > 1
+            && calls.iter().any(|c| {
+                matches!(
+                    c.function.name.as_str(),
+                    "framework_task_await" | "framework_task_yield" | "framework_task_input"
+                )
+            })
+        {
+            return Err(RuntimeError::Tool(
+                "task_await/task_yield/task_input must be the only tool call in its batch",
+            ));
+        }
+        // Validate the entire batch before allowing any side effect.
+        for call in &calls {
+            if !self.seen_calls.insert(call.id.clone()) {
+                return Err(RuntimeError::Model("duplicate tool call ID"));
+            }
+            if call.function.name == "delegate" && !self.record.request.delegates.is_empty() {
+                let args: Delegation = serde_json::from_str(&call.function.arguments)
+                    .map_err(|_| RuntimeError::Tool("invalid delegation arguments"))?;
+                if !self.record.request.delegates.contains(&args.agent)
+                    || args.input.trim().is_empty()
+                    || args.input.len() > 256 * 1024
+                {
+                    return Err(RuntimeError::Tool(
+                        "delegation target or input is not allowed",
+                    ));
+                }
+            } else if !self.tools.targets.contains_key(&call.function.name)
+                && !self.communication_names.contains(&call.function.name)
+            {
+                return Err(RuntimeError::Tool("unknown or unavailable tool"));
+            }
+        }
+        Ok(calls)
+    }
+
+    pub(super) fn execute_tool_batch(&mut self, calls: Vec<ToolCall>) -> Result<ToolFlow> {
+        crate::progress::stage(
+            self.record,
+            &self.runtime.store,
+            self.runtime.scheduled_task.as_ref(),
+            "tool_running",
+        )?;
+        for call in calls {
+            let (arguments, invocation) = self.prepare_tool_call(&call)?;
+            let invocation = self.before_tool_call(invocation)?;
+            let result = self.execute_tool_call(&call, arguments);
+            if let ToolFlow::Suspend = self.after_tool_call(&call, invocation, result)? {
+                return Ok(ToolFlow::Suspend);
+            }
+        }
+        Ok(ToolFlow::Continue)
+    }
+
+    fn prepare_tool_call(&self, call: &ToolCall) -> Result<(Value, CallRecord)> {
+        let arguments: Value = serde_json::from_str(&call.function.arguments)?;
+        let schema = self.communication.as_ref().and_then(|service| {
+            service.schemas().into_iter().find(|s| {
+                format!("framework_{}", s["name"].as_str().expect("tool name"))
+                    == call.function.name
+            })
+        });
+        let fields = schema
+            .as_ref()
+            .and_then(|s| s["inputSchema"]["properties"].as_object())
+            .map(|p| p.keys().map(String::as_str).collect::<Vec<_>>())
+            .unwrap_or_default();
+        let invocation = CallRecord::new(
+            self.record,
+            Some(&call.function.name),
+            argument_summary(&arguments, &fields),
+        )
+        .with_public_context(&arguments);
+        Ok((arguments, invocation))
+    }
+
+    fn before_tool_call(&self, invocation: CallRecord) -> Result<CallRecord> {
+        check_canceled(self.cancellation)?;
+        self.runtime.check_schedule()?;
+        self.runtime.store.start_call(invocation)
+    }
+
+    fn execute_tool_call(
+        &mut self,
+        call: &ToolCall,
+        arguments: Value,
+    ) -> Result<(String, Option<Value>)> {
+        if call.function.name == "delegate" {
+            let args: Delegation = serde_json::from_str(&call.function.arguments)?;
+            Ok((
+                self.runtime.delegate(
+                    self.record,
+                    args,
+                    &call.id,
+                    self.agents,
+                    self.step_count,
+                    self.cancellation,
+                )?,
+                None,
+            ))
+        } else if self.communication_names.contains(&call.function.name) {
+            self.execute_framework_call(call, arguments)
+        } else {
+            let output = self
+                .tools
+                .call(&call.function.name, arguments, self.cancellation)?;
+            let error = (serde_json::from_str::<Value>(&output)?["is_error"] == true)
+            .then(|| json!({"code":"mcp_tool_error","message":"External MCP tool reported an error; inspect its result before retrying."}));
+            Ok((output, error))
+        }
+    }
+
+    fn after_tool_call(
+        &mut self,
+        call: &ToolCall,
+        mut invocation: CallRecord,
+        result: Result<(String, Option<Value>)>,
+    ) -> Result<ToolFlow> {
+        if let Ok((output, None)) = &result
+            && let Ok(value) = serde_json::from_str(output)
+        {
+            invocation.summarize_result(&value);
+        }
+        match &result {
+            Ok((_, None)) => invocation.finish(CallState::Succeeded, None),
+            Ok((_, Some(error))) => invocation.finish(CallState::Failed, Some(error.clone())),
+            Err(error) => invocation.finish(
+                if matches!(error, RuntimeError::Canceled | RuntimeError::Stopped(_)) {
+                    CallState::Canceled
+                } else {
+                    CallState::Failed
+                },
+                Some(runtime_error(error)),
+            ),
+        }
+        self.runtime.store.finish_call(&invocation)?;
+        if invocation.state != CallState::Succeeded {
+            self.record.tool_failures += 1;
+            self.runtime.store.save(self.record)?;
+        }
+        let (output, _) = result?;
+        let output = crate::context::truncate_output(
+            &output,
+            (crate::context::input_budget(self.agent) / 16).max(128),
+        );
+        self.messages
+            .push(json!({"role":"tool", "tool_call_id":call.id, "content":output}));
+        Ok(
+            if matches!(
+                call.function.name.as_str(),
+                "framework_task_await" | "framework_task_yield" | "framework_task_input"
+            ) && invocation.state == CallState::Succeeded
+            {
+                ToolFlow::Suspend
+            } else {
+                ToolFlow::Continue
+            },
+        )
+    }
+}
+
+fn validate_message(message: &Value) -> Result<Vec<ToolCall>> {
+    if message["role"] != "assistant"
+        || (!message["content"].is_null() && !message["content"].is_string())
+    {
+        return Err(RuntimeError::Model("expected a text assistant message"));
+    }
+    let calls: Vec<ToolCall> = if message["tool_calls"].is_null() {
+        Vec::new()
+    } else {
+        serde_json::from_value(message["tool_calls"].clone())
+            .map_err(|_| RuntimeError::Model("invalid tool calls"))?
+    };
+    if calls.len() > 32 {
+        return Err(RuntimeError::Model("too many tool calls in one response"));
+    }
+    for call in &calls {
+        if call.kind != "function" || call.id.trim().is_empty() || call.id.len() > 256 {
+            return Err(RuntimeError::Model("invalid function call identity"));
+        }
+        if !serde_json::from_str::<Value>(&call.function.arguments)
+            .map_err(|_| RuntimeError::Model("tool arguments must be JSON"))?
+            .is_object()
+        {
+            return Err(RuntimeError::Model("tool arguments must be an object"));
+        }
+    }
+    Ok(calls)
+}
