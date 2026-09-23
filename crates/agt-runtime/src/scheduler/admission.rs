@@ -1,4 +1,5 @@
 //! Check a claimed task before context preparation or model execution.
+use crate::schedule_state::ClaimDeferral;
 use crate::{ScheduleStore, ScheduledTask, schedule_store::now_ms};
 use agt_core::CancellationToken;
 use agt_im::{MessageId, MessageListOptions, PrincipalId, PrincipalKind};
@@ -24,8 +25,7 @@ pub(super) fn prepare(
 ) -> Result<Option<Admission>> {
     let Some(binding) = BindingStore::open(home)?.get(&PrincipalId::new(&task.principal))? else {
         if task.work_id.is_some() {
-            task.state = "queued".into();
-            task.reason = Some("task blocked by disabled binding".into());
+            task.defer_claim(ClaimDeferral::DisabledBinding);
             store.update(task, now_ms())?;
             return Ok(None);
         }
@@ -70,14 +70,12 @@ pub(super) fn prepare(
     batch.sort_by_key(|m| m["seq"].as_i64().unwrap_or(0));
     batch.dedup_by(|a, b| a["message_id"] == b["message_id"]);
     if !eligible && task.work_id.is_some() {
-        task.state = "queued".into();
-        task.reason = Some("task blocked by response policy".into());
+        task.defer_claim(ClaimDeferral::ResponsePolicy);
         store.update(task, now_ms())?;
         return Ok(None);
     }
     if !eligible {
-        task.state = "skipped".into();
-        task.reason = Some("response policy or message state".into());
+        task.skip_ineligible_message();
         store.update(task, now_ms())?;
         return Ok(None);
     }
@@ -85,7 +83,7 @@ pub(super) fn prepare(
         .discussion(&task.discussion)?
         .ok_or_else(|| anyhow::anyhow!("round missing"))?;
     if round.state != "active" || token.is_canceled() {
-        task.state = "queued".into();
+        task.defer_claim(ClaimDeferral::InactiveDiscussion);
         store.update(task, now_ms())?;
         return Ok(None);
     }
@@ -94,9 +92,7 @@ pub(super) fn prepare(
         && task.decision_required
         && task.through_seq != conversation.last_message_seq
     {
-        task.state = "queued".into();
-        task.due_at = now_ms();
-        task.reason = None;
+        task.defer_claim(ClaimDeferral::StaleDecision);
         store.update(task, now_ms())?;
         return Ok(None);
     }
@@ -112,8 +108,9 @@ pub(super) fn prepare(
     if let Some(latest) = page.messages.last()
         && !quiet_ready(task, latest.created_at, now_ms())
     {
-        task.state = "queued".into();
-        task.due_at = task.deadline.min(latest.created_at + task.quiet_ms);
+        task.defer_claim(ClaimDeferral::ConversationQuiet {
+            last_message_at: latest.created_at,
+        });
         store.update(task, now_ms())?;
         return Ok(None);
     }
@@ -121,12 +118,7 @@ pub(super) fn prepare(
         task.through_seq = conversation.last_message_seq;
     }
     if external && task.state == "evaluating" {
-        task.state = "ready_to_reply".into();
-        task.reason = Some(
-            "framework: external engine runs only for direct messages or explicit mentions".into(),
-        );
-        task.due_at = now_ms();
-        task.decision_required = false;
+        task.ready_external_reply();
         store.update(task, now_ms())?;
         return Ok(None);
     }

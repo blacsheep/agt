@@ -21,6 +21,7 @@ mod model_stream;
 mod participation;
 mod progress;
 mod resolve;
+mod schedule_state;
 mod schedule_store;
 mod scheduler;
 mod store;

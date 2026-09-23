@@ -1,5 +1,6 @@
 //! Orchestrate one claimed task: admission, context, decision or Run, settlement.
 use super::{admission, completion, decision, guard::ScheduledModel};
+use crate::schedule_state::ClaimDeferral;
 use crate::{
     MessageTrigger, ModelClient, ResolvedAgent, RunRequest, Runtime, RuntimeError, ScheduleStore,
     ScheduledTask, schedule_store::now_ms,
@@ -34,9 +35,7 @@ pub(crate) fn execute(
     if let Some(agent) = &agent
         && crate::work::triage::run(home, &task, agent, &mut scheduled_model)?
     {
-        task.state = "queued".into();
-        task.reason = Some("queue triage committed; awaiting priority admission".into());
-        task.due_at = now_ms();
+        task.defer_claim(ClaimDeferral::QueueTriage);
         store.update(&task, now_ms())?;
         return Ok(());
     }
@@ -72,8 +71,7 @@ pub(crate) fn execute(
         .as_ref()
         .is_some_and(|agent| !(agent.mcps.is_empty() || binding.allow_mcp && round.allow_mcp))
     {
-        task.state = "blocked".into();
-        task.reason = Some("MCP execution needs binding and discussion authorization".into());
+        task.block_for_mcp();
         store.update(&task, now_ms())?;
         return Ok(());
     }

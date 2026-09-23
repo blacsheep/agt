@@ -32,6 +32,30 @@ short fence transactions. Publication still checks the claim before sending.
 `ScheduleStore` retains persistence, atomic claims and counter transitions;
 this split does not introduce new task states, schema changes or engine protocols.
 
+## Task transitions
+
+`schedule_state.rs` owns the coupled record changes for claim/deferral, human wake,
+lease recovery, participation, accepted inputs and Run settlement. Its operations
+mutate only a `ScheduledTask`; authorization, usage charges/refunds, acceptance
+receipts and database writes stay in their existing transactions. Task state strings
+and serialized records are unchanged. Local one-field outcomes and error formatting
+remain at the caller; there is no generic `set_state` API or new transition engine.
+
+| Operation | Preserved contract |
+| --- | --- |
+| Claim | Set evaluating/responding, owner, version and usage epoch together |
+| Defer a claim | Preserve owner/version until the store validates and refunds the old claim |
+| Human wake | Clear quiet/reason/owner, increment version, retain the decision audit |
+| Resume blocked work | Preserve claim and wait fields; only reset state/due/reason |
+| Invalidate ready snapshot | Clear owner/reason and increment version; preserve quiet settings |
+| Recover expired lease | Retry only evaluating; responding becomes interrupted |
+| Scheduled participation | Persist decision; participate becomes ready, never runs inline |
+| Input participation wait | Retain decision audit, release input owner; remove receipt in caller transaction |
+| Accept running input | Record owner, version, Run and mode before execution |
+| Complete an input turn | Release input owner, retain its Run and diagnostic reason |
+| Settle parent | Only outstanding accepted inputs inherit its outcome; completed inputs remain final |
+| Finish reply | Preserve report obligations and silence semantics separately from explicit work |
+
 ## Messages and running input queues
 
 Human messages require explicit automatic-reply authorization. The first creates

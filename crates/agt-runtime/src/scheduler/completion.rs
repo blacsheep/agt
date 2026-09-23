@@ -19,16 +19,7 @@ pub(super) fn settle(
     let (principal, conversation) = scope;
     task.run_id = Some(record.id.clone());
     if task.work_id.is_some() && !task.work_notification {
-        task.state = match record.state {
-            RunState::Completed => "completed",
-            RunState::Suspended => "suspended",
-            RunState::Running | RunState::Interrupted => "interrupted",
-            RunState::Canceled => "canceled",
-            RunState::Failed => "failed",
-            RunState::OutcomeUnknown => "outcome_unknown",
-        }
-        .into();
-        task.reason = record.error.clone();
+        task.finish_work_run(&record);
         store.update(task, now_ms())?;
         return Ok(());
     }
@@ -78,39 +69,15 @@ pub(super) fn settle(
             })
             .is_err()
             {
-                task.state = "interrupted".into();
-                task.reason = Some(
-                    "reply publication stopped or unavailable; inspect run before retrying".into(),
-                );
+                task.interrupt_publication();
                 store.update(task, now_ms())?;
                 return Ok(());
             }
         }
         let obligation = crate::work::notification_obligation(home, store, task)?;
-        task.state = if obligation.as_ref().is_some_and(|o| o["report_required"] == true) {
-            task.reason = Some("task_report_required: execution completed but the result report was not committed; inspect task_get and submit task_report".into());
-            "failed"
-        } else if output.trim() == "[[silent]]" {
-            if task.work_notification && obligation.is_none() {
-                task.reason = Some("task notification was not handled; review task inbox".into());
-                "failed"
-            } else if task.work_notification {
-                "completed"
-            } else {
-                "silent"
-            }
-        } else {
-            "completed"
-        }.into();
+        task.finish_published_reply(output, obligation.as_ref());
     } else {
-        task.state = match record.state {
-            RunState::Running | RunState::Interrupted => "interrupted",
-            RunState::Canceled => "canceled",
-            RunState::OutcomeUnknown => "outcome_unknown",
-            _ => "failed",
-        }
-        .into();
-        task.reason = record.error;
+        task.finish_unsuccessful_reply(&record);
     }
     store.update(task, now_ms())?;
     Ok(())

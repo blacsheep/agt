@@ -1,8 +1,8 @@
 //! Durable per-conversation input queue. Pending messages remain scheduler tasks;
 //! accepting one records its Run before any model/tool effect, without rewriting
 //! the active task's original snapshot. Ambiguous executions are never requeued.
-use crate::participation::{ParticipationDecision, WakeCondition};
-use crate::schedule_store::{RecordedDecision, now_ms, save_task};
+use crate::participation::ParticipationDecision;
+use crate::schedule_store::{now_ms, save_task};
 use crate::{Result, RuntimeError, ScheduleStore, ScheduledTask};
 use agt_im::{MessageId, PrincipalId, PrincipalKind};
 use agt_service::{Actor, BindingStore, InputMode, MessageInput, Messaging, ResponsePolicy, Role};
@@ -30,9 +30,7 @@ fn charge(store: &ScheduleStore, task: &mut ScheduledTask) -> Result<bool> {
         || round.expires_at <= now_ms()
         || (task.decision_required && other_responder(store, task)?)
     {
-        task.state = "queued".into();
-        task.owner = None;
-        task.due_at = now_ms();
+        task.defer_input();
         return Ok(false);
     }
     let replies: u32 = store.connection.query_row(
@@ -167,8 +165,7 @@ pub(crate) fn take(
                         .as_deref()
                         != Some(&parent.discussion))
             {
-                input.state = "skipped".into();
-                input.reason = Some("response policy or message state".into());
+                input.skip_ineligible_message();
                 save_task(&store.connection, &input).map_err(unavailable)?;
                 continue;
             }
@@ -201,14 +198,7 @@ pub(crate) fn take(
             if !input.decision_required && !charge(store, &mut input)? {
                 continue;
             }
-            input.state = "input".into();
-            input.owner = parent.owner.clone();
-            input.version += 1;
-            input.run_id = Some(run.into());
-            input.reason = Some(format!(
-                "{} accepted by active run",
-                serde_json::to_value(mode)?
-            ));
+            input.accept_run_input(parent, run, mode)?;
             store.connection.execute("INSERT INTO run_inputs(input_task,parent_task,run_id,mode,accepted_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(input_task) DO UPDATE SET parent_task=excluded.parent_task,run_id=excluded.run_id,mode=excluded.mode,accepted_at=excluded.accepted_at",params![input.id,parent.id,run,serde_json::to_value(mode)?.as_str(),now_ms()])?;
             save_task(&store.connection, &input).map_err(unavailable)?;
             return Ok(Some(RunInput {
@@ -234,14 +224,7 @@ pub(crate) fn decide(
         if task.state != "input" || task.version != input.task.version {
             return Err(RuntimeError::Canceled);
         }
-        task.last_decision = Some(RecordedDecision {
-            decision: decision.clone(),
-            decided_at: now_ms(),
-            through_seq: task.through_seq,
-        });
-        task.reason = serde_json::to_value(decision)?["reason_code"]
-            .as_str()
-            .map(str::to_owned);
+        task.record_decision(decision)?;
         let accepted = match decision {
             ParticipationDecision::Participate { .. } => charge(store, &mut task)?,
             ParticipationDecision::Silent { .. } => {
@@ -249,24 +232,7 @@ pub(crate) fn decide(
                 false
             }
             ParticipationDecision::Wait { wake, .. } => {
-                task.state = "waiting".into();
-                task.owner = None;
-                match wake {
-                    WakeCondition::After { seconds } => {
-                        task.quiet = false;
-                        task.due_at = now_ms() + i64::from(*seconds) * 1000;
-                        task.deadline = task.due_at;
-                    }
-                    WakeCondition::ConversationQuiet {
-                        quiet_seconds,
-                        max_wait_seconds,
-                    } => {
-                        task.quiet = true;
-                        task.quiet_ms = i64::from(*quiet_seconds) * 1000;
-                        task.due_at = now_ms() + task.quiet_ms;
-                        task.deadline = now_ms() + i64::from(*max_wait_seconds) * 1000;
-                    }
-                }
+                task.wait_from_input(wake);
                 false
             }
         };
@@ -282,16 +248,7 @@ pub(crate) fn decide(
 
 /// Called within the owner's terminal state transaction, including lease takeover.
 pub(crate) fn settle(db: &Connection, parent: &ScheduledTask) -> anyhow::Result<()> {
-    if !matches!(
-        parent.state.as_str(),
-        "completed"
-            | "silent"
-            | "skipped"
-            | "failed"
-            | "canceled"
-            | "interrupted"
-            | "outcome_unknown"
-    ) {
+    if !parent.is_terminal() {
         return Ok(());
     }
     let mut stmt = db.prepare("SELECT t.record FROM tasks t JOIN run_inputs i ON i.input_task=t.id WHERE i.parent_task=?1 AND t.state='input'")?;
@@ -300,10 +257,7 @@ pub(crate) fn settle(db: &Connection, parent: &ScheduledTask) -> anyhow::Result<
         .collect::<std::result::Result<Vec<_>, _>>()?;
     for raw in inputs {
         let mut input: ScheduledTask = serde_json::from_str(&raw)?;
-        input.state = parent.state.clone();
-        input.reason = parent.reason.clone();
-        // Keep the accepted Run id even when takeover has no Run attached to parent.
-        input.owner = None;
+        input.settle_with_parent(parent);
         save_task(db, &input)?;
     }
     Ok(())
@@ -349,13 +303,7 @@ pub(crate) fn complete_turn(
             .collect::<std::result::Result<Vec<_>, _>>()?;
         for raw in inputs {
             let mut input: ScheduledTask = serde_json::from_str(&raw)?;
-            input.state = if body.is_some() {
-                "completed"
-            } else {
-                "silent"
-            }
-            .into();
-            input.owner = None;
+            input.complete_input_turn(body.is_some());
             save_task(&store.connection, &input).map_err(unavailable)?;
         }
         Ok(())

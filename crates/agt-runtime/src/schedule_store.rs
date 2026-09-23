@@ -224,12 +224,7 @@ impl ScheduleStore {
                 "SELECT record FROM tasks WHERE state IN ('waiting','ready_to_reply','limited','blocked')",
             )? {
                 if task.discussion == discussion {
-                    task.state = "queued".into();
-                    task.due_at = now;
-                    task.quiet = false;
-                    task.reason = None;
-                    task.owner = None;
-                    task.version += 1;
+                    task.wake_for_human(now);
                     save_task(&tx, &task)?;
                 }
             }
@@ -282,9 +277,7 @@ impl ScheduleStore {
                         |r| r.get(0),
                     )?;
                     if root == conversation {
-                        task.state = "queued".into();
-                        task.due_at = now;
-                        task.reason = None;
+                        task.resume_pending(now);
                         save_task(&tx, &task)?;
                     }
                 }
@@ -328,15 +321,7 @@ impl ScheduleStore {
                 "SELECT record FROM tasks WHERE state IN ('evaluating','responding')",
             )?;
             for mut task in records {
-                task.state = if task.state == "evaluating" {
-                    "queued"
-                } else {
-                    "interrupted"
-                }
-                .into();
-                task.reason = Some("coordinator lease expired".into());
-                task.owner = None;
-                task.version += 1;
+                task.recover_expired_lease();
                 save_task(&tx, &task)?;
             }
         }
@@ -516,13 +501,10 @@ impl ScheduleStore {
             agt_storage::wake::notify(&self.home);
             return Ok(None);
         }
-        task.state = if replying { "responding" } else { "evaluating" }.into();
-        task.usage_epoch = round.2;
         if task.work_id.is_some() {
             tx.execute("INSERT INTO work_fairness VALUES(?1,?2) ON CONFLICT(principal) DO UPDATE SET notices=CASE WHEN ?2=0 THEN 0 ELSE MIN(4,notices+1) END",params![task.principal,if task.work_notification {1}else{0}])?;
         }
-        task.owner = Some(owner.into());
-        task.version += 1;
+        task.claim_execution(replying, round.2, owner);
         if replying {
             tx.execute(
                 "UPDATE usage SET replies=replies+1 WHERE discussion=?1 AND principal=?2",
@@ -567,11 +549,7 @@ impl ScheduleStore {
             tx.query_row("SELECT record FROM tasks WHERE id=?1", [id], |r| r.get(0))?;
         let mut task: ScheduledTask = serde_json::from_str(&record)?;
         if task.state == "ready_to_reply" && task.through_seq != seq {
-            task.state = "queued".into();
-            task.due_at = now;
-            task.owner = None;
-            task.reason = None;
-            task.version += 1;
+            task.invalidate_ready_snapshot(now);
             save_task(&tx, &task)?;
         }
         tx.commit()?;
@@ -602,13 +580,7 @@ impl ScheduleStore {
     }
     pub(crate) fn cancel_pending(&self, id: &str) -> Result<()> {
         let mut task = self.get(id)?;
-        if matches!(
-            task.state.as_str(),
-            "queued" | "waiting" | "ready_to_reply" | "limited" | "blocked"
-        ) {
-            task.state = "canceled".into();
-            task.reason =
-                Some("discussion ended, member removed or conversation unavailable".into());
+        if task.cancel_pending() {
             save_task(&self.connection, &task)?;
         }
         Ok(())
@@ -760,6 +732,41 @@ mod tests {
         store.ingest(task(1, "agent", "target", false)).unwrap();
         store.control("target", "end", false, 1).unwrap();
         assert_eq!(store.discussion("round").unwrap().unwrap().state, "ended");
+    }
+
+    #[test]
+    fn human_wake_preserves_decision_audit_and_fences_the_old_claim_after_restart() {
+        let (home, mut store) = fixture();
+        store.ingest(task(1, "a", "chat", true)).unwrap();
+        let mut waiting = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
+        let decision = serde_json::from_value(serde_json::json!({
+            "action":"wait", "reason_code":"observe_discussion",
+            "public_reason":"waiting for additional information",
+            "wake":{"type":"conversation_quiet","quiet_seconds":3,"max_wait_seconds":20}
+        }))
+        .unwrap();
+        waiting.finish_scheduled_decision(&decision).unwrap();
+        let audit = serde_json::to_value(&waiting.last_decision).unwrap();
+        assert!(store.update(&waiting, 1).unwrap());
+        assert_eq!(store.status(1).unwrap().usage[0].replies, 0);
+        store
+            .authorize_human("new-human", "chat", 2, false, 2)
+            .unwrap();
+        drop(store);
+        let mut store = ScheduleStore::open(home.path()).unwrap();
+        let queued = store.get("1").unwrap();
+        assert_eq!(queued.state, "queued");
+        assert_eq!(queued.due_at, 2);
+        assert!(!queued.quiet);
+        assert!(queued.owner.is_none());
+        assert!(queued.reason.is_none());
+        assert_eq!(queued.version, waiting.version + 1);
+        assert_eq!(serde_json::to_value(&queued.last_decision).unwrap(), audit);
+        assert!(!store.update(&waiting, 3).unwrap());
+        let next = store.claim("1", "scheduler:one", 3).unwrap().unwrap();
+        assert_eq!(next.state, "evaluating");
+        assert_eq!(next.usage_epoch, 2);
+        assert_eq!(store.status(3).unwrap().usage[0].replies, 0);
     }
 
     #[test]
