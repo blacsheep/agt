@@ -135,7 +135,7 @@ fn external_agent_crud_execution_permissions_and_dependency_protection() {
 }
 
 #[test]
-fn terminating_cli_cancels_and_reaps_external_process() {
+fn terminating_cli_reaps_unresponsive_process_without_claiming_confirmed_cancel() {
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path();
     ok(home, &["init", home.to_str().unwrap()]);
@@ -198,5 +198,5 @@ fn terminating_cli_cancels_and_reaps_external_process() {
         .parse::<i32>()
         .unwrap();
     assert_eq!(unsafe { libc::kill(pid, 0) }, -1);
-    assert_eq!(ok(home, &["run", "list"])[0]["state"], "canceled");
+    assert_eq!(ok(home, &["run", "list"])[0]["state"], "outcome_unknown");
 }

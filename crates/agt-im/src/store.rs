@@ -1770,6 +1770,43 @@ fn to_sql_error(error: ImError) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
 }
 
+// Send only after the transaction and connection guard have been released.
+// Rollbacks can cause harmless extra hints; consumers always re-read durable state.
+pub(crate) struct StoreGuard<'a> {
+    guard: Option<MutexGuard<'a, Connection>>,
+    changes: u64,
+    path: Option<&'a Path>,
+}
+impl std::ops::Deref for StoreGuard<'_> {
+    type Target = Connection;
+    fn deref(&self) -> &Connection {
+        self.guard.as_ref().unwrap()
+    }
+}
+impl std::ops::DerefMut for StoreGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Connection {
+        self.guard.as_mut().unwrap()
+    }
+}
+impl Drop for StoreGuard<'_> {
+    fn drop(&mut self) {
+        let changed = self
+            .guard
+            .as_ref()
+            .is_some_and(|c| c.is_autocommit() && c.total_changes() != self.changes);
+        drop(self.guard.take());
+        if changed
+            && let Some(path) = self.path
+            && path.file_name().is_some_and(|n| n == "im.db")
+            && let Some(dir) = path.parent()
+            && dir.file_name().is_some_and(|n| n == "im")
+            && let Some(home) = dir.parent()
+        {
+            agt_storage::wake::notify(home);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[cfg(unix)]
@@ -2153,42 +2190,5 @@ mod tests {
             .expect("history");
         assert_eq!(page.messages.len(), 1);
         assert_eq!(page.messages[0].body, "old");
-    }
-}
-
-// Send only after the transaction and connection guard have been released.
-// Rollbacks can cause harmless extra hints; consumers always re-read durable state.
-pub(crate) struct StoreGuard<'a> {
-    guard: Option<MutexGuard<'a, Connection>>,
-    changes: u64,
-    path: Option<&'a Path>,
-}
-impl std::ops::Deref for StoreGuard<'_> {
-    type Target = Connection;
-    fn deref(&self) -> &Connection {
-        self.guard.as_ref().unwrap()
-    }
-}
-impl std::ops::DerefMut for StoreGuard<'_> {
-    fn deref_mut(&mut self) -> &mut Connection {
-        self.guard.as_mut().unwrap()
-    }
-}
-impl Drop for StoreGuard<'_> {
-    fn drop(&mut self) {
-        let changed = self
-            .guard
-            .as_ref()
-            .is_some_and(|c| c.is_autocommit() && c.total_changes() != self.changes);
-        drop(self.guard.take());
-        if changed
-            && let Some(path) = self.path
-            && path.file_name().is_some_and(|n| n == "im.db")
-            && let Some(dir) = path.parent()
-            && dir.file_name().is_some_and(|n| n == "im")
-            && let Some(home) = dir.parent()
-        {
-            agt_storage::wake::notify(home);
-        }
     }
 }

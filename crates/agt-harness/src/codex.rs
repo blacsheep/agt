@@ -45,6 +45,7 @@ pub struct Codex {
     child: Child,
     input: ChildStdin,
     messages: Receiver<Result<Value>>,
+    pending: Option<Value>,
     next_id: u64,
     deadline: Instant,
     stderr: StderrTail,
@@ -127,6 +128,7 @@ impl Codex {
             child,
             input,
             messages,
+            pending: None,
             next_id: 0,
             stderr: stderr_tail,
             deadline: Instant::now() + Duration::from_secs(15),
@@ -148,10 +150,19 @@ impl Codex {
             if Instant::now() >= self.deadline {
                 return Err(Failure::new(FailureCode::Timeout, "Codex execution timed out").into());
             }
-            match self.messages.recv_timeout(Duration::from_millis(50)) {
+            let received = if let Some(value) = self.pending.take() {
+                Ok(Ok(value))
+            } else {
+                self.messages.recv_timeout(Duration::from_millis(50))
+            };
+            match received {
                 Ok(value) => {
-                    if value.is_ok() {
-                        event(Event::Protocol)?;
+                    if let Ok(frame) = &value
+                        && let Err(error) = event(Event::Protocol)
+                    {
+                        // Cancellation must not discard an already received start/terminal frame.
+                        self.pending = Some(frame.clone());
+                        return Err(error);
                     }
                     return value;
                 }
@@ -571,6 +582,27 @@ impl Codex {
         })();
         if let Err(error) = &result {
             event(Event::Stopping(error))?;
+        }
+        if result.is_err() && !terminal && turn.is_none() {
+            // Submission may have reached the engine before cancellation was observed.
+            // Read only protocol facts here: never dispatch tools after the stop request.
+            self.deadline = Instant::now() + Duration::from_secs(2);
+            while let Ok(value) = self.receive(&mut |_| Ok(())) {
+                if value["id"] == start_id && value.get("method").is_none() {
+                    if value.get("error").is_some() {
+                        terminal = true;
+                        event(Event::Settled("rejected"))?;
+                        break;
+                    }
+                    turn = value["result"]["turn"]["id"].as_str().map(str::to_owned);
+                } else if value["method"] == "turn/started" && value["params"]["threadId"] == thread
+                {
+                    turn = value["params"]["turn"]["id"].as_str().map(str::to_owned);
+                }
+                if turn.is_some() {
+                    break;
+                }
+            }
         }
         if result.is_err()
             && !terminal
