@@ -160,7 +160,7 @@ window.createInteractionGraph = (onSelect) => {
         if(!n || seen.has(n.id))continue;seen.add(n.id);
         n.running=online && activeStates.has(t.state);
         n.tone=online ? ({waiting:'waiting',queued:'waiting',failed:'failed'})[t.state] || '' : '';
-        n.status=!online?'状态待确认':({running:'执行中',responding:'回复中',evaluating:'判断中',waiting:'等待中',queued:'排队中',ready_to_reply:'等待回复',blocked:'受阻',limited:'已达限制',failed:'执行失败',canceled:'已取消',completed:'已完成',silent:'暂不发言'})[t.state]||t.state;
+        n.status=!online?'状态待确认':({running:'执行中',input:'已接入当前执行',responding:'回复中',evaluating:'判断中',waiting:'等待中',queued:'排队中',ready_to_reply:'等待回复',blocked:'受阻',limited:'已达限制',failed:'执行失败',canceled:'已取消',completed:'已完成',silent:'暂不发言'})[t.state]||t.state;
         n.reason=t.last_decision?.public_reason ? '公开理由：'+t.last_decision.public_reason : '';
       }
       const initial=positions.size===0;

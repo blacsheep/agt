@@ -633,6 +633,7 @@ fn deep_messages_follow_policy_without_a_depth_limit() {
     .unwrap();
     let sent = sender
         .send(agt_service::MessageInput {
+            input_mode: None,
             conversation: agt_im::ConversationId::new(group["id"].as_str().unwrap()),
             body: "keep going".into(),
             request_key: "deep".into(),
@@ -1048,3 +1049,30 @@ fn deleted_agent_identity_keeps_history_but_cannot_join_new_conversations() {
 
 #[path = "memory/recall.rs"]
 mod memory_tests;
+
+#[test]
+fn message_input_mode_is_validated_persisted_and_part_of_idempotency() {
+    let home = home();
+    let owner = service(home.path(), "owner", true);
+    let chat = owner
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap();
+    for mode in ["steering", "follow_up"] {
+        let args =
+            json!({"conversation":chat["id"],"body":"input","request_key":mode,"input_mode":mode});
+        let sent = owner.call("message_send", args.clone()).unwrap();
+        assert_eq!(sent["message"]["metadata"]["input_mode"], mode);
+        assert_eq!(
+            owner.call("message_send", args.clone()).unwrap()["duplicate"],
+            true
+        );
+        let mut changed = args;
+        changed["input_mode"] = json!(if mode == "steering" {
+            "follow_up"
+        } else {
+            "steering"
+        });
+        assert!(owner.call("message_send", changed).is_err());
+    }
+    assert!(owner.call("message_send",json!({"conversation":chat["id"],"body":"invalid","request_key":"bad","input_mode":"interrupt"})).is_err());
+}

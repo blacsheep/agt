@@ -411,7 +411,7 @@ function agentStates(tasks) {
   const rank = t => {
     const round = state.scheduler.discussions.find(d => d.id === t.discussion);
     if (round?.state === 'ended') return 2;
-    return ['evaluating', 'responding'].includes(t.state) ? 0 : ['waiting', 'queued', 'ready_to_reply'].includes(t.state) ? 1 : 2;
+    return ['evaluating', 'responding', 'input'].includes(t.state) ? 0 : ['waiting', 'queued', 'ready_to_reply'].includes(t.state) ? 1 : 2;
   };
   const latest = new Map();
   for (const task of tasks) {
@@ -425,21 +425,22 @@ const decisionReasons = { relevant_expertise: '有相关信息可以补充', cor
 const decisionActions = { participate: '参与发言', silent: '本次不发言', wait: '等待观察' };
 function participationView(t) {
   const round = state.scheduler.discussions.find(d => d.id === t.discussion);
-  const active = ['queued', 'evaluating', 'ready_to_reply', 'responding', 'waiting', 'blocked', 'limited'].includes(t.state);
+  const active = ['queued', 'evaluating', 'ready_to_reply', 'responding', 'input', 'waiting', 'blocked', 'limited'].includes(t.state);
   if (!state.scheduler.online && active) return { label: '状态待确认', tone: 'attention', source: '服务连接', detail: '回复服务未连接，以下为最近保存的状态。' };
   if (active && ['paused', 'ended', 'limited'].includes(round?.state)) {
-    const running = ['evaluating', 'responding'].includes(t.state);
+    const running = ['evaluating', 'responding', 'input'].includes(t.state);
     if (round.state === 'ended') return {label:'正在停止',tone:'attention',source:'会话控制',detail:'停止已请求，等待执行器确认。'};
     const expired = round.expires_at <= Date.now();
     if (running) return {label:'继续执行中',tone:'active',source:'框架调度',detail:round.state === 'paused' ? '当前执行可完成；后续任务等待恢复调度。' : '当前执行可完成；后续任务等待授权续期。'};
     return {label:round.state === 'paused' ? '已暂停' : expired ? '等待授权续期' : '本轮已达上限',tone:'muted',source:'会话控制',detail:round.state === 'paused' ? '恢复回复后继续调度。' : expired ? '讨论授权已到期，任务仍保留在队列。' : '本轮回复额度已用完。'};
   }
   const views = {
-    queued: ['等待调度', 'muted', '框架调度', '等待消息安静期及可用处理机会。'],
+    queued: ['等待调度', 'muted', '框架调度', '输入已排队，等待可用处理机会。'],
     evaluating: [t.last_decision ? '重新判断中' : '参与判断中', 'active', '模型判断', '正在判断是否需要参与本次讨论。'],
-    ready_to_reply: ['等待发言机会', 'active', '框架调度', '参与判断已完成，等待安静期和回复机会。'],
+    ready_to_reply: ['等待发言机会', 'active', '框架调度', '参与判断已完成，等待回复机会。'],
+    input: ['已接入当前执行', 'active', '输入队列', '此消息已由当前执行接纳，等待处理结果。'],
     responding: ['正在回复', 'active', '执行中', '正在生成回复或执行工具。'],
-    waiting: ['观察中', 'waiting', t.last_decision ? '模型自主' : '等待安排', t.quiet ? '讨论安静后重新判断；有新消息时可能顺延。' : `预计 ${dateTime(t.due_at)} 后重新判断，仍需满足消息安静期。`],
+    waiting: ['观察中', 'waiting', t.last_decision ? '模型自主' : '等待安排', t.quiet ? '讨论安静后重新判断；有新消息时可能顺延。' : `预计 ${dateTime(t.due_at)} 后重新判断。`],
     silent: [t.last_decision?.action === 'silent' ? '本次不发言' : '无追加回复', 'muted', t.last_decision?.action === 'silent' ? '模型自主' : '处理结果', t.last_decision?.action === 'silent' ? '模型判断本次无需参与。' : '本次处理没有追加公开回复；可能已通过工具发送消息。'],
     skipped: ['无需处理', 'muted', '框架规则', '响应策略或消息状态不要求回复。'],
     completed: ['已完成回复', 'done', '处理结果', '本次处理已结束，可在聊天中查看回复。'],
@@ -462,7 +463,7 @@ function presenceMarkup(t) {
   const stale = decision && (['queued', 'evaluating'].includes(t.state) || decision.through_seq < t.through_seq || (state.conversation?.id === t.conversation && decision.through_seq < state.conversation.last_message_seq));
   const wake = decision?.wake;
   const wakeText = wake?.type === 'after' ? `${wake.seconds} 秒后重新判断` : wake?.type === 'conversation_quiet' ? `讨论安静 ${wake.quiet_seconds} 秒后重新判断，最长观察 ${wake.max_wait_seconds} 秒` : '';
-  const body = `<div class="presence-section"><span class="presence-label">当前状态 · ${esc(view.source)}</span><p>${esc(view.detail)}</p></div><div class="presence-section"><span class="presence-label">最近模型决定</span>${decision ? `<div class="decision-heading"><strong>${esc(decisionActions[decision.action] || '已判断')}</strong><time>${esc(dateTime(decision.decided_at))}</time></div><p class="decision-category">${esc(reason)}</p>${decision.public_reason?.trim() ? `<blockquote>${esc(decision.public_reason)}</blockquote>` : '<p class="presence-note">未提供额外说明</p>'}${wakeText ? `<p class="presence-note">当时的等待条件：${esc(wakeText)}。唤醒后仍需满足至少 5 秒的消息安静期。</p>` : ''}${stale ? '<p class="presence-note">这是之前的判断；有新消息或正在重新评估，请以当前状态为准。</p>' : ''}` : '<p class="presence-note">暂无独立参与判断记录。直接回复可能跳过此判断；旧记录也未保存这些信息。</p>'}</div>${debugMode ? `<pre class="presence-debug">${esc(JSON.stringify({ state: t.state, reason: t.reason, task: t.id, through_seq: t.through_seq, decision_through_seq: decision?.through_seq, due_at: t.due_at, version: t.version }, null, 2))}</pre>` : ''}`;
+  const body = `<div class="presence-section"><span class="presence-label">当前状态 · ${esc(view.source)}</span><p>${esc(view.detail)}</p></div><div class="presence-section"><span class="presence-label">最近模型决定</span>${decision ? `<div class="decision-heading"><strong>${esc(decisionActions[decision.action] || '已判断')}</strong><time>${esc(dateTime(decision.decided_at))}</time></div><p class="decision-category">${esc(reason)}</p>${decision.public_reason?.trim() ? `<blockquote>${esc(decision.public_reason)}</blockquote>` : '<p class="presence-note">未提供额外说明</p>'}${wakeText ? `<p class="presence-note">当时的等待条件：${esc(wakeText)}。</p>` : ''}${stale ? '<p class="presence-note">这是之前的判断；有新消息或正在重新评估，请以当前状态为准。</p>' : ''}` : '<p class="presence-note">暂无独立参与判断记录。直接回复可能跳过此判断；旧记录也未保存这些信息。</p>'}</div>${debugMode ? `<pre class="presence-debug">${esc(JSON.stringify({ state: t.state, reason: t.reason, task: t.id, through_seq: t.through_seq, decision_through_seq: decision?.through_seq, due_at: t.due_at, version: t.version }, null, 2))}</pre>` : ''}`;
   return { summary, body };
 }
 function renderPresence(tasks) {
@@ -503,7 +504,7 @@ function renderReplyStatus() {
   const own = canParticipate();
   const tasks = agentStates(discussionTasks(id));
   const rounds = state.scheduler.discussions.filter(d => d.conversation === id);
-  const running = tasks.some(t => ['evaluating', 'responding'].includes(t.state));
+  const running = tasks.some(t => ['evaluating', 'responding', 'input'].includes(t.state));
   const current = rounds[0];
   $('#execute').disabled = !id || !own || state.conversation.state !== 'active' || running;
   $('#reply-status').classList.toggle('hidden', !id || isObserver() || currentEntry()?.left_message_seq != null || (!current && !tasks.length && state.scheduler.online));
@@ -726,7 +727,7 @@ async function showCalls(id) {
 }
 function showReplyControls() {
   const conversation = state.conversation?.id; if (!conversation) return;
-  dialog('继续这个会话的回复', `<form id="modal-form"><p>处理当前会话尚未完成的消息，会调用模型并可能产生费用。</p><p class="form-note">消息合并至安静满 5 秒后处理。不同 Agent 可并行判断，自主接话依次开始；明确请求可并行回复。每位 Agent 的回复额度由全局运行设置决定，新的用户消息获准自动回复后计数归零；继续讨论不会重置计数。失败或中断的操作不会自动重跑。</p><div class="check-list"><label><input name="mcp" type="checkbox">本轮允许已在运行设置中授权的外部 MCP</label></div><div class="form-actions"><button class="primary" type="submit">开始回复</button></div></form>`);
+  dialog('继续这个会话的回复', `<form id="modal-form"><p>处理当前会话尚未完成的消息，会调用模型并可能产生费用。</p><p class="form-note">消息独立排队；同会话的新消息会在工具执行完成或当前回答结束后继续处理。不同 Agent 可并行判断，自主接话依次开始；明确请求可并行回复。每位 Agent 的回复额度由全局运行设置决定，新的用户消息获准自动回复后计数归零；继续讨论不会重置计数。失败或中断的操作不会自动重跑。</p><div class="check-list"><label><input name="mcp" type="checkbox">本轮允许已在运行设置中授权的外部 MCP</label></div><div class="form-actions"><button class="primary" type="submit">开始回复</button></div></form>`);
   formHandler(async data => { await api('reply', { conversation, action: 'start', allow_mcp: data.has('mcp'), confirm: true }); $('#modal').close(); await activity(); });
 }
 function showNewChat() {

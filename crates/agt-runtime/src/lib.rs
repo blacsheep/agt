@@ -10,6 +10,7 @@ mod engine;
 mod harness;
 mod harness_input;
 mod harness_sessions;
+mod run_inputs;
 pub use harness_sessions::{
     ExecutionState as HarnessExecutionState, HarnessSession, HarnessSessions, SessionExecution,
 };

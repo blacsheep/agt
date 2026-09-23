@@ -91,7 +91,7 @@ fn begin(home: &Path, user: &ToolService, chat: &str) -> Scheduler {
 fn make_quiet(scheduler: &mut Scheduler) {
     rusqlite::Connection::open(scheduler.home.join("im/im.db"))
         .unwrap()
-        .execute("UPDATE messages SET created_at=?1", [now_ms() - QUIET_MS])
+        .execute("UPDATE messages SET created_at=?1", [now_ms() - 5_000])
         .unwrap();
     for mut task in scheduler.store.candidates().unwrap() {
         task.due_at = now_ms();
@@ -135,14 +135,25 @@ fn model_calls_overlap_and_replies_inherit_one_round() {
     struct Blocking {
         started: mpsc::Sender<()>,
         release: mpsc::Receiver<()>,
+        decisions: std::sync::Arc<std::sync::atomic::AtomicU32>,
     }
     impl ModelClient for Blocking {
         fn complete(
             &mut self,
             _: &ResolvedAgent,
             _: &[Value],
-            _: &[Value],
+            tools: &[Value],
         ) -> crate::Result<Value> {
+            if tools
+                .first()
+                .is_some_and(|t| t["function"]["name"] == "participation_decision")
+            {
+                self.decisions
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return Ok(decision(
+                    json!({"action":"silent","reason_code":"already_answered"}),
+                ));
+            }
             self.started.send(()).unwrap();
             self.release.recv_timeout(Duration::from_secs(5)).unwrap();
             Ok(json!({"role":"assistant","content":"useful reply"}))
@@ -153,11 +164,13 @@ fn model_calls_overlap_and_replies_inherit_one_round() {
     let tasks = [claim(&mut scheduler, "a"), claim(&mut scheduler, "b")];
     let round = tasks[0].discussion.clone();
     let (tx, rx) = mpsc::channel();
+    let decisions = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
     let mut releases = Vec::new();
     let mut threads = Vec::new();
     for task in tasks {
         let path = home.path().to_owned();
         let started = tx.clone();
+        let decisions = decisions.clone();
         let (release, wait) = mpsc::channel();
         releases.push(release);
         threads.push(thread::spawn(move || {
@@ -167,6 +180,7 @@ fn model_calls_overlap_and_replies_inherit_one_round() {
                 &mut Blocking {
                     started,
                     release: wait,
+                    decisions,
                 },
                 &CancellationToken::new(),
             )
@@ -191,7 +205,7 @@ fn model_calls_overlap_and_replies_inherit_one_round() {
     }
     assert_eq!(
         scheduler.store.discussion(&round).unwrap().unwrap().calls,
-        2
+        2 + decisions.load(std::sync::atomic::Ordering::Relaxed)
     );
 }
 
@@ -215,6 +229,7 @@ fn peer_task(home: &Path, user: &ToolService, chat: &str) -> (Scheduler, Schedul
     .with_discussion(Some(a.discussion));
     sender
         .send(MessageInput {
+            input_mode: None,
             conversation: ConversationId::new(chat),
             body: "peer idea".into(),
             request_key: "peer".into(),
@@ -458,25 +473,22 @@ fn model_call_count_is_diagnostic_not_an_admission_limit() {
 }
 
 #[test]
-fn five_second_window_slides_and_wait_deadline_cannot_bypass_it() {
+fn ordinary_inputs_are_immediate_but_explicit_quiet_waits_remain() {
     let (home, user, chat) = fixture();
     let scheduler = begin(home.path(), &user, &chat);
     let mut task = scheduler.store.candidates().unwrap().remove(0);
     task.due_at = 0;
-    assert!(!quiet_ready(&task, 0, 4999));
-    assert!(quiet_ready(&task, 0, 5000));
-    assert!(!quiet_ready(&task, 4000, 5000));
-    assert!(!quiet_ready(&task, 4000, 8999));
-    assert!(quiet_ready(&task, 4000, 9000));
+    assert!(quiet_ready(&task, 4000, 4000));
     task.quiet = true;
-    task.deadline = 1;
+    task.deadline = 50_000;
     task.quiet_ms = 30_000;
     assert!(!quiet_ready(&task, 4000, 5000));
-    assert!(quiet_ready(&task, 4000, 9000));
+    assert!(quiet_ready(&task, 4000, 34_000));
+    assert!(quiet_ready(&task, 49_999, 50_000));
 }
 
 #[test]
-fn human_burst_merges_and_waits_before_any_model_call() {
+fn human_burst_queues_independent_inputs_without_fixed_delay() {
     let (home, user, chat) = fixture();
     let mut scheduler = begin(home.path(), &user, &chat);
     for key in ["fragment-2", "fragment-3"] {
@@ -494,16 +506,14 @@ fn human_burst_merges_and_waits_before_any_model_call() {
         )
         .unwrap();
     }
-    scheduler.tick(true).unwrap();
-    assert!(scheduler.jobs.is_empty());
+    scheduler.scan().unwrap();
     let pending = scheduler.store.candidates().unwrap();
-    assert_eq!(pending.len(), 2);
+    assert_eq!(pending.len(), 6);
     assert!(
         pending
             .iter()
-            .all(|t| t.deliveries.len() == 3 && t.triggers.len() == 3)
+            .all(|t| t.deliveries.len() == 1 && t.triggers.len() == 1 && t.due_at <= now_ms())
     );
-    assert_eq!(scheduler.store.snapshot().unwrap().discussions.len(), 1);
     let task = claim(&mut scheduler, "a");
     execute(
         home.path(),
@@ -513,7 +523,15 @@ fn human_burst_merges_and_waits_before_any_model_call() {
     )
     .unwrap();
     assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
-    assert_eq!(scheduler.store.snapshot().unwrap().usage[0].replies, 1);
+    assert!(
+        scheduler
+            .store
+            .tasks()
+            .unwrap()
+            .iter()
+            .filter(|t| t.principal == "a")
+            .all(|t| t.state == "completed")
+    );
 }
 
 #[test]
@@ -659,18 +677,7 @@ fn participation_model_calls_overlap_in_one_conversation() {
 }
 
 #[test]
-fn new_message_after_claim_defers_execution_without_consuming_reply() {
-    struct NoCall;
-    impl ModelClient for NoCall {
-        fn complete(
-            &mut self,
-            _: &ResolvedAgent,
-            _: &[Value],
-            _: &[Value],
-        ) -> crate::Result<Value> {
-            panic!("must await quiet");
-        }
-    }
+fn unauthorized_new_message_does_not_delay_or_steer_active_execution() {
     let (home, user, chat) = fixture();
     let mut scheduler = begin(home.path(), &user, &chat);
     let task = claim(&mut scheduler, "a");
@@ -682,12 +689,21 @@ fn new_message_after_claim_defers_execution_without_consuming_reply() {
     execute(
         home.path(),
         task.clone(),
-        &mut NoCall,
+        &mut Answer(json!({"role":"assistant","content":"done"})),
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "queued");
-    assert_eq!(scheduler.store.snapshot().unwrap().usage[0].replies, 0);
+    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+    assert_eq!(scheduler.store.snapshot().unwrap().usage[0].replies, 1);
+    assert_eq!(
+        scheduler
+            .store
+            .connection
+            .query_row("SELECT COUNT(*) FROM run_inputs", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
 }
 
 #[test]
@@ -722,6 +738,22 @@ fn three_agents_count_zero_through_ten_without_a_depth_cutoff() {
     for number in 0..=10 {
         scheduler.scan().unwrap();
         let principal = ["a", "b", "c"][number % 3];
+        // This test exercises a single causal chain. Older independent inputs
+        // are deliberately skipped instead of implicitly merged into the newest.
+        let pending = scheduler.store.candidates().unwrap();
+        let newest = pending
+            .iter()
+            .filter(|t| t.principal == principal)
+            .max_by_key(|t| t.through_seq)
+            .unwrap()
+            .id
+            .clone();
+        for old in pending
+            .iter()
+            .filter(|t| t.principal == principal && t.id != newest)
+        {
+            scheduler.store.cancel_pending(&old.id).unwrap();
+        }
         let mut task = claim(&mut scheduler, principal);
         if task.state == "evaluating" {
             execute(
@@ -1000,7 +1032,7 @@ fn reset_schema_upgrade_preserves_existing_discussions() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        16
+        17
     );
 }
 
@@ -1494,3 +1526,6 @@ mod reset_history_tests;
 
 #[path = "tests/harness/tools.rs"]
 mod harness_tool_tests;
+
+#[path = "tests/scheduler/run_inputs.rs"]
+mod run_input_tests;

@@ -1,6 +1,6 @@
 //! One native execution, isolated from scheduler admission and Run ownership.
-//! The outer loop advances tool turns; request.rs retries context preparation
-//! within one turn. New conversation inputs remain the scheduler's responsibility.
+//! The outer loop drains follow-ups; the inner loop advances tools and steering.
+//! Scheduler tasks remain the durable queue and authorization boundary.
 use super::{Runtime, check_canceled};
 use crate::{ResolvedAgent, Result, RunRecord, RunState, RuntimeError};
 use agt_core::CancellationToken;
@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod framework;
+mod inputs;
 mod mcp;
 mod prepare;
 mod request;
@@ -36,7 +37,10 @@ pub(super) enum LoopOutcome {
 }
 
 enum ModelTurn {
-    Final(String),
+    Final {
+        message: Value,
+        reported_tokens: Option<usize>,
+    },
     Tools {
         message: Value,
         calls: Vec<ToolCall>,
@@ -60,6 +64,9 @@ pub(super) struct NativeRun<'run, 'host> {
     communication: Option<agt_service::ToolService>,
     communication_names: BTreeSet<String>,
     messages: Vec<Value>,
+    input_messages: Vec<Value>,
+    completed_turns: usize,
+    reply: Option<(agt_im::MessageId, u32)>,
     usage: crate::context::ContextUsage,
     seen_calls: BTreeSet<String>,
     published: bool,
@@ -70,23 +77,52 @@ pub(super) struct NativeRun<'run, 'host> {
 
 impl NativeRun<'_, '_> {
     pub(super) fn run(mut self) -> Result<LoopOutcome> {
+        use agt_service::InputMode;
         loop {
-            match self.request_turn()? {
-                ModelTurn::Final(output) => {
-                    return Ok(LoopOutcome::Complete(self.finish_turn(output)));
-                }
-                ModelTurn::Tools {
-                    message,
-                    calls,
-                    reported_tokens,
-                } => {
-                    self.messages.push(message);
-                    self.usage.observe(reported_tokens, self.messages.len());
-                    if let ToolFlow::Suspend = self.execute_tool_batch(calls)? {
-                        self.suspend()?;
-                        return Ok(LoopOutcome::Suspended);
+            // Steering may also arrive during follow-up admission.
+            if let Some(input) = self.next_input(InputMode::Steering)? {
+                self.accept_input(input);
+            }
+            let output = loop {
+                match self.request_turn()? {
+                    ModelTurn::Final {
+                        message,
+                        reported_tokens,
+                    } => {
+                        let output = message["content"]
+                            .as_str()
+                            .expect("validated final text")
+                            .to_owned();
+                        self.messages.push(message);
+                        self.usage.observe(reported_tokens, self.messages.len());
+                        if let Some(input) = self.next_input(InputMode::Steering)? {
+                            self.accept_input(input);
+                            continue;
+                        }
+                        break output;
+                    }
+                    ModelTurn::Tools {
+                        message,
+                        calls,
+                        reported_tokens,
+                    } => {
+                        self.messages.push(message);
+                        self.usage.observe(reported_tokens, self.messages.len());
+                        if let ToolFlow::Suspend = self.execute_tool_batch(calls)? {
+                            self.suspend()?;
+                            return Ok(LoopOutcome::Suspended);
+                        }
+                        if let Some(input) = self.next_input(InputMode::Steering)? {
+                            self.accept_input(input);
+                        }
                     }
                 }
+            };
+            if let Some(input) = self.next_input(InputMode::FollowUp)? {
+                self.publish_completed_turn(output, &input.task.id)?;
+                self.accept_input(input);
+            } else {
+                return Ok(LoopOutcome::Complete(self.finish_turn(output)));
             }
         }
     }

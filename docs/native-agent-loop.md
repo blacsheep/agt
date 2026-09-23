@@ -11,6 +11,7 @@ Harness 保留自己的执行引擎，不作为 Native 模型请求的一种实�
 | `engine.rs` / `Runtime` | Run 认领、Native/Harness 选择、终态持久化、显式子 Run 委派 |
 | `engine/native.rs` / `NativeRun` | 本次执行的上下文、工具会话、回合推进、完成与挂起结果 |
 | `engine/native/prepare.rs` | 配置与工具快照、身份和能力绑定、恢复显式工作 checkpoint |
+| `engine/native/inputs.rs` / `run_inputs.rs` | 安全边界轮询、参与判断、持久化接纳与输入终态 |
 | `engine/native/request.rs` | 请求前检查、压缩、模型请求及审计、有限的超窗恢复 |
 | `engine/native/tools.rs` | 整批验证以及每个工具的 prepare/before/execute/after 流水线 |
 | `engine/native/framework.rs` | Framework 工具分派、消息去重和数据库副作用围栏 |
@@ -24,22 +25,31 @@ Harness 保留自己的执行引擎，不作为 Native 模型请求的一种实�
 
 ```text
 Runtime: claim → prepare NativeRun
-  外层：推进模型/工具回合
-    内层 request_turn：
-      prepare_turn → prepare_request → request_model
-      明确超窗且存在历史 → 强制压缩后再请求一次
-      成功 → 返回 Final 或 Tools
-    Final → finish_turn → Complete(Text / Silent)
-    Tools → 加入 assistant 消息 → execute_tool_batch
-      Continue → 下一回合
-      Suspend → 提交 checkpoint → Suspended
-Runtime: 保存 Run 终态
+  外层：follow-up 回合
+    接收一条 steering（如有）
+    内层：模型 / 工具 / steering
+      request_turn → Final 或 Tools（超窗恢复与网络重试保持原请求）
+      Tools → 完整工具批次 → 接收一条 steering → 继续
+      Final → 若有 steering，加入上下文继续；否则结束内层
+    有 follow-up → 发布当前回答并结算已完成输入 → 接收 follow-up → 继续外层
+    无 follow-up → Complete(Text / Silent)
+Runtime: 保存 Run 终态与剩余已接纳输入的终态
 ```
 
-这里借鉴 pi 的阶段划分，并未复制其 steering/follow-up 队列。
-AGT 的内层处理单轮上下文恢复，外层处理工具后续；新会话输入仍由持久化调度器处理。
-若以后加入 steering/follow-up，必须另行定义输入的会话可见性、接纳记录及恢复语义。
-普通网络重试继续在 `model::complete_with_progress` 内，只重试同一个模型请求。
+普通消息不再固定等待 5 秒，也不合并为一个调度任务。每条消息独立持久化。
+人类消息默认 steering，Agent 消息默认 follow-up；发送时可用 `input_mode` 或
+CLI `im message send --input-mode steering|follow_up` 指定。模式不授予额外权限。
+仅同 principal、同 conversation、同 discussion 的普通输入可进入当前 Native Run。
+群内未被点名的 Agent 消息仍须参与判断；silent/wait 不进入执行上下文。
+
+接纳先写 schema v17 的 `run_inputs` 收据，再进入模型或工具阶段，并计入回复额度。
+暂停、额度、成员资格、删除和上下文重置仍生效。压缩保留已接纳输入原文。
+已接纳但未完成的输入在失败、取消或接管时随 Run 结算，不自动重放；尚未接纳的
+消息保留在队列，包含最后一次轮询之后到达的消息。已完成输入不被后续失败覆盖。
+follow-up 开始新的发送去重范围；steering 保留当前范围。回复关联当前处理的消息。
+
+显式 work 继续使用 task_input/await；Harness 使用后续独立 Run 处理排队消息，
+不支持本机制的运行中注入。普通网络重试仍只重试同一个模型请求，不消费队列。
 
 `prepare_turn` 检查取消、调度资格与步数预算；恢复请求也必须经过这些检查。
 `prepare_request` 只在完整工具批次之间压缩并检查输入预算。
@@ -71,7 +81,7 @@ AGT 的内层处理单轮上下文恢复，外层处理工具后续；新会话�
 
 恢复继续校验配置指纹与工作目录；已完成工具结果、call ID 和成功发送去重状态一起恢复。
 工具连接随 NativeRun 释放，部分初始化失败时也关闭已连接的 MCP 客户端。
-不自动重试结果未知的副作用，不改变数据库格式、request key 或调度状态协议。
+不自动重试结果未知的副作用。已接纳输入以 `input` 状态关联当前 Run。
 
 ## 验证
 
@@ -79,3 +89,6 @@ AGT 的内层处理单轮上下文恢复，外层处理工具后续；新会话�
 原有回归覆盖整批预验证、取消、委派、去重、挂起恢复与 checkpoint 崩溃间隙。
 `src/tests/engine/stages.rs` 补充业务错误后继续批次、致命错误/取消阻止后续副作用，
 以及成功工具回合之后恢复额度重新生效的测试。
+
+`src/tests/scheduler/run_inputs.rs` 覆盖 steering/follow-up 顺序、工具批次边界、
+参与判断、跨会话隔离、删除围栏、重试快照、压缩、额度、暂停及接管后的终态。

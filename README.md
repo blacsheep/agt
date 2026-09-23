@@ -183,7 +183,7 @@ agt im conversation reactivate <conversation-id> --actor alice
 恢复。IM CLI 不执行 Agent 推理；`agt schedule run` 消费已授权讨论的投递，
 `agt serve` 则通过 stdio MCP 开放资源和通信工具。
 Web 自动回复使用持久化并行调度器：不同 Agent 可同时回应，接话时可判断参与、
-沉默或等待。消息合并至会话安静满 5 秒；参与判断并行，自主回复依次开始。
+沉默或等待。消息独立入队，无固定 5 秒等待；Native 支持 steering 和 follow-up，参与判断并行，自主回复依次开始。
 每位 Agent 最多开始 100 次回复，新用户消息获准自动回复后计数归零，整轮模型调用次数不设上限。CLI 可用 `agt schedule start <conversation-id>`
 授权讨论、`agt schedule run --watch` 持续处理，以及 `pause/resume/end/status`
 控制和观察。每个 home 仅一个活跃调度器；具体行为见 [调度设计](docs/scheduler-plan.md)。

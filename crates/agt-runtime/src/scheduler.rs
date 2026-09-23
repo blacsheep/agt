@@ -14,7 +14,7 @@ use anyhow::{Result, bail};
 use serde_json::{Value, json};
 
 use crate::participation::{ParticipationDecision, WakeCondition, decide};
-use crate::schedule_store::{QUIET_MS, now_ms};
+use crate::schedule_store::now_ms;
 use crate::{
     ChatCompletions, MessageTrigger, ModelClient, ResolvedAgent, RunRequest, RunState, Runtime,
     RuntimeError, ScheduleStore, ScheduledTask,
@@ -109,6 +109,7 @@ pub(crate) fn guarded_store<T>(
                         .is_ok_and(|c| c.state == ConversationState::Active)
                 });
             root_active
+                && crate::run_inputs::visible(&store, &im, task, cutoff)
                 && im
                     .get_conversation(&ConversationId::new(&task.conversation))
                     .is_ok_and(|c| c.state == ConversationState::Active)
@@ -353,6 +354,7 @@ impl Scheduler {
         for task in self.store.candidates()? {
             let mut due = task.due_at;
             if task.work_id.is_none()
+                && task.quiet
                 && let Ok(page) = im.list_messages(
                     &ConversationId::new(&task.conversation),
                     &PrincipalId::new(&task.principal),
@@ -364,10 +366,7 @@ impl Scheduler {
                 )
                 && let Some(message) = page.messages.last()
             {
-                due = due.max(message.created_at + QUIET_MS);
-                if task.quiet {
-                    due = due.max(task.deadline.min(message.created_at + task.quiet_ms));
-                }
+                due = due.max(task.deadline.min(message.created_at + task.quiet_ms));
             }
             if due > now {
                 next = next.min(due);
@@ -552,125 +551,125 @@ impl Scheduler {
 
     fn scan(&mut self) -> Result<()> {
         crate::HarnessSessions::open(&self.home)?.reconcile()?;
-        let im = im(&self.home)?;
-        for binding in BindingStore::open(&self.home)?.list()? {
-            let mut after = 0;
-            loop {
-                let page = im.deliveries_after(&binding.principal, true, 200, None, after)?;
-                if page.is_empty() {
-                    break;
+        scan_inputs(&self.home, &mut self.store)
+    }
+}
+
+pub(crate) fn scan_inputs(home: &Path, store: &mut ScheduleStore) -> Result<()> {
+    let im = im(home)?;
+    for binding in BindingStore::open(home)?.list()? {
+        let mut after = 0;
+        loop {
+            let page = im.deliveries_after(&binding.principal, true, 200, None, after)?;
+            if page.is_empty() {
+                break;
+            }
+            after = page.last().expect("nonempty").id;
+            for delivery in page {
+                if store.assigned(delivery.id)? {
+                    continue;
                 }
-                after = page.last().expect("nonempty").id;
-                for delivery in page {
-                    if self.store.assigned(delivery.id)? {
-                        continue;
-                    }
-                    let message = im.get_message(&delivery.message_id)?;
-                    let route = match crate::work::route(&self.store, &message) {
-                        Ok(route) => route,
-                        Err(_) => {
-                            im.update_delivery(
-                                delivery.id,
-                                DeliveryState::Skipped,
-                                None,
-                                Some("invalid task notification"),
-                            )?;
-                            continue;
-                        }
-                    };
-                    if route
-                        .as_ref()
-                        .is_some_and(|(_, target, _)| target != binding.principal.as_str())
-                    {
+                let message = im.get_message(&delivery.message_id)?;
+                let route = match crate::work::route(store, &message) {
+                    Ok(route) => route,
+                    Err(_) => {
                         im.update_delivery(
                             delivery.id,
                             DeliveryState::Skipped,
                             None,
-                            Some("directed work message for another recipient"),
+                            Some("invalid task notification"),
                         )?;
                         continue;
                     }
-                    if let Some((id, _, true)) = &route
-                        && !matches!(
-                            message.metadata["work_event"].as_str(),
-                            Some("input_requested" | "resolved" | "dependency_expired")
-                        )
-                        && crate::work::wait::consumed_notice(&self.store.connection, id)?
-                    {
-                        im.update_delivery(
-                            delivery.id,
-                            DeliveryState::Completed,
-                            None,
-                            Some("result consumed by work continuation"),
-                        )?;
-                        continue;
-                    }
-                    if message.seq
-                        <= self
-                            .store
-                            .context_cutoff(message.conversation_id.as_str())?
-                    {
-                        continue;
-                    }
-                    let discussion = if let Some(id) = message.metadata["discussion_id"].as_str() {
-                        Some(id.to_string())
-                    } else {
-                        self.store.human_discussion(message.id.as_str())?
-                    };
-                    let Some(discussion) = discussion else {
-                        continue;
-                    };
-                    if self.store.discussion(&discussion)?.is_none() {
-                        continue;
-                    }
-                    let peer = im.get_principal(&message.sender_id)?.kind != PrincipalKind::User;
-                    let mentioned = message.metadata["mentions"].as_array().is_some_and(|a| {
-                        a.iter()
-                            .any(|p| p.as_str() == Some(binding.principal.as_str()))
-                    });
-                    let now = now_ms();
-                    self.store.ingest(ScheduledTask {
-                        id: route
-                            .as_ref()
-                            .map(|(id, _, notice)| {
-                                if *notice {
-                                    format!("notice:{}", message.id)
-                                } else {
-                                    format!("work:{id}")
-                                }
-                            })
-                            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
-                        discussion,
-                        principal: binding.principal.to_string(),
-                        conversation: message.conversation_id.to_string(),
-                        state: "queued".into(),
-                        deliveries: vec![delivery.id],
-                        message: message.id.to_string(),
-                        through_seq: message.seq,
-                        usage_epoch: 0,
-                        triggers: vec![message.id.to_string()],
-                        decision_required: route.is_none() && peer && !mentioned,
-                        quiet: false,
-                        due_at: message.created_at + if route.is_some() { 0 } else { QUIET_MS },
-                        deadline: now + 60_000,
-                        quiet_ms: QUIET_MS,
-                        version: 0,
-                        owner: None,
-                        run_id: None,
-                        reason: None,
-                        last_decision: None,
-                        work_id: route.as_ref().map(|(id, _, _)| id.clone()),
-                        work_notification: route.as_ref().is_some_and(|(_, _, notice)| *notice),
-                        work_event: message.metadata["work_event"].as_str().map(str::to_owned),
-                        work_input_id: message.metadata["input_request_id"]
-                            .as_str()
-                            .map(str::to_owned),
-                    })?;
+                };
+                if route
+                    .as_ref()
+                    .is_some_and(|(_, target, _)| target != binding.principal.as_str())
+                {
+                    im.update_delivery(
+                        delivery.id,
+                        DeliveryState::Skipped,
+                        None,
+                        Some("directed work message for another recipient"),
+                    )?;
+                    continue;
                 }
+                if let Some((id, _, true)) = &route
+                    && !matches!(
+                        message.metadata["work_event"].as_str(),
+                        Some("input_requested" | "resolved" | "dependency_expired")
+                    )
+                    && crate::work::wait::consumed_notice(&store.connection, id)?
+                {
+                    im.update_delivery(
+                        delivery.id,
+                        DeliveryState::Completed,
+                        None,
+                        Some("result consumed by work continuation"),
+                    )?;
+                    continue;
+                }
+                if message.seq <= store.context_cutoff(message.conversation_id.as_str())? {
+                    continue;
+                }
+                let discussion = if let Some(id) = message.metadata["discussion_id"].as_str() {
+                    Some(id.to_string())
+                } else {
+                    store.human_discussion(message.id.as_str())?
+                };
+                let Some(discussion) = discussion else {
+                    continue;
+                };
+                if store.discussion(&discussion)?.is_none() {
+                    continue;
+                }
+                let peer = im.get_principal(&message.sender_id)?.kind != PrincipalKind::User;
+                let mentioned = message.metadata["mentions"].as_array().is_some_and(|a| {
+                    a.iter()
+                        .any(|p| p.as_str() == Some(binding.principal.as_str()))
+                });
+                let now = now_ms();
+                store.ingest(ScheduledTask {
+                    id: route
+                        .as_ref()
+                        .map(|(id, _, notice)| {
+                            if *notice {
+                                format!("notice:{}", message.id)
+                            } else {
+                                format!("work:{id}")
+                            }
+                        })
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                    discussion,
+                    principal: binding.principal.to_string(),
+                    conversation: message.conversation_id.to_string(),
+                    state: "queued".into(),
+                    deliveries: vec![delivery.id],
+                    message: message.id.to_string(),
+                    through_seq: message.seq,
+                    usage_epoch: 0,
+                    triggers: vec![message.id.to_string()],
+                    decision_required: route.is_none() && peer && !mentioned,
+                    quiet: false,
+                    due_at: message.created_at,
+                    deadline: now + 60_000,
+                    quiet_ms: 0,
+                    version: 0,
+                    owner: None,
+                    run_id: None,
+                    reason: None,
+                    last_decision: None,
+                    work_id: route.as_ref().map(|(id, _, _)| id.clone()),
+                    work_notification: route.as_ref().is_some_and(|(_, _, notice)| *notice),
+                    work_event: message.metadata["work_event"].as_str().map(str::to_owned),
+                    work_input_id: message.metadata["input_request_id"]
+                        .as_str()
+                        .map(str::to_owned),
+                })?;
             }
         }
-        Ok(())
     }
+    Ok(())
 }
 
 fn quiet_ready(task: &ScheduledTask, last_message_at: i64, now: i64) -> bool {
@@ -678,7 +677,6 @@ fn quiet_ready(task: &ScheduledTask, last_message_at: i64, now: i64) -> bool {
         return now >= task.due_at;
     }
     now >= task.due_at
-        && now - last_message_at >= QUIET_MS
         && (!task.quiet || now >= task.deadline || now - last_message_at >= task.quiet_ms)
 }
 
@@ -846,11 +844,13 @@ pub(crate) fn execute(
         && !quiet_ready(&task, latest.created_at, now_ms())
     {
         task.state = "queued".into();
-        task.due_at = latest.created_at + QUIET_MS;
+        task.due_at = task.deadline.min(latest.created_at + task.quiet_ms);
         store.update(&task, now_ms())?;
         return Ok(());
     }
-    task.through_seq = conversation.last_message_seq;
+    if task.decision_required || task.work_id.is_some() {
+        task.through_seq = conversation.last_message_seq;
+    }
     if external && task.state == "evaluating" {
         task.state = "ready_to_reply".into();
         task.reason = Some(
@@ -1075,23 +1075,35 @@ pub(crate) fn execute(
             if !store.update(&task, now_ms())? {
                 return Ok(());
             }
+            let reply_message =
+                messaging
+                    .im
+                    .get_message(&MessageId::new(crate::run_inputs::reply_target(
+                        &store, &task, &record.id,
+                    )?))?;
+            let reply_depth = reply_message.metadata["automated_depth"]
+                .as_u64()
+                .unwrap_or(0)
+                .saturating_add(1)
+                .min(u64::from(u32::MAX)) as u32;
             let publisher = Messaging::open(
                 home,
                 Actor {
                     principal: binding.principal,
                     role: Role::Participant,
-                    automated_depth: Some(depth),
+                    automated_depth: Some(reply_depth),
                 },
             )?
             .with_discussion(Some(task.discussion.clone()));
             if guarded(home, &task, || {
                 publisher
                     .send(MessageInput {
+                        input_mode: None,
                         conversation: trigger.conversation_id,
                         body: output.into(),
                         request_key: format!("run-result:{}", record.id),
                         mentions: Vec::new(),
-                        reply_to: Some(trigger.id),
+                        reply_to: Some(reply_message.id),
                     })
                     .map_err(|_| RuntimeError::Im("cannot publish scheduled reply"))
             })

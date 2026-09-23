@@ -70,10 +70,13 @@ fn creates_direct_conversation_and_replays_messages() {
             "hello from cli",
             "--idempotency-key",
             "request-1",
+            "--input-mode",
+            "follow_up",
         ],
     ));
     assert_eq!(send["message"]["seq"], 1);
     assert_eq!(send["duplicate"], false);
+    assert_eq!(send["message"]["metadata"]["input_mode"], "follow_up");
 
     let retry = json(run(
         &home,
@@ -87,6 +90,8 @@ fn creates_direct_conversation_and_replays_messages() {
             "hello from cli",
             "--idempotency-key",
             "request-1",
+            "--input-mode",
+            "follow_up",
         ],
     ));
     assert_eq!(retry["duplicate"], true);

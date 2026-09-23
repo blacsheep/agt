@@ -593,6 +593,9 @@ struct ImMessageSendArgs {
     client_message_id: Option<String>,
     #[arg(long)]
     idempotency_key: Option<String>,
+    /// When an active native run should receive this message.
+    #[arg(long, value_parser = ["steering", "follow_up"])]
+    input_mode: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -932,7 +935,10 @@ fn dispatch_im_message(
                 body: args.body,
                 client_message_id: args.client_message_id,
                 reply_to_id: None,
-                metadata: Value::Object(Default::default()),
+                metadata: args
+                    .input_mode
+                    .map(|mode| serde_json::json!({"input_mode":mode}))
+                    .unwrap_or_else(|| Value::Object(Default::default())),
                 idempotency_key: args.idempotency_key,
             })?,
             output,

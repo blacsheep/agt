@@ -3,11 +3,11 @@
 Current implementation · 2026-09-08. See [operator acceptance](framework-acceptance.md)
 and [document index](README.md).
 
-The scheduler owns discussion rounds, merged tasks, waits, leases and reply
+The scheduler owns discussion rounds, independent input tasks, waits, leases and reply
 allowances in runtime/scheduler.db. IM stays generic. Explicit runs retain their
 own execution rules; automatic message execution uses only the scheduler.
 
-## Messages and the five-second quiet window
+## Messages and running input queues
 
 Human messages require explicit automatic-reply authorization. The first creates
 a discussion; subsequent newly authorized human messages in the same unfinished
@@ -16,20 +16,20 @@ Message authorization is durable and idempotent: replaying an authorization or
 resuming a discussion never resets counters. Ended discussions remain ended;
 a new human message can create a new discussion.
 
-Pending messages for the same discussion/principal/conversation merge. Queued and
-ready work adopts new input; direct requests wake model-requested waits. New human
-turns also wake pending waits and reply-limited work. Active execution snapshots
-are not mutated. Arrivals during a decision merge before it can start a reply.
-The batch retains every trigger ID and includes its nondeleted message bodies in
-the model input (maximum 128 KiB; oversized batches fail rather than silently lose
-fragments). Model-visible history now uses a per-principal persisted summary and token-budgeted recent messages; see [context management](context-management.md).
+Each pending message remains an independent task; there is no fixed five-second
+quiet window or automatic burst merge. Explicit model-requested timed/quiet waits
+remain supported. Human authorization wakes pending waits and reply-limited work.
+Model-visible history uses persisted summaries and token-budgeted recent messages;
+see [context management](context-management.md).
 
-Every task waits until there have been no new conversation messages for five
-seconds. Each message restarts that sliding window, including Agent messages.
-Read receipts and membership events do not reset it. There is no maximum-delay
-shortcut around these five seconds. Model-requested timed/quiet waits can delay
-work further; their deadline cannot bypass the base five-second window.
-Already-running inference or tools are not restarted when a message arrives.
+Native ordinary chat accepts same-principal, same-conversation, same-discussion
+inputs at safe boundaries. Human messages default to steering; Agent messages
+default to follow-up. `input_mode` can explicitly select either mode without
+changing authorization. Steering enters between complete tool batches or before
+a final response is committed; follow-up enters after the current turn completes.
+Retries retain their request snapshot and do not consume inputs. Work tasks keep
+their task_input/await protocol; Harness processes later inputs in separate Runs.
+See [native agent loop](native-agent-loop.md) for queue and recovery contracts.
 
 ## Separate decision and reply admission
 
@@ -48,11 +48,11 @@ short user-facing explanation, not the model's private decision transcript, whic
 is not persisted or replayed.
 Formal reply input includes the decision reason. Ready replies have queue priority
 over evaluations. Before reply admission, new history invalidates the decision
-and sends the task back to evaluation after the quiet window.
+and sends the task back to evaluation without a fixed quiet window.
 
 At most one autonomous reply starts at a time in a conversation, and it waits for
 existing responders. Human requests and explicitly mentioned peers retain direct
-execution and may reply in parallel across identities, after the same quiet window.
+execution and may reply in parallel across identities, without a fixed quiet window.
 Response policy, active membership, message deletion, expiry and MCP permissions
 remain execution gates. Unmentioned nonmanual peer messages use participation.
 
@@ -89,7 +89,7 @@ request. Independent coordinator heartbeats and versioned claims fence stale wor
 Expired evaluating work can retry; responding work becomes interrupted and is
 never automatically replayed. Ready and waiting tasks survive restart.
 
-Scheduler databases initialize at schema v4; v3 upgrades additively with the context-reset table. Earlier incompatible schema versions are rejected. Human authorization is deduplicated
+Scheduler databases use schema v17, adding durable run_inputs acceptance receipts. Unsupported schema versions are rejected. Human authorization is deduplicated
 in human_messages, and tasks persist counter epochs and reply admission state.
 
 Local framework operations and final publication recheck discussion/claim state.
@@ -111,7 +111,7 @@ Start with --message authorizes that human message idempotently; without it, sta
 authorizes pending human deliveries and resumes. Non-watch execution drains only
 currently ready work; use watch to wait through quiet windows and reminders.
 
-Verification covers sliding-window boundaries, burst merging, concurrent decisions
+Verification covers immediate independent inputs, steering/follow-up boundaries, concurrent decisions
 and direct replies, autonomous reply exclusion, stale decisions, 100-reply reset
 and idempotency, waits/restart, unsupported-schema rejection and pause/end/publication fencing.
 Tests use local fixtures, not paid model requests.
@@ -141,3 +141,10 @@ request key even when the model emits new tool-call IDs/keys. Each invocation st
 passes service validation, membership checks and scheduler fencing; the IM store
 returns its existing message with duplicate=true. Failures are not cached. This is
 not cross-Run text deduplication, and distinct recipients/reply targets remain distinct.
+
+Accepted inputs are charged separately and recorded before execution. Pending input
+state is `input` with its consuming Run ID. Completed turns settle their inputs;
+a later failure does not overwrite completed inputs. On failure or lease takeover,
+remaining accepted inputs settle with the parent and are never automatically
+replayed. Unaccepted inputs remain queued. Follow-up starts a new send-deduplication
+scope; steering preserves the current scope.

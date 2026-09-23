@@ -6,7 +6,6 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 
 pub(crate) const LEASE_MS: i64 = 15_000;
-pub(crate) const QUIET_MS: i64 = 5_000;
 
 pub(crate) fn now_ms() -> i64 {
     SystemTime::now()
@@ -129,7 +128,7 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3..=16 => {},
+            3..=17 => {},
             _ => bail!("unsupported scheduler database version"),
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
@@ -145,6 +144,11 @@ impl ScheduleStore {
                 CREATE INDEX IF NOT EXISTS active_identity ON tasks(principal,state);
                 CREATE TABLE IF NOT EXISTS work_execution_policy(work_id TEXT PRIMARY KEY,policy TEXT NOT NULL,requested TEXT NOT NULL);
                 PRAGMA user_version=16;")?;
+        }
+        if version < 17 {
+            tx.execute_batch("CREATE TABLE IF NOT EXISTS run_inputs(input_task TEXT PRIMARY KEY,parent_task TEXT NOT NULL,run_id TEXT NOT NULL,mode TEXT NOT NULL,accepted_at INTEGER NOT NULL);
+                CREATE INDEX IF NOT EXISTS run_input_parent ON run_inputs(parent_task);
+                PRAGMA user_version=17;")?;
         }
         tx.commit()?;
         Ok(Self {
@@ -221,7 +225,7 @@ impl ScheduleStore {
             )? {
                 if task.discussion == discussion {
                     task.state = "queued".into();
-                    task.due_at = now + QUIET_MS;
+                    task.due_at = now;
                     task.quiet = false;
                     task.reason = None;
                     task.owner = None;
@@ -354,7 +358,7 @@ impl ScheduleStore {
         Ok(())
     }
 
-    pub(crate) fn ingest(&mut self, mut task: ScheduledTask) -> Result<()> {
+    pub(crate) fn ingest(&mut self, task: ScheduledTask) -> Result<()> {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -369,53 +373,22 @@ impl ScheduleStore {
         {
             return Ok(());
         }
-        let existing: Option<String> = if task.work_id.is_some() {
-            None
-        } else {
-            tx.query_row("SELECT record FROM tasks WHERE discussion=?1 AND principal=?2 AND conversation=?3 AND json_extract(record,'$.work_id') IS NULL AND state IN ('queued','waiting','ready_to_reply') ORDER BY rowid LIMIT 1",params![task.discussion,task.principal,task.conversation],|r|r.get(0)).optional()?
-        };
         let delivery = task.deliveries[0];
-        if let Some(record) = existing {
-            let mut merged: ScheduledTask = serde_json::from_str(&record)?;
-            merged.deliveries.push(delivery);
-            merged.triggers.extend(task.triggers);
-            if task.through_seq > merged.through_seq {
-                merged.through_seq = task.through_seq;
-                merged.message = task.message;
-            }
-            merged.decision_required &= task.decision_required;
-            if merged.state == "ready_to_reply" {
-                merged.state = "queued".into();
-                merged.reason = None;
-                merged.owner = None;
-                merged.version += 1;
-            }
-            merged.due_at = merged.due_at.max(task.due_at);
-            if !task.decision_required {
-                merged.state = "queued".into();
-                merged.quiet = false;
-                merged.due_at = task.due_at;
-                merged.deadline = task.deadline;
-            }
-            task = merged;
-            save_task(&tx, &task)?;
-        } else {
-            tx.execute(
-                "INSERT INTO tasks VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
-                params![
-                    task.id,
-                    task.discussion,
-                    task.principal,
-                    task.conversation,
-                    task.state,
-                    task.due_at,
-                    task.quiet,
-                    task.version,
-                    task.owner,
-                    serde_json::to_string(&task)?
-                ],
-            )?;
-        }
+        tx.execute(
+            "INSERT INTO tasks VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            params![
+                task.id,
+                task.discussion,
+                task.principal,
+                task.conversation,
+                task.state,
+                task.due_at,
+                task.quiet,
+                task.version,
+                task.owner,
+                serde_json::to_string(&task)?
+            ],
+        )?;
         tx.execute(
             "INSERT INTO assigned VALUES(?1,?2)",
             params![delivery, task.id],
@@ -563,7 +536,7 @@ impl ScheduleStore {
     }
 
     pub(crate) fn update(&mut self, task: &ScheduledTask, now: i64) -> Result<bool> {
-        let mut task = task.clone();
+        let task = task.clone();
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -578,43 +551,6 @@ impl ScheduleStore {
                 "UPDATE usage SET replies=MAX(0,replies-1) WHERE discussion=?1 AND principal=?2",
                 params![task.discussion, task.principal],
             )?;
-            }
-        }
-        if task.work_id.is_none()
-            && matches!(task.state.as_str(), "queued" | "waiting" | "ready_to_reply")
-        {
-            let pending = query_tasks(
-                &tx,
-                "SELECT record FROM tasks WHERE state IN ('queued','waiting')",
-            )?;
-            for mut other in pending {
-                if other.work_id.is_some()
-                    || other.id == task.id
-                    || other.discussion != task.discussion
-                    || other.principal != task.principal
-                    || other.conversation != task.conversation
-                {
-                    continue;
-                }
-                task.deliveries.append(&mut other.deliveries);
-                task.triggers.append(&mut other.triggers);
-                if other.through_seq > task.through_seq {
-                    task.through_seq = other.through_seq;
-                    task.message = other.message.clone();
-                }
-                task.decision_required &= other.decision_required;
-                task.state = "queued".into();
-                task.quiet = false;
-                task.due_at = task.due_at.max(other.due_at);
-                task.reason = None;
-                tx.execute(
-                    "UPDATE assigned SET task=?1 WHERE task=?2",
-                    params![task.id, other.id],
-                )?;
-                other.state = "canceled".into();
-                other.reason = Some("merged into pending message batch".into());
-                save_task(&tx, &other)?;
-                tx.execute("INSERT OR IGNORE INTO reconciled VALUES(?1)", [&other.id])?;
             }
         }
         save_task(&tx, &task)?;
@@ -774,6 +710,7 @@ pub(crate) fn save_task(c: &Connection, t: &ScheduledTask) -> Result<()> {
             serde_json::to_string(t)?
         ],
     )?;
+    crate::run_inputs::settle(c, t)?;
     Ok(())
 }
 
@@ -890,7 +827,7 @@ mod tests {
     }
 
     #[test]
-    fn wait_persists_merge_is_idempotent_and_mentions_release_model_wait() {
+    fn pending_inputs_are_independent_and_idempotent_across_restart() {
         let (home, mut store) = fixture();
         store.ingest(task(1, "a", "chat", true)).unwrap();
         let mut waiting = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
@@ -901,13 +838,13 @@ mod tests {
         let mut store = ScheduleStore::open(home.path()).unwrap();
         store.ingest(task(2, "a", "chat", true)).unwrap();
         store.ingest(task(2, "a", "chat", true)).unwrap();
-        let merged = store.get("1").unwrap();
-        assert_eq!(merged.deliveries, vec![1, 2]);
-        assert_eq!(merged.due_at, 30_000);
+        assert_eq!(store.get("1").unwrap().deliveries, vec![1]);
+        assert_eq!(store.get("1").unwrap().due_at, 30_000);
+        assert_eq!(store.get("2").unwrap().deliveries, vec![2]);
         store.ingest(task(3, "a", "chat", false)).unwrap();
-        let urgent = store.claim("1", "scheduler:one", 100).unwrap().unwrap();
+        let urgent = store.claim("3", "scheduler:one", 100).unwrap().unwrap();
         assert_eq!(urgent.state, "responding");
-        assert_eq!(urgent.deliveries, vec![1, 2, 3]);
+        assert_eq!(urgent.deliveries, vec![3]);
         assert!(!urgent.quiet);
     }
 
@@ -1001,14 +938,14 @@ mod tests {
         assert!(store.status(0).unwrap().usage.is_empty());
         assert!(
             store
-                .claim("101", "scheduler:one", QUIET_MS)
+                .claim("101", "scheduler:one", 5_000)
                 .unwrap()
                 .is_some()
         );
         store
-            .authorize_human("human-1", "chat", 1, false, QUIET_MS)
+            .authorize_human("human-1", "chat", 1, false, 5_000)
             .unwrap();
-        assert_eq!(store.status(QUIET_MS).unwrap().usage[0].replies, 1);
+        assert_eq!(store.status(5_000).unwrap().usage[0].replies, 1);
     }
 
     #[test]
@@ -1032,20 +969,19 @@ mod tests {
     }
 
     #[test]
-    fn arrivals_during_decision_merge_before_reply_and_keep_all_deliveries() {
+    fn arrivals_during_decision_keep_independent_delivery_snapshots() {
         let (_home, mut store) = fixture();
         store.ingest(task(1, "a", "chat", true)).unwrap();
         let mut deciding = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
         store.ingest(task(2, "a", "chat", false)).unwrap();
         deciding.state = "ready_to_reply".into();
         store.update(&deciding, 0).unwrap();
-        let merged = store.get("1").unwrap();
-        assert_eq!(merged.state, "queued");
-        assert_eq!(merged.deliveries, vec![1, 2]);
-        assert_eq!(merged.triggers, vec!["message-1", "message-2"]);
-        assert_eq!(store.get("2").unwrap().state, "canceled");
-        assert!(store.get("2").unwrap().deliveries.is_empty());
-        assert!(!merged.decision_required);
+        let ready = store.get("1").unwrap();
+        assert_eq!(ready.state, "ready_to_reply");
+        assert_eq!(ready.deliveries, vec![1]);
+        assert_eq!(ready.triggers, vec!["message-1"]);
+        assert_eq!(store.get("2").unwrap().state, "queued");
+        assert_eq!(store.get("2").unwrap().deliveries, vec![2]);
     }
 
     #[test]

@@ -215,6 +215,11 @@ impl<'run, 'host> NativeRun<'run, 'host> {
             .model_steps;
         let initial_steps = *step_count;
 
+        let reply = record
+            .request
+            .trigger
+            .as_ref()
+            .map(|t| (t.message_id.clone(), t.depth));
         Ok(Self {
             runtime,
             record,
@@ -226,6 +231,9 @@ impl<'run, 'host> NativeRun<'run, 'host> {
             communication,
             communication_names,
             messages,
+            input_messages: Vec::new(),
+            completed_turns: 0,
+            reply,
             usage,
             seen_calls,
             published,

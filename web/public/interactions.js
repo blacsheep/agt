@@ -128,7 +128,7 @@
       const html = latest.map(t => {
         const decision = t.last_decision;
         const progress = data.runs.find(r => r.id === t.run_id && r.conversation === item.conversation.id)?.progress;
-        return `<article class="ix-state"><div><strong>${esc(nameOf(t.principal))}</strong><span>${esc(stateNames[t.state] || ({waiting:'等待中',responding:'回复中',queued:'排队中',silent:'不发言',evaluating:'判断中'})[t.state] || t.state)}</span></div>
+        return `<article class="ix-state"><div><strong>${esc(nameOf(t.principal))}</strong><span>${esc(stateNames[t.state] || ({waiting:'等待中',input:'已接入当前执行',responding:'回复中',queued:'排队中',silent:'不发言',evaluating:'判断中'})[t.state] || t.state)}</span></div>
           <p class="ix-note">框架状态 · ${data.scheduler.online ? '调度在线' : '调度离线，状态待确认'}</p>
           ${decision ? `<p><b>模型公开决策</b> · ${esc(({participate:'参与',wait:'等待',silent:'不发言'})[decision.action] || decision.action)}</p><p class="ix-body">${esc(decision.public_reason || '未记录公开理由')}</p><small>${esc(stamp(decision.decided_at))} · 截至消息 #${decision.through_seq}</small>` : '<p class="ix-note">未记录模型公开决策</p>'}
           ${progress ? `<p>${esc(progressLabels[progress.phase] || progress.phase)}</p>${activityTimeline(progress.activities || [])}` : ''}</article>`;

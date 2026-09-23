@@ -30,6 +30,14 @@ impl Actor {
     }
 }
 
+/// Timing within an active native conversation run; never grants response permission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InputMode {
+    Steering,
+    FollowUp,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MessageInput {
@@ -40,6 +48,8 @@ pub struct MessageInput {
     pub mentions: Vec<PrincipalId>,
     #[serde(default)]
     pub reply_to: Option<MessageId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_mode: Option<InputMode>,
 }
 
 pub struct Messaging {
@@ -125,6 +135,9 @@ impl Messaging {
             }
         }
         let mut metadata = json!({"mentions":input.mentions,"automated_depth":self.actor.automated_depth.unwrap_or(0)});
+        if let Some(mode) = input.input_mode {
+            metadata["input_mode"] = json!(mode);
+        }
         if let Some(id) = &self.discussion {
             metadata["discussion_id"] = json!(id);
         }
