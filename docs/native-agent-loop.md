@@ -8,7 +8,8 @@ Harness 保留自己的执行引擎，不作为 Native 模型请求的一种实�
 
 | 模块 | 职责 |
 | --- | --- |
-| `engine.rs` / `Runtime` | Run 认领、Native/Harness 选择、终态持久化、显式子 Run 委派 |
+| `engine.rs` / `Runtime` | 公共 Run 认领、重放、终态持久化、显式子 Run 委派 |
+| `engine/dispatch.rs` | 引擎选择、续跑引擎兼容检查、分派到 Native/Harness |
 | `engine/native.rs` / `NativeRun` | 本次执行的上下文、工具会话、回合推进、完成与挂起结果 |
 | `engine/native/prepare.rs` | 配置与工具快照、身份和能力绑定、恢复显式工作 checkpoint |
 | `engine/native/inputs.rs` / `run_inputs.rs` | 安全边界轮询、参与判断、持久化接纳与输入终态 |
@@ -20,6 +21,20 @@ Harness 保留自己的执行引擎，不作为 Native 模型请求的一种实�
 `NativeRun` 借用宿主的存储、模型和取消信号，自己持有当前 transcript、usage、
 已使用的 call ID、成功消息发送的去重状态以及工具连接。委派子 Run 使用独立上下文，
 共享步数统计；这些状态不提升到 principal 全局。
+
+## 公共执行边界
+
+调度器为两种引擎共用准入、请求标识、任务绑定和结果结算。
+`scheduler/backend.rs` 集中表达执行前的差异：参与策略、上下文准备、
+Native 模型预算与 MCP 准入检查。公共执行流程不再组合 `external` 布尔值与
+可空的 Native 配置。适配模块是固定的两种引擎分派，不是插件注册层。
+
+Runtime 仍按 `claim → execute_claimed → finish` 执行。已保存的 Run 先返回，
+不会因引擎配置变化重新执行；新 Run 认领后才再次解析引擎。调度准入时的
+引擎选择不替代运行时配置检查。显式 Native 子 Run 继续使用原委派配置快照。
+Native 的双循环、工具和 checkpoint，Harness 的会话、协议与取消确认均保留原实现。
+两种引擎返回原有执行结果，并由公共终态逻辑保留 completed / suspended /
+canceled / interrupted / outcome_unknown 等区别。
 
 ## 循环层次
 

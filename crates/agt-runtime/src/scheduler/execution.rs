@@ -1,13 +1,13 @@
 //! Orchestrate one claimed task: admission, context, decision or Run, settlement.
-use super::{admission, completion, decision, guard::ScheduledModel};
+use super::{admission, backend::ScheduledEngine, completion, guard::ScheduledModel};
 use crate::schedule_state::ClaimDeferral;
 use crate::{
-    MessageTrigger, ModelClient, ResolvedAgent, RunRequest, Runtime, RuntimeError, ScheduleStore,
-    ScheduledTask, schedule_store::now_ms,
+    MessageTrigger, ModelClient, RunRequest, Runtime, ScheduleStore, ScheduledTask,
+    schedule_store::now_ms,
 };
 use agt_core::CancellationToken;
 use agt_mcp::DefaultMcpClientFactory;
-use anyhow::{Result, bail};
+use anyhow::Result;
 use serde_json::json;
 use std::path::Path;
 
@@ -21,20 +21,14 @@ pub(crate) fn execute(
     let Some(admitted) = admission::prepare(home, &mut store, &mut task, token)? else {
         return Ok(());
     };
-    let agent = if admitted.external {
-        None
-    } else {
-        Some(ResolvedAgent::load(home, &admitted.binding.agent)?)
-    };
+    let engine = ScheduledEngine::load(home, &admitted.binding.agent, admitted.engine)?;
     let mut scheduled_model = ScheduledModel {
         inner: model,
         home: home.into(),
         task: task.clone(),
         token: token.clone(),
     };
-    if let Some(agent) = &agent
-        && crate::work::triage::run(home, &task, agent, &mut scheduled_model)?
-    {
+    if engine.triage(home, &task, &mut scheduled_model)? {
         task.defer_claim(ClaimDeferral::QueueTriage);
         store.update(&task, now_ms())?;
         return Ok(());
@@ -44,7 +38,7 @@ pub(crate) fn execute(
         &mut store,
         &mut task,
         &admitted,
-        agent.as_ref(),
+        &engine,
         &mut scheduled_model,
         token,
     )?
@@ -59,18 +53,9 @@ pub(crate) fn execute(
         ..
     } = admitted;
     if task.state == "evaluating" {
-        return decision::evaluate(
-            &mut store,
-            &mut task,
-            &mut scheduled_model,
-            agent.as_ref().unwrap(),
-            &input,
-        );
+        return engine.evaluate(&mut store, &mut task, &mut scheduled_model, &input);
     }
-    if agent
-        .as_ref()
-        .is_some_and(|agent| !(agent.mcps.is_empty() || binding.allow_mcp && round.allow_mcp))
-    {
+    if engine.needs_mcp_authorization(binding.allow_mcp && round.allow_mcp) {
         task.block_for_mcp();
         store.update(&task, now_ms())?;
         return Ok(());
@@ -125,44 +110,14 @@ fn prepare_input(
     store: &mut ScheduleStore,
     task: &mut ScheduledTask,
     admitted: &admission::Admission,
-    agent: Option<&ResolvedAgent>,
+    engine: &ScheduledEngine,
     model: &mut dyn ModelClient,
     token: &CancellationToken,
 ) -> Result<Option<String>> {
-    let admission::Admission {
-        messaging,
-        trigger,
-        batch,
-        external,
-        ..
-    } = admitted;
-    let external = *external;
-    let context = if external {
-        let cutoff = store.context_cutoff(&task.conversation)?;
-        json!({"history":crate::conversation_context::visible_history(&messaging.im,task,cutoff)?,"summary":"","reset_through_seq":cutoff})
-    } else {
-        match crate::conversation_context::prepare(
-            home,
-            &messaging.im,
-            task,
-            agent.unwrap(),
-            model,
-            token,
-        ) {
-            Ok(context) => context,
-            Err(error) => {
-                task.state =
-                    if matches!(error, RuntimeError::Canceled | RuntimeError::Stopped(_)) {
-                        "canceled"
-                    } else {
-                        "failed"
-                    }
-                    .into();
-                task.reason = Some(format!("conversation context: {error}"));
-                store.update(task, now_ms())?;
-                return Ok(None);
-            }
-        }
+    let Some(context) =
+        engine.prepare_context(home, store, task, &admitted.messaging.im, model, token)?
+    else {
+        return Ok(None);
     };
     let presence: Vec<_> = store
         .tasks()?
@@ -174,32 +129,11 @@ fn prepare_input(
         })
         .map(|t| json!({"principal":t.principal,"state":t.state,"wake_at":t.due_at,"waiting_for_quiet":t.quiet}))
         .collect();
-    let history = if external {
-        context["history"].clone()
-    } else {
-        json!(
-            context["history"]
-                .as_array()
-                .unwrap_or(&Vec::new())
-                .iter()
-                .filter(|m| !task
-                    .triggers
-                    .iter()
-                    .any(|id| m["message_id"] == id.as_str()))
-                .collect::<Vec<_>>()
-        )
-    };
+    let history = engine.input_history(&context, task);
     let instruction =
         crate::conversation_instructions::execution(task.work_id.is_some(), task.work_notification);
     let report_obligation = crate::work::notification_obligation(home, store, task)?;
-    let input=json!({"instruction":instruction,"report_obligation":report_obligation,"discussion":task.discussion,"last_decision":task.reason,"now":now_ms(),"your_principal":task.principal,"conversation":task.conversation,"trigger":{"id":trigger.id},"messages":batch,"history":history,"conversation_summary":context["summary"],"context_reset_through_seq":context["reset_through_seq"],"presence":presence}).to_string();
-    if let Some(agent) = agent
-        && crate::context::estimate(&input) + crate::context::estimate(&agent.system_prompt)
-            > crate::context::input_budget(agent)
-    {
-        bail!(
-            "conversation input exceeds context budget; shorten the message batch or increase model context_window"
-        );
-    }
+    let input=json!({"instruction":instruction,"report_obligation":report_obligation,"discussion":task.discussion,"last_decision":task.reason,"now":now_ms(),"your_principal":task.principal,"conversation":task.conversation,"trigger":{"id":admitted.trigger.id},"messages":admitted.batch,"history":history,"conversation_summary":context["summary"],"context_reset_through_seq":context["reset_through_seq"],"presence":presence}).to_string();
+    engine.validate_input(&input)?;
     Ok(Some(input))
 }

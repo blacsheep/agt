@@ -1,9 +1,11 @@
 //! Check a claimed task before context preparation or model execution.
+use super::backend;
+use crate::engine::EngineKind;
 use crate::schedule_state::ClaimDeferral;
 use crate::{ScheduleStore, ScheduledTask, schedule_store::now_ms};
 use agt_core::CancellationToken;
 use agt_im::{MessageId, MessageListOptions, PrincipalId, PrincipalKind};
-use agt_service::{Actor, BindingStore, Messaging, ResponsePolicy, Role};
+use agt_service::{Actor, BindingStore, Messaging, Role};
 use anyhow::{Result, bail};
 use serde_json::{Value, json};
 use std::path::Path;
@@ -13,7 +15,7 @@ pub(super) struct Admission {
     pub messaging: Messaging,
     pub trigger: agt_im::Message,
     pub round: crate::Discussion,
-    pub external: bool,
+    pub engine: EngineKind,
     pub batch: Vec<Value>,
 }
 
@@ -41,22 +43,14 @@ pub(super) fn prepare(
     )?;
     let trigger = messaging.im.get_message(&MessageId::new(&task.message))?;
     let policy = BindingStore::open(home)?.policy(&trigger.conversation_id, &binding)?;
-    let external = crate::harness::agent_config(home, &binding.agent)?
-        .harness
-        .is_some();
+    let engine = EngineKind::resolve(home, &binding.agent)?;
     let mut eligible = false;
     let mut batch = Vec::new();
     let mut batch_bytes = 0;
     for id in &task.triggers {
         let message = messaging.im.get_message(&MessageId::new(id.as_str()))?;
         let peer = messaging.im.get_principal(&message.sender_id)?.kind != PrincipalKind::User;
-        let effective_policy = if external && policy != ResponsePolicy::Manual {
-            ResponsePolicy::Mentioned
-        } else if peer && policy != ResponsePolicy::Manual {
-            ResponsePolicy::All
-        } else {
-            policy
-        };
+        let effective_policy = backend::response_policy(engine, policy, peer);
         eligible |= messaging.may_respond(&message, effective_policy)?;
         if message.deleted_at.is_none() {
             let item = json!({"seq":message.seq,"message_id":message.id,"sender":message.sender_id,"body":message.body});
@@ -117,9 +111,7 @@ pub(super) fn prepare(
     if task.decision_required || task.work_id.is_some() {
         task.through_seq = conversation.last_message_seq;
     }
-    if external && task.state == "evaluating" {
-        task.ready_external_reply();
-        store.update(task, now_ms())?;
+    if backend::admit_participation(engine, store, task)? {
         return Ok(None);
     }
     Ok(Some(Admission {
@@ -127,7 +119,7 @@ pub(super) fn prepare(
         messaging,
         trigger,
         round,
-        external,
+        engine,
         batch,
     }))
 }

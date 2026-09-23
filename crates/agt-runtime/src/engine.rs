@@ -12,7 +12,9 @@ use crate::{
     ModelClient, ResolvedAgent, Result, RunRecord, RunRequest, RunState, RunStore, RuntimeError,
 };
 
+mod dispatch;
 mod native;
+pub(crate) use dispatch::EngineKind;
 
 pub struct Runtime<'a> {
     home: PathBuf,
@@ -59,49 +61,7 @@ impl<'a> Runtime<'a> {
             return Ok(record);
         }
         let mut step_count = 0;
-        let result = (|| {
-            check_canceled(cancellation)?;
-            if crate::harness::agent_config(&self.home, &request.agent)?
-                .harness
-                .is_some()
-            {
-                if let Some(task) = &self.scheduled_task
-                    && !task.work_notification
-                    && let Some(id) = &task.work_id
-                    && crate::work::WorkLedger::open(&self.home)
-                        .and_then(|l| l.get(id))
-                        .map_err(|_| RuntimeError::Configuration("cannot read continuation"))?
-                        .resume_from
-                        .is_some()
-                {
-                    let item = crate::work::WorkLedger::open(&self.home)
-                        .and_then(|l| l.get(id))
-                        .map_err(|_| RuntimeError::Configuration("cannot read continuation"))?;
-                    if !matches!(
-                        self.store
-                            .checkpoint(item.resume_from.as_deref().unwrap())?,
-                        crate::work::wait::Checkpoint::Codex { .. }
-                    ) {
-                        return Err(RuntimeError::Configuration(
-                            "native continuation cannot switch to a harness",
-                        ));
-                    }
-                }
-                return crate::harness::execute(
-                    &self.home,
-                    &mut record,
-                    &mut self.store,
-                    cancellation,
-                    self.scheduled_task.as_ref(),
-                    self.discussion.as_deref(),
-                );
-            }
-            let agents = std::iter::once(&request.agent)
-                .chain(&request.delegates)
-                .map(|name| Ok((name.clone(), ResolvedAgent::load(&self.home, name)?)))
-                .collect::<Result<BTreeMap<_, _>>>()?;
-            self.drive(&mut record, &agents, &mut step_count, cancellation)
-        })();
+        let result = self.execute_claimed(&request, &mut record, &mut step_count, cancellation);
         record.model_steps = step_count;
         self.finish(record, result)
     }

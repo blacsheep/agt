@@ -21,7 +21,8 @@ retains its original reads, writes and transaction boundaries.
 | `scheduler/ingress.rs` | Convert IM deliveries into durable scheduler tasks |
 | `scheduler/admission.rs` | Recheck binding, policy, discussion, snapshot and waits |
 | `scheduler/guard.rs` | Transaction fences and per-attempt model accounting |
-| `scheduler/execution.rs` | Context preparation, work triage and Run orchestration |
+| `scheduler/execution.rs` | Shared input envelope, Run request and execution orchestration |
+| `scheduler/backend.rs` | Native/Harness policy, context, participation and model-specific checks |
 | `scheduler/decision.rs` | Participation inference and silent/wait/ready outcomes |
 | `scheduler/completion.rs` | Run settlement, fenced publication and report obligations |
 
@@ -31,6 +32,26 @@ not fall through into execution. Model and external calls remain outside the
 short fence transactions. Publication still checks the claim before sending.
 `ScheduleStore` retains persistence, atomic claims and counter transitions;
 this split does not introduce new task states, schema changes or engine protocols.
+
+## Engine preparation boundary
+
+Admission resolves an `EngineKind` using the same agent configuration lookup as
+Runtime dispatch. Native configuration is still resolved only after admission.
+`scheduler/backend.rs` owns the differences below; it does not run either protocol.
+
+| Concern | Native | Harness |
+| --- | --- | --- |
+| Nonmanual response policy | Agent peers use participation; human policy is preserved | Direct/mentioned messages |
+| Participation and work triage | Native restricted model calls | Framework admission, no native inference |
+| Context | Token-budgeted history and compaction; exclude trigger messages from history | Visible history including triggers for existing Harness rendering |
+| Budget and mounted MCP admission | Existing native model budget and binding/discussion checks | Existing Harness validation during execution |
+
+Shared code still creates the input envelope and Run key, binds the scheduled task,
+and settles the returned Run. Error handling is unchanged: native context failures
+settle the task at preparation; Harness context errors propagate to the existing
+execution boundary. `engine/dispatch.rs` selects execution only after Run claim;
+Runtime retains common replay and terminal-state persistence. Cancellation,
+checkpoint compatibility and external protocol facts are not normalized away.
 
 ## Task transitions
 

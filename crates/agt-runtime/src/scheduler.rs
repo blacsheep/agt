@@ -17,6 +17,7 @@ fn im(home: &Path) -> Result<ImStore> {
 }
 
 mod admission;
+mod backend;
 mod completion;
 mod controls;
 mod decision;
