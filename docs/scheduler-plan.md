@@ -7,6 +7,31 @@ The scheduler owns discussion rounds, independent input tasks, waits, leases and
 allowances in runtime/scheduler.db. IM stays generic. Explicit runs retain their
 own execution rules; automatic message execution uses only the scheduler.
 
+## Module boundaries
+
+`scheduler.rs` is the coordinator and preserves the existing public entry points.
+Its tick order is explicit: heartbeat, poll active jobs, reconcile work, scan inputs,
+expire discussions, reconcile deliveries, then dispatch ready tasks. Each stage
+retains its original reads, writes and transaction boundaries.
+
+| Module | Responsibility |
+| --- | --- |
+| `scheduler/lease.rs` | Coordinator ownership, independent heartbeat and release |
+| `scheduler/controls.rs` | Human authorization, delete/dissolve and context reset |
+| `scheduler/ingress.rs` | Convert IM deliveries into durable scheduler tasks |
+| `scheduler/admission.rs` | Recheck binding, policy, discussion, snapshot and waits |
+| `scheduler/guard.rs` | Transaction fences and per-attempt model accounting |
+| `scheduler/execution.rs` | Context preparation, work triage and Run orchestration |
+| `scheduler/decision.rs` | Participation inference and silent/wait/ready outcomes |
+| `scheduler/completion.rs` | Run settlement, fenced publication and report obligations |
+
+The claimed-task path is `admission → context → decision or Run → completion`.
+A participation decision still releases its slot before reply admission; it does
+not fall through into execution. Model and external calls remain outside the
+short fence transactions. Publication still checks the claim before sending.
+`ScheduleStore` retains persistence, atomic claims and counter transitions;
+this split does not introduce new task states, schema changes or engine protocols.
+
 ## Messages and running input queues
 
 Human messages require explicit automatic-reply authorization. The first creates

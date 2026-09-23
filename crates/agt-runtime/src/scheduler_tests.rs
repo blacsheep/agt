@@ -1,9 +1,17 @@
+use super::guard::ScheduledModel;
 use super::*;
+use crate::RunRequest;
+use crate::participation::ParticipationDecision;
+use crate::{ModelClient, ResolvedAgent, RunState, RuntimeError, ScheduledTask};
 use agt_agent::{AgentConfig, AgentStore};
 use agt_im::PrincipalInput;
+use agt_im::{MessageId, PrincipalKind};
 use agt_model::{ModelConfig, ModelReference, ModelStore};
 use agt_provider::{ProviderConfig, ProviderStore};
+use agt_service::{Actor, MessageInput, Messaging, ResponsePolicy, Role};
 use agt_service::{Binding, ToolService};
+use serde_json::{Value, json};
+use std::sync::mpsc;
 
 fn fixture() -> (tempfile::TempDir, ToolService, String) {
     let home = tempfile::tempdir().unwrap();
