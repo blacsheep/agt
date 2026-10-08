@@ -8,6 +8,10 @@ pub struct ToolError {
     pub message: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub argument_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema_path: Option<String>,
 }
 
 impl ToolError {
@@ -16,6 +20,8 @@ impl ToolError {
             code,
             message,
             field: None,
+            argument_path: None,
+            schema_path: None,
         }
     }
 
@@ -24,6 +30,23 @@ impl ToolError {
             code: "invalid_arguments",
             message,
             field: field.map(str::to_owned),
+            argument_path: None,
+            schema_path: None,
+        }
+    }
+
+    pub fn from_contract(error: agt_core::tool_schema::ContractError) -> Self {
+        Self {
+            code: error.code,
+            message: error.message,
+            field: error
+                .field
+                .split('/')
+                .nth(1)
+                .filter(|s| !s.is_empty())
+                .map(str::to_owned),
+            argument_path: (!error.field.is_empty()).then_some(error.field),
+            schema_path: (!error.schema_path.is_empty()).then_some(error.schema_path),
         }
     }
 
@@ -34,6 +57,13 @@ impl ToolError {
     pub(crate) fn classify(error: anyhow::Error) -> Self {
         if let Some(error) = error.downcast_ref::<Self>() {
             return error.clone();
+        }
+        if let Some(agt_mcp::McpError::ToolSchema { tool, source }) =
+            error.downcast_ref::<agt_mcp::McpError>()
+        {
+            let mut error = Self::from_contract(source.clone());
+            error.field = Some(format!("tools/{tool}/inputSchema"));
+            return error;
         }
         if error.downcast_ref::<serde_json::Error>().is_some() {
             return Self::invalid(
@@ -117,6 +147,9 @@ impl std::fmt::Display for ToolError {
         write!(f, "{}: {}", self.code, self.message)?;
         if let Some(field) = &self.field {
             write!(f, " (field: {field})")?;
+        }
+        if let Some(path) = &self.schema_path {
+            write!(f, " (schema: {path})")?;
         }
         Ok(())
     }

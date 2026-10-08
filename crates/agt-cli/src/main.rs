@@ -331,10 +331,21 @@ enum McpCommand {
     #[command(alias = "edit")]
     Update(McpWriteArgs),
     Test(RefArgs),
+    /// Connect, discover tools, and validate input schemas (executes server startup).
+    Probe(McpProbeArgs),
     #[command(alias = "remove")]
     Delete(DeleteArgs),
     #[command(subcommand)]
     Category(CategoryCommand),
+}
+
+#[derive(Debug, Args)]
+struct McpProbeArgs {
+    name: String,
+    #[arg(long)]
+    category: Option<String>,
+    #[arg(long)]
+    working_directory: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -1312,6 +1323,12 @@ fn dispatch_mcp(command: McpCommand, home: &Path, output: OutputMode, yes: bool)
                 }),
                 output,
             )
+        }
+        McpCommand::Probe(args) => {
+            let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
+            let result = agt_service::Resources::new(home)
+                .mcp_probe(&format!("{category}/{name}"), &args.working_directory)?;
+            emit_value(result, output)
         }
         McpCommand::Delete(args) => delete_resource(
             ResourceKind::Mcp,

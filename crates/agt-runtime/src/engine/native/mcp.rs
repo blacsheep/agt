@@ -7,6 +7,7 @@ pub(super) struct ToolSession {
     clients: Vec<Box<dyn McpClient>>,
     pub(super) targets: BTreeMap<String, (usize, String)>,
     pub(super) schemas: Vec<Value>,
+    pub(super) validators: BTreeMap<String, agt_core::tool_schema::ToolSchema>,
 }
 
 impl ToolSession {
@@ -20,6 +21,7 @@ impl ToolSession {
             clients: Vec::new(),
             targets: BTreeMap::new(),
             schemas: Vec::new(),
+            validators: BTreeMap::new(),
         };
         for (server_index, document) in agent.mcps.iter().enumerate() {
             check_canceled(cancellation)?;
@@ -51,6 +53,19 @@ impl ToolSession {
             return Err(RuntimeError::Tool("more than 128 tools attached"));
         }
         Ok(session)
+    }
+
+    pub(super) fn compile_schemas(&mut self) -> Result<()> {
+        for schema in &self.schemas {
+            let name = schema["function"]["name"].as_str().expect("tool name");
+            let validator =
+                agt_core::tool_schema::ToolSchema::compile(&schema["function"]["parameters"])
+                    .map_err(|error| {
+                        RuntimeError::Invalid(format!("invalid tool schema {name}: {error}"))
+                    })?;
+            self.validators.insert(name.to_owned(), validator);
+        }
+        Ok(())
     }
 
     pub(super) fn call(

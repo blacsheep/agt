@@ -18,6 +18,14 @@ impl Codex {
         tool: &mut dyn FnMut(&str, Value) -> Result<Value>,
         mut approvals: Option<&mut dyn crate::ApprovalHandler>,
     ) -> Result<String> {
+        let validators = execution
+            .tools
+            .iter()
+            .map(|tool| {
+                agt_core::tool_schema::ToolSchema::compile(&tool.input_schema)
+                    .map(|schema| (tool.name.clone(), schema))
+            })
+            .collect::<std::result::Result<std::collections::BTreeMap<_, _>, _>>()?;
         let mut params = json!({"cwd":harness.working_directory,"approvalPolicy":if approvals.is_some(){"on-request"}else{"never"},"approvalsReviewer":"user","sandbox":harness.sandbox.protocol(),"developerInstructions":execution.instructions});
         if let Some(model) = &harness.model {
             params["model"] = json!(model);
@@ -140,7 +148,7 @@ impl Codex {
                         }
                     }
                 } else if method == "item/tool/call" {
-                    self.call_tool(&value, execution.tools, event, tool)?;
+                    self.call_tool(&value, &validators, event, tool)?;
                 } else if value.get("id").is_some() && value.get("method").is_some() {
                     event(Event::Activity {
                         tool_name: None,
@@ -251,7 +259,7 @@ impl Codex {
     fn call_tool(
         &mut self,
         value: &Value,
-        tools: &[Tool],
+        validators: &std::collections::BTreeMap<String, agt_core::tool_schema::ToolSchema>,
         event: &mut dyn FnMut(Event<'_>) -> Result<()>,
         tool: &mut dyn FnMut(&str, Value) -> Result<Value>,
     ) -> Result<()> {
@@ -267,9 +275,11 @@ impl Codex {
             status: "running",
         })?;
         let name = p["tool"].as_str().context("missing dynamic tool name")?;
-        let allowed = tools.iter().any(|t| t.name == name);
-        let result = if allowed {
-            tool(name, p["arguments"].clone())
+        let result = if let Some(validator) = validators.get(name) {
+            validator
+                .validate(&p["arguments"])
+                .map_err(anyhow::Error::from)
+                .and_then(|()| tool(name, p["arguments"].clone()))
         } else {
             Err(anyhow::anyhow!("tool unavailable"))
         };

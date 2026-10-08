@@ -495,6 +495,20 @@ impl AgentStore {
         agent: &str,
         mutate: impl FnOnce(&mut AgentConfig) -> Result<()>,
     ) -> Result<StoredAgent> {
+        self.read_in(agent_category, agent)?; // Preserve missing-agent diagnostics before opening the sidecar.
+        // Keep the lock on a stable sidecar: agent.yaml is atomically replaced.
+        let lock_path = self
+            .agent_dir_in(agent_category, agent)?
+            .join(".update.lock");
+        check_no_symlinks_under(self.paths.home(), &lock_path).map_err(map_core_error)?;
+        let lock = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|e| AgentError::io(&lock_path, e))?;
+        lock.lock().map_err(|e| AgentError::io(&lock_path, e))?;
         let mut stored = self.read_in(agent_category, agent)?;
         mutate(&mut stored.config)?;
         stored.config.validate()?;

@@ -148,13 +148,24 @@ impl McpDocument {
         let summary = self.summary();
         let factory = DefaultMcpClientFactory;
         let mut client = factory.connect(self, cwd, McpLimits::default())?;
-        let mut tool_names = client
-            .list_tools()?
-            .into_iter()
-            .map(|tool| tool.name)
-            .collect::<Vec<_>>();
-        tool_names.sort();
-        client.close()?;
+        let result: Result<Vec<String>> = (|| {
+            let tools = client.list_tools()?;
+            let mut names = Vec::with_capacity(tools.len());
+            for tool in tools {
+                agt_core::tool_schema::ToolSchema::compile(&tool.input_schema).map_err(
+                    |source| McpError::ToolSchema {
+                        tool: tool.name.clone(),
+                        source,
+                    },
+                )?;
+                names.push(tool.name);
+            }
+            names.sort();
+            Ok(names)
+        })();
+        let closed = client.close();
+        let tool_names: Vec<String> = result?;
+        closed?;
 
         Ok(McpTestResult {
             name: self.name.to_string(),
@@ -162,7 +173,7 @@ impl McpDocument {
             target: summary.target.unwrap_or_else(|| "-".to_string()),
             tool_count: tool_names.len(),
             tool_names,
-            smoke: "initialize 与 tools/list 成功".to_string(),
+            smoke: "initialize、tools/list 与 inputSchema 校验成功".to_string(),
         })
     }
 

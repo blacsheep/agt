@@ -100,3 +100,42 @@ fn command_details_are_reported_without_replacing_activity_events() {
     assert_eq!(details[0].1["command"], "secret-command");
     assert_eq!(details[1].1["aggregatedOutput"], "private-output");
 }
+
+#[test]
+fn schema_failure_returns_tool_error_without_invoking_host_callback() {
+    let (dir, config) = fixture();
+    let mut event = |_: Event<'_>| Ok(());
+    let mut client = Codex::connect(&config, &mut event).unwrap();
+    let tools = [Tool {
+        name: "framework_resource_list".into(),
+        description: "list".into(),
+        input_schema: json!({"type":"object","properties":{"kind":{"type":"integer"}},"required":["kind"]}),
+    }];
+    let result = client
+        .execute(
+            &config,
+            Execution {
+                input: "TOOL",
+                instructions: "",
+                thread: None,
+                tools: &tools,
+            },
+            &mut event,
+            &mut |_, _| panic!("invalid arguments reached callback"),
+        )
+        .unwrap();
+    assert_eq!(result, "tool completed");
+    let log = std::fs::read_to_string(dir.path().join("protocol.jsonl")).unwrap();
+    let reply = log
+        .lines()
+        .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+        .find(|v| v["id"] == "tool")
+        .unwrap();
+    assert_eq!(reply["result"]["success"], false);
+    assert!(
+        reply["result"]["contentItems"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("invalid_arguments")
+    );
+}

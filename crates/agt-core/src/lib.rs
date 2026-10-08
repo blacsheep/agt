@@ -4,6 +4,7 @@ pub mod error;
 pub mod ids;
 pub mod resource_ref;
 pub mod tool;
+pub mod tool_schema;
 
 pub use cancellation::CancellationToken;
 pub use category::{

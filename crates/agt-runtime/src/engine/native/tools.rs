@@ -34,11 +34,17 @@ impl NativeRun<'_, '_> {
                 return Err(RuntimeError::Model("duplicate tool call ID"));
             }
             if call.function.name == "delegate" && !self.record.request.delegates.is_empty() {
-                let args: Delegation = serde_json::from_str(&call.function.arguments)
-                    .map_err(|_| RuntimeError::Tool("invalid delegation arguments"))?;
-                if !self.record.request.delegates.contains(&args.agent)
-                    || args.input.trim().is_empty()
-                    || args.input.len() > 256 * 1024
+                let args: Value = serde_json::from_str(&call.function.arguments)?;
+                if args["agent"].as_str().is_some_and(|agent| {
+                    !self
+                        .record
+                        .request
+                        .delegates
+                        .iter()
+                        .any(|allowed| allowed == agent)
+                }) || args["input"]
+                    .as_str()
+                    .is_some_and(|input| input.trim().is_empty() || input.len() > 256 * 1024)
                 {
                     return Err(RuntimeError::Tool(
                         "delegation target or input is not allowed",
@@ -61,7 +67,21 @@ impl NativeRun<'_, '_> {
             "tool_running",
         )?;
         for call in calls {
+            check_canceled(self.cancellation)?;
+            self.runtime.check_schedule()?;
             let (arguments, invocation) = self.prepare_tool_call(&call)?;
+            if let Err(error) = self.tools.validators[&call.function.name].validate(&arguments) {
+                // Invalid arguments are repairable tool outcomes, never approval requests.
+                let invocation = self.before_tool_call(invocation)?;
+                let error = if self.communication_names.contains(&call.function.name) {
+                    json!(agt_service::ToolError::from_contract(error))
+                } else {
+                    json!(error)
+                };
+                let output = json!({"error": error}).to_string();
+                self.after_tool_call(&call, invocation, Ok((output, Some(error))))?;
+                continue;
+            }
             let scope =
                 crate::approval::Scope::new(self.record, self.runtime.scheduled_task.as_ref());
             let allowed = self.permissions.authorize(
@@ -230,12 +250,8 @@ fn validate_message(message: &Value) -> Result<Vec<ToolCall>> {
         if call.kind != "function" || call.id.trim().is_empty() || call.id.len() > 256 {
             return Err(RuntimeError::Model("invalid function call identity"));
         }
-        if !serde_json::from_str::<Value>(&call.function.arguments)
-            .map_err(|_| RuntimeError::Model("tool arguments must be JSON"))?
-            .is_object()
-        {
-            return Err(RuntimeError::Model("tool arguments must be an object"));
-        }
+        serde_json::from_str::<Value>(&call.function.arguments)
+            .map_err(|_| RuntimeError::Model("tool arguments must be JSON"))?;
     }
     Ok(calls)
 }

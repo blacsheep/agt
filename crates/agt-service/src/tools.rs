@@ -10,6 +10,7 @@ pub struct ToolService {
     home: PathBuf,
     messaging: Messaging,
     resource_management: bool,
+    mcp_probe_enabled: bool,
     harness: Option<Box<dyn crate::HarnessControl>>,
     execution: Option<Box<dyn crate::ExecutionControl>>,
     work: Option<Box<dyn crate::WorkControl>>,
@@ -18,6 +19,7 @@ impl ToolService {
     pub fn open(home: &Path, actor: Actor) -> Result<Self> {
         Ok(Self {
             home: home.to_owned(),
+            mcp_probe_enabled: actor.role == Role::Manager,
             messaging: Messaging::open(home, actor)?,
             resource_management: false,
             harness: None,
@@ -60,7 +62,16 @@ impl ToolService {
             result.push(schema("task_input","Save this task and ask its requester for business input, resuming on task_reply or deadline (future Unix milliseconds). Call alone and end the turn. This is not an execution approval or sandbox permission request.",json!({"question":{"type":"string"},"deadline":{"type":"integer"}}),&["question","deadline"]));
             result.push(schema("task_await", "Register a durable wait, not just a spoken promise to wait. Suspend this explicit work task until all 1..20 requested dependencies resolve, or deadline (Unix milliseconds). Call alone, never in a parallel tool batch. Runtime saves completed tool results and releases the execution slot; continuation receives the outcome, including failure, unknown outcome or timeout. Other tasks for this Agent can run while waiting. Does not cancel the dependency on timeout.", json!({"task_id":{"type":"string"},"task_ids":{"type":"array","items":{"type":"string"}},"deadline":{"type":"integer"}}), &["deadline"]));
         }
+        if !self.mcp_probe_enabled {
+            result.retain(|schema| schema["name"] != "mcp_probe");
+        }
         result
+    }
+    /// The host supplies effective binding AND discussion authorization.
+    /// Resource management alone does not authorize starting an MCP server.
+    pub fn with_mcp_probe(mut self, enabled: bool) -> Self {
+        self.mcp_probe_enabled = enabled;
+        self
     }
     pub fn with_work_control(mut self, work: Box<dyn crate::WorkControl>) -> Self {
         self.work = Some(work);
@@ -200,6 +211,25 @@ impl ToolService {
             "resource_test" => {
                 let d: Reference = serde_json::from_value(args)?;
                 resources.test(&d.kind, &d.reference)?
+            }
+            "mcp_probe" => {
+                self.require_resource_management()?;
+                let d: McpProbe = serde_json::from_value(args)?;
+                resources.mcp_probe(&d.reference, Path::new(&d.working_directory))?
+            }
+            "agent_mcp_list" => {
+                self.require_resource_management()?;
+                let d: AgentMountList = serde_json::from_value(args)?;
+                resources.agent_mcps(&d.agent)?
+            }
+            "agent_mcp_attach" | "agent_mcp_detach" => {
+                self.require_resource_management()?;
+                let d: AgentMount = serde_json::from_value(args)?;
+                if name == "agent_mcp_attach" {
+                    resources.agent_mcp_attach(&d.agent, &d.mcp)?
+                } else {
+                    resources.agent_mcp_detach(&d.agent, &d.mcp)?
+                }
             }
             "resource_category_list" => {
                 let d: Kind = serde_json::from_value(args)?;
@@ -514,6 +544,10 @@ fn schemas(role: Role, resource_management: bool) -> Vec<Value> {
             schema("resource_delete","First omit confirm (or use null) to get dependency-aware deletion plan; then pass exact ordered items as confirm. Empty array does not authorize a nonempty plan. Protects the default prompt.",json!({"kind":kind,"reference":string,"recursive":{"type":"boolean","default":false},"confirm":{"type":["array","null"],"items":string}}),&["kind","reference"]),
             schema("provider_models", "Fetch model IDs using stored Provider credentials. Calls /models; does not run inference.", json!({"reference":string}), &["reference"]),
             schema("resource_test", "Validate Provider or MCP configuration only. Does not contact servers or execute MCP commands.", json!({"kind":{"enum":["provider","mcp"]},"reference":string}), &["kind","reference"]),
+            schema("mcp_probe", "Explicitly start/connect a registered MCP in working_directory, initialize, list tools and validate their input schemas. Closes the connection; does not call tools. Unlike resource_test this executes configured server commands or contacts its URL. Does not prove business behavior; run contract tests separately.", json!({"reference":string,"working_directory":string}), &["reference","working_directory"]),
+            schema("agent_mcp_list", "List configured MCP mounts on an Agent. Mounts affect new Runs only; binding and discussion authorization are separate.", json!({"agent":string}), &["agent"]),
+            schema("agent_mcp_attach", "Attach an existing MCP resource to a Native Agent (category/name references). Idempotent; preserves other mounts. Effective on new Runs only. Does not connect, enable the Agent, or grant MCP authorization. Harness Agents do not support AGT MCP mounts.", json!({"agent":string,"mcp":string}), &["agent","mcp"]),
+            schema("agent_mcp_detach", "Remove one MCP mount from an Agent, preserving others. Idempotent when already absent. Effective on new Runs only; running tool snapshots remain unchanged.", json!({"agent":string,"mcp":string}), &["agent","mcp"]),
             schema("resource_category_list", "List categories in a resource domain.", json!({"kind":kind}), &["kind"]),
             schema("resource_category_create", "Create a category in a resource domain.", json!({"kind":kind,"category":string}), &["kind","category"]),
             schema("resource_category_delete", "Delete an empty non-default category. Nonempty and default categories are protected.", json!({"kind":kind,"category":string}), &["kind","category"]),
@@ -536,71 +570,11 @@ fn schemas(role: Role, resource_management: bool) -> Vec<Value> {
     tools
 }
 
-// Validate the small schema vocabulary used by our own tool envelopes. Nested
-// resource documents remain validated by their typed resource parsers, not here.
+// Typed resource and business validation remains in each implementation.
 fn validate_arguments(schema: &Value, args: &Value) -> std::result::Result<(), ToolError> {
-    let args = args
-        .as_object()
-        .ok_or_else(|| ToolError::invalid(None, "Arguments must be a JSON object."))?;
-    let properties = schema["properties"].as_object().expect("tool properties");
-    if args.keys().any(|key| !properties.contains_key(key)) {
-        return Err(ToolError::invalid(
-            None,
-            "Unknown argument; use only fields declared in the tool schema.",
-        ));
-    }
-    for required in schema["required"].as_array().expect("required fields") {
-        let field = required.as_str().expect("field name");
-        if !args.contains_key(field) {
-            return Err(ToolError::invalid(
-                Some(field),
-                "Required argument is missing.",
-            ));
-        }
-    }
-    // Field names come from our schema, never untrusted input.
-    for (field, spec) in properties {
-        if let Some(value) = args.get(field)
-            && !matches_spec(spec, value)
-        {
-            return Err(ToolError::invalid(
-                Some(field),
-                "Argument must match the type, enum and bounds declared in the tool schema.",
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn matches_spec(spec: &Value, value: &Value) -> bool {
-    let type_matches = |kind: &str| match kind {
-        "null" => value.is_null(),
-        "string" => value.is_string(),
-        "boolean" => value.is_boolean(),
-        "integer" => value.is_i64() || value.is_u64(),
-        "array" => value.is_array(),
-        "object" => value.is_object(),
-        _ => false,
-    };
-    let valid_type = match &spec["type"] {
-        Value::String(kind) => type_matches(kind),
-        Value::Array(kinds) => kinds.iter().any(|k| k.as_str().is_some_and(type_matches)),
-        Value::Null => true, // enum-only property
-        _ => false,
-    };
-    valid_type
-        && spec
-            .get("enum")
-            .is_none_or(|values| values.as_array().expect("enum").contains(value))
-        && spec["minimum"]
-            .as_f64()
-            .is_none_or(|min| value.as_f64().is_some_and(|n| n >= min))
-        && spec["maximum"]
-            .as_f64()
-            .is_none_or(|max| value.as_f64().is_some_and(|n| n <= max))
-        && value
-            .as_array()
-            .is_none_or(|values| values.iter().all(|item| matches_spec(&spec["items"], item)))
+    let validator =
+        agt_core::tool_schema::ToolSchema::compile(schema).map_err(ToolError::from_contract)?;
+    validator.validate(args).map_err(ToolError::from_contract)
 }
 
 #[derive(Deserialize)]
@@ -722,4 +696,22 @@ fn limit_u32() -> u32 {
 }
 fn yes() -> bool {
     true
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct McpProbe {
+    reference: String,
+    working_directory: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentMountList {
+    agent: String,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentMount {
+    agent: String,
+    mcp: String,
 }

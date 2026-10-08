@@ -381,3 +381,47 @@ fn builtin_resource_mounts_are_configurable_from_cli() {
     );
     fs::remove_dir_all(home).unwrap();
 }
+
+#[test]
+fn mcp_probe_is_explicit_and_checks_tool_schemas() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path().join("home");
+    assert!(init(&home).status.success());
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../agt-runtime/tests/fixtures/contract_mcp.py");
+    let log = temp.path().join("calls");
+    let file = temp.path().join("mcp.json");
+    let config = serde_json::json!({"mcpServers":{"counter":{"command":"python3","args":[fixture,"valid",log]}}});
+    fs::write(&file, config.to_string()).unwrap();
+    assert!(
+        run(
+            &home,
+            &["mcp", "create", "counter", "--file", file.to_str().unwrap()]
+        )
+        .status
+        .success()
+    );
+    assert!(run(&home, &["mcp", "test", "counter"]).status.success());
+    assert!(!temp.path().join("calls.starts").exists());
+    let output = run(
+        &home,
+        &[
+            "--output",
+            "json",
+            "mcp",
+            "probe",
+            "counter",
+            "--working-directory",
+            home.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["schemas_valid"], true);
+    assert!(temp.path().join("calls.starts").exists());
+    assert!(!log.exists());
+}

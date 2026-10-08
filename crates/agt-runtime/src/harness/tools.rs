@@ -72,6 +72,7 @@ impl ToolBridge<'_> {
         let task = self.task;
         let invoke = || service.call(name, args).map_err(error);
         if let Some(t) = task
+            && name != "mcp_probe"
             && !name.starts_with("harness_")
             && !matches!(
                 name,

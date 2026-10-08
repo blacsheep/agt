@@ -1765,3 +1765,5 @@ mod loop_stages;
 
 #[path = "permission/cases.rs"]
 mod permissions;
+
+mod tool_contract;

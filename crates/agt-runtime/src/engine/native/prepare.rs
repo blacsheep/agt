@@ -130,6 +130,9 @@ impl<'run, 'host> NativeRun<'run, 'host> {
                         service
                             .with_discussion(runtime.discussion.clone())
                             .with_resource_management(resource_management)
+                            .with_mcp_probe(
+                                record.request.trigger.as_ref().is_none_or(|t| t.allow_mcp),
+                            )
                     })
                     .map_err(|_| RuntimeError::Tool("cannot initialize framework tools"))
             })
@@ -146,6 +149,8 @@ impl<'run, 'host> NativeRun<'run, 'host> {
                     && !tool_name.starts_with("memory_")
                     && tool_name != "local_exec"
                     && tool_name != "provider_models"
+                    && tool_name != "mcp_probe"
+                    && !tool_name.starts_with("agent_mcp_")
                     && !matches!(
                         tool_name,
                         "principal_create"
@@ -166,6 +171,7 @@ impl<'run, 'host> NativeRun<'run, 'host> {
         if tools.schemas.len() > 128 {
             return Err(RuntimeError::Tool("more than 128 tools attached"));
         }
+        tools.compile_schemas()?;
         // The discovered schemas are also part of the execution snapshot.
         record.config_fingerprint = Some(fingerprint(&serde_json::to_vec(&(
             &record.config_fingerprint,

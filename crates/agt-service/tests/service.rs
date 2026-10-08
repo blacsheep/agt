@@ -1076,3 +1076,5 @@ fn message_input_mode_is_validated_persisted_and_part_of_idempotency() {
     }
     assert!(owner.call("message_send",json!({"conversation":chat["id"],"body":"invalid","request_key":"bad","input_mode":"interrupt"})).is_err());
 }
+
+mod assembly;

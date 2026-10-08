@@ -22,6 +22,11 @@ impl fmt::Display for McpStderrSummary {
 
 #[derive(Debug, thiserror::Error)]
 pub enum McpError {
+    #[error("invalid input schema for tool {tool}: {source}")]
+    ToolSchema {
+        tool: String,
+        source: agt_core::tool_schema::ContractError,
+    },
     #[error(transparent)]
     Category {
         #[from]

@@ -85,6 +85,7 @@ impl NativeRun<'_, '_> {
             && !task_tool
             && !call.function.name.starts_with("framework_harness_")
             && call.function.name != "framework_local_exec"
+            && call.function.name != "framework_mcp_probe"
         {
             crate::scheduler::guarded(&self.runtime.home, task, operation)?
         } else {
