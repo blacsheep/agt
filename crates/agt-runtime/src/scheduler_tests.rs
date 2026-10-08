@@ -17,6 +17,9 @@ fn fixture() -> (tempfile::TempDir, ToolService, String) {
     let home = tempfile::tempdir().unwrap();
     let path = home.path();
     agt_config::initialize_home(Some(path.into())).unwrap();
+    let mut policy = agt_config::RuntimeConfig::load(path).unwrap();
+    policy.permissions.mode = agt_config::runtime::PermissionMode::AutoAllow;
+    policy.save(path).unwrap();
     agt_prompt::PromptStore::new(path)
         .ensure_default_prompt()
         .unwrap();

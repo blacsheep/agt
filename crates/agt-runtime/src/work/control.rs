@@ -629,6 +629,12 @@ pub(super) fn view(home: &Path, store: &ScheduleStore, item: &WorkItem) -> Resul
         {
             value["execution_status"] = json!("canceling");
         }
+        value["execution_engine"] = run
+            .execution
+            .as_ref()
+            .and_then(|e| e.get("engine"))
+            .cloned()
+            .unwrap_or(json!("native"));
         if let Some(execution) = &run.execution {
             value["execution_ids"] = json!({"run_id":run.id,"thread_id":execution["thread_id"],"turn_id":execution["turn_id"],"session_record":execution["session_record"]});
         }

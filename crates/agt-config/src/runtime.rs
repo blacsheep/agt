@@ -10,6 +10,7 @@ pub struct RuntimeConfig {
     pub scheduler: SchedulerConfig,
     pub memory: MemoryConfig,
     pub execution: ExecutionConfig,
+    pub permissions: PermissionConfig,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -31,6 +32,41 @@ pub struct ExecutionConfig {
     pub enabled: bool,
     pub timeout_seconds: Option<u32>,
     pub output_bytes: usize,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionMode {
+    #[default]
+    ModelReview,
+    Manual,
+    AutoAllow,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct PermissionConfig {
+    pub harness_mode: HarnessPermissionMode,
+    pub mode: PermissionMode,
+    pub reviewer_model: Option<String>,
+    pub review_timeout_seconds: u32,
+    pub request_timeout_seconds: u32,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HarnessPermissionMode {
+    #[default]
+    Manual,
+    AutoAllow,
+}
+impl Default for PermissionConfig {
+    fn default() -> Self {
+        Self {
+            mode: PermissionMode::ModelReview,
+            harness_mode: HarnessPermissionMode::Manual,
+            reviewer_model: None,
+            review_timeout_seconds: 30,
+            request_timeout_seconds: 600,
+        }
+    }
 }
 impl Default for SchedulerConfig {
     fn default() -> Self {
@@ -85,6 +121,19 @@ impl RuntimeConfig {
         {
             bail!("limits must be positive; use null for unlimited");
         }
+        if !(1..=120).contains(&self.permissions.review_timeout_seconds)
+            || !(1..=86400).contains(&self.permissions.request_timeout_seconds)
+        {
+            bail!("permission review timeout must be 1..120 and request timeout 1..86400 seconds");
+        }
+        if self
+            .permissions
+            .reviewer_model
+            .as_ref()
+            .is_some_and(|s| s.trim().is_empty())
+        {
+            bail!("reviewer_model must not be empty")
+        }
         if !(1024..=1048576).contains(&self.execution.output_bytes) {
             bail!("execution.output_bytes must be 1024..1048576");
         }
@@ -134,6 +183,11 @@ impl RuntimeConfig {
     }
     pub fn describe() -> Value {
         json!({"unlimited":"null 表示不限，0 无效；取消、权限与会话互斥始终有效。","fields":[
+            {"key":"permissions.harness_mode","default":"manual","description":"Harness 原生请求处理：manual / auto_allow；不改变引擎沙箱。","effective":"当前待审批及后续请求"},
+            {"key":"permissions.mode","default":"model_review","description":"Native 工具权限策略：model_review / manual / auto_allow；不影响 Harness 原生审批。","effective":"当前待审批及后续请求"},
+            {"key":"permissions.reviewer_model","default":null,"description":"独立审核 Model 资源；未配置或审核异常转人工。","effective":"当前待审批及后续请求"},
+            {"key":"permissions.review_timeout_seconds","default":30,"description":"审核模型超时（1–120 秒），超时转人工。","effective":"当前待审批及后续请求"},
+            {"key":"permissions.request_timeout_seconds","default":600,"description":"Native 审批总等待秒数，超时取消执行。","effective":"后续请求；不延长已有请求"},
             {"key":"scheduler.parallel_work","default":false,"description":"允许双方显式声明 parallel 的独立工作任务在同一身份并行；普通聊天仍串行，共享资源声明仍互斥。模型需为会写入的同一资源使用一致的资源键。","effective":"调度器重启"},
             {"key":"scheduler.concurrency","default":3,"description":"同时执行的任务总数；不含保存检查点后的等待。增大可减少排队，但增加模型与本机负载。null 不限。","effective":"调度器重启；CLI --concurrency 可覆盖"},
             {"key":"scheduler.replies_per_agent","default":100,"description":"每个身份在同一讨论中允许进入回复执行的次数，不是工具调用次数。null 不限。","effective":"调度器重启；已用次数保留"},

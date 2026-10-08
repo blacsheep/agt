@@ -73,6 +73,7 @@ pub(super) struct NativeRun<'run, 'host> {
     sent_messages: BTreeMap<String, String>,
     initial_steps: u32,
     model_steps: Option<u32>,
+    permissions: crate::permission::PermissionLoop,
 }
 
 impl NativeRun<'_, '_> {

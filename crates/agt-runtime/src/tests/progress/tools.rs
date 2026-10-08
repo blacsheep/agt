@@ -80,3 +80,48 @@ fn unfinished_tools_are_unknown_after_run_failure() {
             .all(|a| a["status"] == "unknown")
     );
 }
+
+#[test]
+fn completed_execution_retains_activity_facts_but_never_the_draft() {
+    let home = tempfile::tempdir().unwrap();
+    let mut store = RunStore::open(home.path()).unwrap();
+    let (mut run, _) = store
+        .claim(&RunRequest::new("test", "private input"), None)
+        .unwrap();
+    crate::progress::stage(&mut run, &store, None, "generating").unwrap();
+    crate::progress::update(&mut run, &store, ModelEvent::Text("private draft")).unwrap();
+    crate::progress::harness_event(
+        &mut run,
+        &store,
+        &agt_harness::Event::Activity {
+            id: "private-engine-item",
+            kind: "command",
+            status: "completed",
+            tool_name: None,
+        },
+    )
+    .unwrap();
+    crate::progress::harness_event(
+        &mut run,
+        &store,
+        &agt_harness::Event::Activity {
+            id: "unfinished-command",
+            kind: "command",
+            status: "running",
+            tool_name: None,
+        },
+    )
+    .unwrap();
+    let activity_id = run.progress.as_ref().unwrap().activities[0].id.clone();
+    crate::progress::finish(&mut run);
+    run.state = RunState::Completed;
+    store.save(&run).unwrap();
+    let restored = store.get(&run.id).unwrap();
+    assert!(restored.progress.is_none());
+    let activity = &restored.execution.unwrap()["activity"];
+    assert_eq!(activity["items"][0]["id"], activity_id);
+    assert_eq!(activity["items"][0]["status"], "completed");
+    assert_eq!(activity["items"][1]["status"], "unknown");
+    assert!(activity["ended_at"].as_i64().unwrap() >= activity["started_at"].as_i64().unwrap());
+    assert!(!activity.to_string().contains("private"));
+}

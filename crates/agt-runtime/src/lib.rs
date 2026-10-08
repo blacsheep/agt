@@ -1,10 +1,12 @@
 //! Explicit, bounded agent execution. IM remains a runtime-independent store.
+pub mod approval;
 mod audit;
 mod context;
 mod context_store;
 mod conversation_context;
 mod conversation_instructions;
 pub mod events;
+mod permission;
 pub use context::ContextCheckpoint;
 mod engine;
 mod harness;
@@ -191,7 +193,9 @@ pub use context_history::context_reset_history;
 mod harness_control;
 pub use harness_control::SessionControl;
 
+mod tool_details;
 mod tool_progress;
+pub use tool_details::{ToolDetail, ToolDetailField};
 
 #[cfg(test)]
 #[path = "tests/progress/tools.rs"]

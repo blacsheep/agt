@@ -119,3 +119,77 @@ fn cancellation_before_start_ack_preserves_protocol_and_confirms_interrupt() {
         );
     }
 }
+
+#[test]
+fn stopping_notification_failure_does_not_skip_interrupt_confirmation() {
+    let (dir, config) = fixture();
+    let mut terminal = Vec::new();
+    let mut event = |event: Event<'_>| {
+        match event {
+            Event::Turn(_) => anyhow::bail!("original cancellation"),
+            Event::Stopping(_) => anyhow::bail!("cannot save stop notification"),
+            Event::Settled(status) => terminal.push(status.to_owned()),
+            _ => {}
+        }
+        Ok(())
+    };
+    let mut client = Codex::connect(&config, &mut event).unwrap();
+    let error = client
+        .execute(
+            &config,
+            Execution {
+                input: "CANCELABLE",
+                instructions: "",
+                thread: None,
+                tools: &[],
+            },
+            &mut event,
+            &mut |_, _| panic!("must not execute tools during cleanup"),
+        )
+        .unwrap_err();
+    assert_eq!(terminal, ["interrupted"]);
+    assert!(error.to_string().contains("original cancellation"));
+    let protocol = std::fs::read_to_string(dir.path().join("protocol.jsonl")).unwrap();
+    assert_eq!(
+        protocol
+            .lines()
+            .filter(|line| line.contains("turn/interrupt"))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn compaction_stop_notification_failure_still_confirms_interrupt() {
+    let (dir, config) = fixture();
+    let mut submitted = false;
+    let mut frames = 0;
+    let mut terminal = Vec::new();
+    let error = Codex::compact(&config, "cancelable-compact", &mut |event| {
+        match event {
+            Event::Submitted => submitted = true,
+            Event::Protocol if submitted => frames += 1,
+            Event::Tick if frames >= 2 => anyhow::bail!("original compaction cancellation"),
+            Event::Stopping(_) => anyhow::bail!("cannot save stop notification"),
+            Event::Settled(status) => terminal.push(status.to_owned()),
+            _ => {}
+        }
+        Ok(())
+    })
+    .unwrap_err();
+    assert_eq!(terminal, ["interrupted"]);
+    assert!(
+        error
+            .to_string()
+            .contains("original compaction cancellation")
+    );
+    let protocol = std::fs::read_to_string(dir.path().join("protocol.jsonl")).unwrap();
+    assert_eq!(
+        protocol
+            .lines()
+            .filter(|line| line.contains("turn/interrupt"))
+            .count(),
+        1
+    );
+    assert!(!protocol.contains("turn/start"));
+}

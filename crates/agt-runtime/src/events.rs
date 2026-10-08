@@ -32,6 +32,7 @@ impl Events {
         crate::RunStore::open(home)?;
         crate::ScheduleStore::open(home)?;
         crate::HarnessSessions::open(home)?;
+        crate::approval::ApprovalStore::open(home)?;
         agt_service::BindingStore::open(home)?;
         let mut connection =
             Connection::open(agt_storage::database_path(home, "runtime", "events.db")?)?;
@@ -70,6 +71,7 @@ impl Events {
             ("schedule", "runtime", "scheduler.db"),
             ("binding", "runtime", "bindings.db"),
             ("harness", "runtime", "harnesses.db"),
+            ("approval", "runtime", "approvals.db"),
         ] {
             let db = Connection::open(agt_storage::database_path(&self.home, directory, name)?)?;
             db.busy_timeout(Duration::from_secs(5))?;

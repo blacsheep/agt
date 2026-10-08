@@ -42,7 +42,7 @@ pub struct RunRecord {
 
 pub struct RunStore {
     home: std::path::PathBuf,
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 impl RunStore {
@@ -71,7 +71,7 @@ impl RunStore {
                  PRAGMA user_version = 2;",
             )?,
             2 => {}
-            3..=5 => {}
+            3..=6 => {}
             _ => {
                 return Err(RuntimeError::Configuration(
                     "unsupported runtime database version",
@@ -93,6 +93,9 @@ impl RunStore {
                     INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record_json,'$.request.trigger.conversation_id'),'run',CAST(unixepoch('subsec')*1000 AS INTEGER));
                 END;
                 PRAGMA user_version=5;")?;
+        }
+        if version < 6 {
+            tx.execute_batch("CREATE TABLE IF NOT EXISTS tool_details(run_id TEXT NOT NULL REFERENCES runs(id), activity_id TEXT NOT NULL, detail_json TEXT NOT NULL, PRIMARY KEY(run_id, activity_id)); PRAGMA user_version=6;")?;
         }
         tx.commit()?;
         connection.pragma_update(None, "journal_mode", "WAL")?;

@@ -31,6 +31,10 @@ for line in sys.stdin:
   if (root/'reject-start').exists():
    emit({'id':id,'error':{'code':-32602,'message':'fixture rejected'}});continue
   reply(id,{})
+  if p['threadId']=='cancelable-compact':
+   thread=p['threadId'];turn='compact-turn'
+   note('turn/started',{'threadId':thread,'turn':{'id':turn}})
+   continue
   if p['threadId']=='hang-compact':
    (root/'compacting').write_text('1');time.sleep(60)
   time.sleep(0.1)
@@ -58,6 +62,13 @@ for line in sys.stdin:
    (root/'started').write_text('1');time.sleep(0.4);finish(thread,turn,'completed after expiry')
   elif 'FAIL' in text:note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'failed','error':{'message':'fixture failed'}}})
   elif 'EMPTY' in text:note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'completed'}})
+  elif text.startswith('RELAY_'):
+   mode=text
+   kind='permissions' if 'PERMISSIONS' in text else ('fileChange' if 'FILE' in text else 'commandExecution')
+   req={'id':71 if kind=='permissions' else 'approval','method':'item/'+kind+'/requestApproval','params':{'threadId':thread,'turnId':turn,'itemId':'item-1','permissions':{'network':{'enabled':True}},'availableDecisions':['accept','decline','cancel']}}
+   emit(req)
+   if 'DUP' in text:emit(req)
+   if 'TERMINAL' in text:finish(thread,turn,'ended without approval')
   elif 'APPROVE' in text:emit({'id':'approval','method':'item/commandExecution/requestApproval','params':{'threadId':thread,'turnId':turn}})
   else:
    if 'PROGRESS' in text:
@@ -68,6 +79,9 @@ for line in sys.stdin:
    if 'TOOL' in text:
     emit({'id':'tool','method':'item/tool/call','params':{'threadId':thread,'turnId':turn,'tool':'framework_resource_list','arguments':{'kind':'agent'}}})
    else:finish(thread,turn,'fixture final answer')
+ elif id in ['approval',71] and method is None and 'result' in v:
+  note('serverRequest/resolved',{'threadId':thread,'requestId':id})
+  finish(thread,turn,'approval returned')
  elif id=='tool':finish(thread,turn,'tool completed')
  elif method=='turn/interrupt':
   reply(id,{})

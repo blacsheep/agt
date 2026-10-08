@@ -25,6 +25,7 @@ pub struct HarnessSessions {
     home: std::path::PathBuf,
 }
 mod lifecycle;
+pub(crate) use lifecycle::ExecutionLock;
 pub use lifecycle::{ExecutionState, SessionExecution};
 impl HarnessSessions {
     pub fn open(home: &Path) -> Result<Self> {

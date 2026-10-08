@@ -16,6 +16,9 @@ use serde_json::{Value, json};
 fn home() -> tempfile::TempDir {
     let temp = tempfile::tempdir().unwrap();
     agt_config::initialize_home(Some(temp.path().to_owned())).unwrap();
+    let mut policy = agt_config::RuntimeConfig::load(temp.path()).unwrap();
+    policy.permissions.mode = agt_config::runtime::PermissionMode::AutoAllow;
+    policy.save(temp.path()).unwrap();
     PromptStore::new(temp.path())
         .ensure_default_prompt()
         .unwrap();
@@ -1759,3 +1762,6 @@ mod context_recovery;
 
 #[path = "../src/tests/engine/stages.rs"]
 mod loop_stages;
+
+#[path = "permission/cases.rs"]
+mod permissions;

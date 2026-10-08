@@ -188,10 +188,11 @@ impl ModelClient for ChatCompletions {
         } else {
             let mut body = json!({"messages": messages});
             if !tools.is_empty() {
-                body["tools"] = json!(tools);
+                body["tools"] = json!(wire_tools(tools));
             }
             body
         };
+        apply_tool_choice(&mut body, tools, responses);
         body["model"] = json!(agent.model.model);
         body["stream"] = json!(true);
         if !responses {
@@ -313,6 +314,33 @@ pub(crate) fn attach_usage(mut message: Value, usage: &Value, responses: bool) -
     message
 }
 
+// Internal request constraint; never send AGT metadata to the provider.
+fn wire_tools(tools: &[Value]) -> Vec<Value> {
+    tools
+        .iter()
+        .map(|tool| {
+            let mut tool = tool.clone();
+            if let Some(object) = tool.as_object_mut() {
+                object.remove("_agt_required");
+            }
+            tool
+        })
+        .collect()
+}
+fn apply_tool_choice(body: &mut Value, tools: &[Value], responses: bool) {
+    if let [tool] = tools
+        && tool["_agt_required"] == true
+    {
+        let name = &tool["function"]["name"];
+        body["tool_choice"] = if responses {
+            json!({"type":"function","name":name})
+        } else {
+            json!({"type":"function","function":{"name":name}})
+        };
+        body["parallel_tool_calls"] = json!(false);
+    }
+}
+
 fn responses_request(messages: &[Value], tools: &[Value]) -> Result<Value> {
     let mut input = Vec::new();
     for message in messages {
@@ -417,3 +445,36 @@ mod usage_tests {
 #[cfg(test)]
 #[path = "tests/context/provider_errors.rs"]
 mod provider_errors;
+
+#[cfg(test)]
+mod required_tool_tests {
+    use super::*;
+    #[test]
+    fn forced_tool_is_encoded_for_both_apis_without_private_metadata() {
+        let tools = vec![
+            json!({"type":"function","_agt_required":true,"function":{"name":"participation_decision","parameters":{"type":"object"},"strict":false}}),
+        ];
+        for responses in [false, true] {
+            let mut body = if responses {
+                responses_request(&[], &tools).unwrap()
+            } else {
+                json!({"tools":wire_tools(&tools)})
+            };
+            apply_tool_choice(&mut body, &tools, responses);
+            assert_eq!(body["parallel_tool_calls"], false);
+            assert_eq!(
+                body["tool_choice"],
+                if responses {
+                    json!({"type":"function","name":"participation_decision"})
+                } else {
+                    json!({"type":"function","function":{"name":"participation_decision"}})
+                }
+            );
+            assert!(!body.to_string().contains("_agt_required"));
+        }
+        let ordinary = wire_tools(&tools);
+        let mut body = json!({});
+        apply_tool_choice(&mut body, &ordinary, false);
+        assert!(body.get("tool_choice").is_none());
+    }
+}

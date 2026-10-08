@@ -1,4 +1,4 @@
-//! One bounded snapshot per Run, cleared on completion; never shared IM history.
+//! Bounded live progress and retained public activity summaries; never shared IM history.
 use crate::{ModelEvent, Result, RunRecord, RunStore, ScheduledTask};
 use serde::{Deserialize, Serialize};
 
@@ -179,4 +179,30 @@ pub(crate) fn harness_event(
         store.save(record)?;
     }
     Ok(())
+}
+
+/// Retain only public activity facts. Draft text and model reasoning are not execution history.
+pub(crate) fn finish(record: &mut RunRecord) {
+    let Some(mut progress) = record.progress.take() else {
+        return;
+    };
+    let ended_at = crate::schedule_store::now_ms();
+    for activity in &mut progress.activities {
+        if activity.status == "running" {
+            // Ending a Run is not evidence that an external operation succeeded or was canceled.
+            activity.status = "unknown".into();
+        }
+    }
+    let execution = record
+        .execution
+        .get_or_insert_with(|| serde_json::json!({"engine":"native"}));
+    execution["activity"] = serde_json::json!({
+        "items": progress.activities,
+        "started_at": progress.started_at,
+        "updated_at": progress.updated_at,
+        "ended_at": ended_at,
+        "local_checked_at": progress.local_checked_at,
+        "protocol_at": progress.protocol_at,
+        "meaningful_at": progress.meaningful_at,
+    });
 }

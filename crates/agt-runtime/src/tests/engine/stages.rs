@@ -64,6 +64,27 @@ fn business_error_is_audited_and_the_rest_of_the_batch_reaches_the_next_turn() {
         Some("framework_resource_write")
     );
     assert!(audit[3].tool_name.is_none());
+    let store = RunStore::open(home.path()).unwrap();
+    let detail = store
+        .tool_detail(&run.id, &format!("call:{}", audit[2].id))
+        .unwrap()
+        .unwrap();
+    assert!(
+        detail.fields["arguments"]
+            .text
+            .contains("created by a tool")
+    );
+    assert!(!detail.fields["output"].text.is_empty());
+    let failed = store
+        .tool_detail(&run.id, &format!("call:{}", audit[1].id))
+        .unwrap()
+        .unwrap();
+    assert!(failed.fields["output"].text.contains("error"));
+    assert!(
+        !serde_json::to_string(&audit)
+            .unwrap()
+            .contains("created by a tool")
+    );
 }
 
 #[test]

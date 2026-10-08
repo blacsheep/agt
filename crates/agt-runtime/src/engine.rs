@@ -67,7 +67,7 @@ impl<'a> Runtime<'a> {
     }
 
     fn finish(&self, mut record: RunRecord, result: Result<String>) -> Result<RunRecord> {
-        record.progress = None;
+        crate::progress::finish(&mut record);
         match result {
             Ok(_) if record.state == RunState::Suspended => {}
             Ok(output) => {

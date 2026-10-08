@@ -43,6 +43,12 @@ pub(crate) enum RunCommand {
     Children {
         id: String,
     },
+    /// Inspect private tool arguments/results (host access only)
+    ToolDetail {
+        id: String,
+        #[arg(long)]
+        activity: String,
+    },
     /// Inspect redacted model/tool invocation metadata (not private transcripts)
     Calls {
         id: String,
@@ -88,6 +94,9 @@ pub(crate) fn inspect(command: RunCommand, home: &Path, output: OutputMode) -> R
     match command {
         RunCommand::List { limit } => emit(&store.list(limit)?, output),
         RunCommand::Info { id } => emit(&store.get(&id)?, output),
+        RunCommand::ToolDetail { id, activity } => {
+            emit(&store.tool_detail(&id, &activity)?, output)
+        }
         RunCommand::Calls { id, after, limit } => emit(&store.calls(&id, after, limit)?, output),
         RunCommand::Children { id } => {
             store.get(&id)?;

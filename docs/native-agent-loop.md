@@ -14,7 +14,8 @@ Harness 保留自己的执行引擎，不作为 Native 模型请求的一种实�
 | `engine/native/prepare.rs` | 配置与工具快照、身份和能力绑定、恢复显式工作 checkpoint |
 | `engine/native/inputs.rs` / `run_inputs.rs` | 安全边界轮询、参与判断、持久化接纳与输入终态 |
 | `engine/native/request.rs` | 请求前检查、压缩、模型请求及审计、有限的超窗恢复 |
-| `engine/native/tools.rs` | 整批验证以及每个工具的 prepare/before/execute/after 流水线 |
+| `engine/native/tools.rs` | 整批验证以及每个工具的 prepare/permission/before/execute/after 流水线 |
+| `permission.rs` / `permission/*` | Native 权限循环与策略插件；拒绝返回配对工具结果，取消终止运行 |
 | `engine/native/framework.rs` | Framework 工具分派、消息去重和数据库副作用围栏 |
 | `engine/native/mcp.rs` | MCP 连接、调用与关闭、外部结果规范化 |
 
@@ -32,7 +33,8 @@ Native 模型预算与 MCP 准入检查。公共执行流程不再组合 `extern
 Runtime 仍按 `claim → execute_claimed → finish` 执行。已保存的 Run 先返回，
 不会因引擎配置变化重新执行；新 Run 认领后才再次解析引擎。调度准入时的
 引擎选择不替代运行时配置检查。显式 Native 子 Run 继续使用原委派配置快照。
-Native 的双循环、工具和 checkpoint，Harness 的会话、协议与取消确认均保留原实现。
+Native 与 Harness 分别维护自己的执行阶段；Harness 的宿主、协议与取消确认边界见
+[Harness 执行流程](harness-execution.md)。
 两种引擎返回原有执行结果，并由公共终态逻辑保留 completed / suspended /
 canceled / interrupted / outcome_unknown 等区别。
 
@@ -107,3 +109,5 @@ follow-up 开始新的发送去重范围；steering 保留当前范围。回复�
 
 `src/tests/scheduler/run_inputs.rs` 覆盖 steering/follow-up 顺序、工具批次边界、
 参与判断、跨会话隔离、删除围栏、重试快照、压缩、额度、暂停及接管后的终态。
+
+Native 权限配置、人工队列与独立审核模型的边界见 [权限审批与交互观察](permissions.md)。

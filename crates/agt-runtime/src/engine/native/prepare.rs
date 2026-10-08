@@ -43,7 +43,16 @@ impl<'run, 'host> NativeRun<'run, 'host> {
         } else {
             vec![(&agent.name, &agent.fingerprint)]
         };
-        record.config_fingerprint = Some(fingerprint(&serde_json::to_vec(&snapshot)?));
+        let permission_config = agt_config::RuntimeConfig::load(&runtime.home)
+            .map_err(|e| RuntimeError::Invalid(e.to_string()))?
+            .permissions;
+        let permissions =
+            crate::permission::PermissionLoop::new(&runtime.home, permission_config.clone());
+        record.config_fingerprint = Some(fingerprint(&serde_json::to_vec(&(
+            snapshot,
+            permission_config,
+            permissions.reviewer_fingerprint(),
+        ))?));
         runtime.store.save(record)?;
         runtime.check_schedule()?;
         crate::progress::stage(
@@ -221,6 +230,7 @@ impl<'run, 'host> NativeRun<'run, 'host> {
             .as_ref()
             .map(|t| (t.message_id.clone(), t.depth));
         Ok(Self {
+            permissions,
             runtime,
             record,
             agents,

@@ -1,4 +1,5 @@
 mod harness;
+mod permission;
 use std::fs;
 use std::io::{self, IsTerminal, Read};
 use std::path::{Path, PathBuf};
@@ -64,6 +65,9 @@ enum Command {
     /// 工作空间运行策略与配置说明
     #[command(subcommand)]
     Config(config::ConfigCommand),
+    /// Inspect and decide pending native or engine approvals
+    #[command(subcommand)]
+    Permission(permission::PermissionCommand),
     /// watch authorized durable changes as JSONL
     #[command(subcommand)]
     Events(events::EventCommand),
@@ -739,6 +743,7 @@ fn dispatch(command: Command, home: &Path, output: OutputMode, yes: bool) -> Res
         Command::Prompt(command) => dispatch_prompt(command, home, output, yes),
         Command::Skill(command) => dispatch_skill(command, home, output, yes),
         Command::Mcp(command) => dispatch_mcp(command, home, output, yes),
+        Command::Permission(command) => permission::dispatch(command, home, output),
         Command::Harness(command) => harness::dispatch(command, home, output, yes),
         Command::Agent(command) => dispatch_agent(command, home, output, yes),
         Command::Run(command) => runtime::inspect(command, home, output),

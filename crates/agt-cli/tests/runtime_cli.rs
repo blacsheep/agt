@@ -29,6 +29,11 @@ fn success(output: Output) -> Value {
 
 fn setup(home: &Path, url: &str) {
     success(run(home, &["init", home.to_str().unwrap()]));
+    std::fs::write(
+        home.join("config.yaml"),
+        "permissions:\n  mode: auto_allow\n",
+    )
+    .unwrap();
     success(run(
         home,
         &[

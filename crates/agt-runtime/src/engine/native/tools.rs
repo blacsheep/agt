@@ -62,7 +62,29 @@ impl NativeRun<'_, '_> {
         )?;
         for call in calls {
             let (arguments, invocation) = self.prepare_tool_call(&call)?;
+            let scope =
+                crate::approval::Scope::new(self.record, self.runtime.scheduled_task.as_ref());
+            let allowed = self.permissions.authorize(
+                &scope,
+                &call.id,
+                &call.function.name,
+                &arguments,
+                &self.record.request.input,
+                &|| {
+                    check_canceled(self.cancellation)?;
+                    self.runtime.check_schedule()
+                },
+            )?;
+            if !allowed {
+                self.messages.push(json!({"role":"tool","tool_call_id":call.id,"content":"Permission denied. This tool was not executed. Do not repeat the same request without new authorization."}));
+                continue;
+            }
             let invocation = self.before_tool_call(invocation)?;
+            self.runtime.store.save_tool_detail(
+                &self.record.id,
+                &format!("call:{}", invocation.id),
+                &[("arguments", &arguments)],
+            )?;
             let result = self.execute_tool_call(&call, arguments);
             if let ToolFlow::Suspend = self.after_tool_call(&call, invocation, result)? {
                 return Ok(ToolFlow::Suspend);
@@ -152,6 +174,17 @@ impl NativeRun<'_, '_> {
                 Some(runtime_error(error)),
             ),
         }
+        let output = match &result {
+            Ok((output, _)) => {
+                serde_json::from_str(output).unwrap_or_else(|_| Value::String(output.clone()))
+            }
+            Err(error) => runtime_error(error),
+        };
+        self.runtime.store.save_tool_detail(
+            &self.record.id,
+            &format!("call:{}", invocation.id),
+            &[("output", &output)],
+        )?;
         self.runtime.store.finish_call(&invocation)?;
         if invocation.state != CallState::Succeeded {
             self.record.tool_failures += 1;
