@@ -301,7 +301,7 @@ async function selectConversation(id) {
   document.body.classList.toggle('mobile-chat-open', matchMedia('(max-width: 760px)').matches);
   $('#latest-message').classList.add('hidden');
   state.messages = []; state.contextResets = []; state.members = []; state.cursor = null;
-  state.runs = state.runs.map(r => ({...r, progress: null})); renderLiveReplies();
+  state.runs = state.runs.map(r => ({...r, progress: null, tool_activity: null})); renderLiveReplies();
   $('#message-body').value = ''; state.pendingSend = null; renderMentions();
   renderConversations(); renderChatHead(); setupReadOnly();
   $('#messages').innerHTML = empty('正在读取…', '消息保存在本地');
@@ -362,7 +362,7 @@ function showResetContext(c, fromComposer = false) {
     $('#modal').close();
     if (state.conversation?.id === c.id) {
       state.generation++;
-      state.runs = state.runs.map(r => r.conversation === c.id ? {...r, progress:null} : r); renderLiveReplies();
+      state.runs = state.runs.map(r => r.conversation === c.id ? {...r, progress:null,tool_activity:null} : r); renderLiveReplies();
       if (fromComposer && ['new','clear'].includes(AgtCommands.parse($('#message-body').value)?.name)) {
         $('#message-body').value = ''; state.pendingSend = null; renderMentions(); $('#message-body').focus();
       }
@@ -636,53 +636,22 @@ async function activity() {
     const data = await api('activity' + query); if (generation !== state.generation) return;
     state.runs = data.runs; state.scheduler = data.scheduler; window.AgtInteractions?.statusChanged(); renderReplyStatus(); renderActivity(); window.AgtTasks?.refresh();
   } catch (error) {
-    if (generation === state.generation) { state.scheduler.online = false; window.AgtInteractions?.statusChanged(); renderReplyStatus(); renderActivity(); }
+    if (generation === state.generation) { state.runs=state.runs.map(r=>({...r,progress:null,tool_activity:null})); state.scheduler.online = false; window.AgtInteractions?.statusChanged(); renderReplyStatus(); renderActivity(); }
     throw error;
   }
 }
 function runLabel(r) {
   return ({ completed: r.tool_failures ? '回复结束，部分操作未完成' : '本次回复已结束', running: '正在准备回复', failed: '暂时无法回复', canceled: '回复已取消' })[r.state] || '等待处理';
 }
-const progressLabels = { preparing: '准备上下文与工具', waiting: '等待模型输出', reasoning: '模型处理中', generating: '正在生成', tool_pending: '准备工具调用', tool_running: '正在执行工具', compacting: '正在压缩上下文', retrying: '连接异常，正在重试', input_required: '执行器需要交互' };
-const toolLabels={harness_models:'查询可用模型',harness_session_models:'查询会话可用模型',harness_session_get:'读取执行会话',harness_session_configure:'修改会话模型',resource_list:'查看资源',resource_read:'读取资源配置',resource_write:'配置资源',agent_bind:'绑定并启用 Agent',agent_set_enabled:'调整 Agent 启用状态',task_request:'安排协作任务',task_get:'查看任务进度',message_send:'发送协作消息'};
-function activityTitle(a) { return a.label || toolLabels[a.tool_name?.replace(/^framework_/, '')] || ({command:'执行命令',files:'修改文件',mcp:'调用 MCP 工具',framework:'调用框架工具',input:'等待交互'})[a.kind] || '执行工具'; }
-function activityTimeline(activities) {
-  return `<ol class="task-timeline tool-activity-list">${activities.map(a=>{
-    const seconds=Math.max(0,((a.status==='running'?Date.now():a.updated_at)-a.started_at)/1000);
-    return `<li><div><span>${esc(activityTitle(a))}</span>${a.tool_name?`<code>${esc(a.tool_name)}</code>`:''}${a.summary?`<small>${esc(a.summary)}</small>`:''}</div><small>${esc(({running:'进行中',completed:'成功',failed:'失败',canceled:'已取消',unsupported:'不支持',unknown:'状态待确认'})[a.status]||a.status)} · ${seconds.toFixed(1)} 秒 · ${esc(({framework:'框架',mcp:'MCP',command:'Codex',files:'Codex',input:'引擎'})[a.kind]||'工具')}</small></li>`;
-  }).join('')}</ol>`;
-}
+function activityTitle(a) { return AgtToolActivity.title(a); }
+function activityTimeline(activities) { return AgtToolActivity.timeline(activities); }
 function renderLiveReplies() {
-  const box = $('#live-replies');
-  const runs = state.scheduler.online && state.conversation?.state === 'active' && currentEntry()?.left_message_seq == null
-    ? state.runs.filter(r => r.state === 'running' && r.conversation === state.conversation.id && r.progress) : [];
-  const previous = new Map([...box.children].map(node => [node.dataset.run, node]));
-  for (const [index, run] of runs.entries()) {
-    const p = run.progress;
-    let node = previous.get(run.id); previous.delete(run.id);
-    if (!node) {
-      node = document.createElement('details'); node.className = 'live-reply'; node.dataset.run = run.id; node.open = false;
-      node.innerHTML = '<summary><span class="live-dot" aria-hidden="true"></span><strong></strong><span class="live-phase"></span><small></small></summary><div class="live-body"><p class="live-preview"></p><span class="live-caption"></span><div class="harness-activity"></div></div>';
-    }
-    const set = (selector, text) => { const target = node.querySelector(selector); if (target.textContent !== text) target.textContent = text; };
-    set('strong', nameOf(p.principal) || run.agent.split('/').at(-1));
-    const activeTools=(p.activities||[]).filter(a=>a.status==='running');
-    set('.live-phase', activeTools.length>1?`正在执行 ${activeTools.length} 项操作`:activeTools.length?activityTitle(activeTools[0]):p.phase==='tool_running' && p.activities?.length?'整理工具结果':progressLabels[p.phase] || '正在处理');
-    const seconds = Math.max(0, Math.floor((Date.now() - p.started_at) / 1000));
-    set('small', `${seconds < 60 ? seconds + ' 秒' : Math.floor(seconds / 60) + ' 分 ' + seconds % 60 + ' 秒'}${p.attempt > 1 ? ' · 第 ' + p.attempt + '/10 次尝试' : ''}`);
-    const preview = node.querySelector('.live-preview');
-    const following = !node.isConnected || preview.scrollHeight - preview.scrollTop - preview.clientHeight < 30;
-    set('.live-preview', p.preview || '');
-    preview.hidden = !p.preview;
-    set('.live-caption', p.preview ? '生成预览 · 仅显示最近片段，完成后发布正式消息' : p.phase === 'retrying' ? '本次预览已清除，正在重新请求。' : '收到正文后会在这里预览；模型处理期间可能暂时没有文字。');
-    const timeline = node.querySelector('.harness-activity');
-    const age=p.protocol_at?Math.max(0,Math.floor((Date.now()-p.protocol_at)/1000)):0;
-    timeline.innerHTML=(p.protocol_at?`<div class="progress-clocks"><span>最近协议 ${esc(dateTime(p.protocol_at))}</span><span>最近进展 ${p.meaningful_at?esc(dateTime(p.meaningful_at)):'等待中'}</span></div>${age>30?'<p class="form-note">暂未收到新进度，执行结果尚未确认。</p>':''}`:'')+activityTimeline([...(p.activities||[]).filter(a=>a.status!=='running').slice(-8),...(p.activities||[]).filter(a=>a.status==='running')]);
-    if (box.children[index] !== node) box.insertBefore(node, box.children[index] || null);
-    if (following) preview.scrollTop = preview.scrollHeight;
-  }
-  previous.forEach(node => node.remove());
-  box.classList.toggle('hidden', !runs.length);
+  const viewer=state.viewer, conversation=state.conversation?.id;
+  AgtExecutionView.render({container:$('#live-replies'),runs:state.runs,conversation:state.conversation?.id,
+    viewer:state.viewer,online:state.scheduler.online,
+    visible:state.conversation?.state==='active' && currentEntry()?.left_message_seq==null,
+    nameOf,onApproval:id=>AgtApprovals.open(id),
+    loadToolDetail:(id,activity)=>api('tool-detail',{id,activity,viewer,conversation})});
 }
 function renderActivity() {
   renderLiveReplies();
@@ -1321,6 +1290,7 @@ function showUnavailableCommand(kind) {
   commandPanel('当前会话不支持 /'+kind,`<p>此命令用于 Codex 执行会话，当前会话没有可操作的 Codex Agent。</p><p class="form-note">内置 Agent 暂未接入此命令。可以查看模型和运行状态，或重置上下文。</p><button id="available-commands" class="secondary" type="button">查看可用命令</button><p class="form-note">草稿已保留，本次未发送消息或执行请求。</p>`);
   $('#available-commands').onclick=()=>showChatCommand({name:'help',args:''});
 }
+const commandPanelHome = $('#command-panel').parentElement;
 function closeCommandPanel(restoreFocus = false) {
   commandGeneration++;
   commandTarget = null;
@@ -1328,9 +1298,11 @@ function closeCommandPanel(restoreFocus = false) {
   document.body.classList.remove('command-panel-open');
   $('#chat-commands').setAttribute('aria-expanded','false');
   $('#command-panel-body').innerHTML='';
-  if (restoreFocus) $($('#command-panel').dataset.mode === 'tasks' ? '#chat-tasks' : '#chat-commands').focus();
+  if (restoreFocus) $($('#command-panel').dataset.mode === 'approvals' ? '#ix-approvals' : $('#command-panel').dataset.mode === 'tasks' ? '#chat-tasks' : '#chat-commands').focus();
+  commandPanelHome.append($('#command-panel'));
 }
 function commandPanel(title, content, kind = 'help') {
+  (kind === 'approvals' ? document.body : commandPanelHome).append($('#command-panel'));
   $('#command-panel').dataset.mode = kind;
   commandGeneration++;
   const opening = $('#command-panel').classList.contains('hidden');
@@ -1338,10 +1310,10 @@ function commandPanel(title, content, kind = 'help') {
   document.body.classList.add('command-panel-open');
   $('#chat-commands').setAttribute('aria-expanded','true');
   $('#command-panel-title').textContent=title;
-  $('#command-panel-context').textContent=conversationName(state.conversation);
+  $('#command-panel-context').textContent=kind==='approvals' ? '当前观察身份可见的审批' : state.conversation ? conversationName(state.conversation) : '';
   $('#command-panel-body').innerHTML=content;
   $('#command-panel-error').classList.add('hidden');
-  $('#command-panel-nav').innerHTML=availableChatCommands().map(c=>`<button type="button" data-panel-command="${c.name}" aria-current="${kind===c.name?'page':'false'}" title="${esc(c.description)}">${esc(c.label)}</button>`).join('');
+  $('#command-panel-nav').innerHTML=(kind==='approvals'?[]:availableChatCommands()).map(c=>`<button type="button" data-panel-command="${c.name}" aria-current="${kind===c.name?'page':'false'}" title="${esc(c.description)}">${esc(c.label)}</button>`).join('');
   $$('#command-panel-nav button').forEach(b=>b.onclick=()=>showChatCommand({name:b.dataset.panelCommand,args:''}));
   if(opening) $('#close-command-panel').focus({preventScroll:true});
   else $('#command-panel-nav [aria-current=page]')?.focus({preventScroll:true});
@@ -1370,7 +1342,7 @@ function showCommandAction(kind) {
       $('#command-action-feedback').textContent=reset?'上下文已重置，可以发送新消息。':'已结束本轮讨论。';
       if(reset){
         state.generation++;
-        state.runs=state.runs.map(r=>r.conversation===c.id?{...r,progress:null}:r);renderLiveReplies();
+        state.runs=state.runs.map(r=>r.conversation===c.id?{...r,progress:null,tool_activity:null}:r);renderLiveReplies();
       }
       const parsed=AgtCommands.parse($('#message-body').value);
       if(parsed?.type==='command' && [kind,reset?'clear':'stop'].includes(parsed.name)){$('#message-body').value='';state.pendingSend=null;renderMentions();resizeComposer();}

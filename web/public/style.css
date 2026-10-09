@@ -1308,25 +1308,10 @@ button:active:not(:disabled) { transform: translateY(1px); }
 .context-controls .form-note { margin: 6px 0 0; }
 .context-controls button { justify-self: start; }
 
-/* A quiet, bounded work-in-progress strip, separate from published messages. */
-.live-replies { flex: 0 1 auto; min-height: 0; max-height: min(32vh, 260px); overflow: auto; padding: 0 20px; border-top: 1px solid var(--line); background: var(--paper); }
-.live-reply { padding: 10px 0; color: var(--ink); }
-.live-reply + .live-reply { border-top: 1px solid var(--line); }
-.live-reply summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; list-style: none; }
-.live-reply summary::-webkit-details-marker { display: none; }
-.live-reply summary::after { content: '⌄'; color: var(--muted); }
-.live-reply[open] summary::after { transform: rotate(180deg); }
-.live-reply summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.live-reply strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 35%; }
-.live-phase { color: var(--accent); }
-.live-reply small { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Shared service liveness indicator; tool-card styles live in execution-view.css. */
 .live-dot { flex: 0 0 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: live-pulse 1.8s ease-in-out infinite; }
-.live-body { padding: 6px 0 0 14px; }
-.live-preview { margin: 0 0 4px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 100px; overflow: auto; }
-.live-caption { font-size: 11px; color: var(--muted); }
 @keyframes live-pulse { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
-@media (max-width: 520px) { .live-replies { padding: 0 12px; } .live-reply summary { flex-wrap: wrap; } .live-reply strong { max-width: 42%; } }
 
 .history-window { margin: 0 0 10px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--paper); }
 .history-window small { display: block; line-height: 1.6; overflow-wrap: anywhere; }
@@ -1791,7 +1776,7 @@ footer { color: var(--muted); }
 .tool-activity-list li > div { min-width: 0; display: grid; gap: 3px; }
 .tool-activity-list code { font-size: 11px; color: #64748b; overflow-wrap: anywhere; }
 .tool-activity-list li > small { flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.live-reply summary .live-phase { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 @media(max-width:600px) { .tool-activity-list li { flex-wrap: wrap; } }
 
 /* Operational settings: aligned controls, readable explanations, no nested card grid. */
@@ -1935,3 +1920,17 @@ footer { color: var(--muted); }
 }
 .ix-node.waiting .ix-node-state {fill:#c08b29}
 .ix-node.failed .ix-node-state {fill:#cf4d51}
+
+.ix-edge.delegation .ix-edge-line { stroke: #9b7bd4; stroke-width: 2.5; }
+#approval-form { display: grid; gap: 12px; margin-top: 20px; }
+#approval-form label { display: grid; gap: 6px; }
+
+.command-panel[data-mode="approvals"] { position: fixed; inset: 16px 16px 16px auto; width: min(560px, calc(100vw - 32px)); z-index: 45; border: 1px solid var(--line); box-shadow: 0 12px 48px #182a4930; }
+#approval-form { display: grid; gap: 14px; margin-top: 20px; }
+#approval-form label { display: grid; gap: 6px; }
+
+.permission-mode { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+.permission-mode-form { display: grid; gap: 10px; min-width: 0; }
+.permission-mode-form label { display: grid; gap: 6px; }
+.permission-mode-form select { width: 100%; min-width: 0; }
+.permission-mode-feedback { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }

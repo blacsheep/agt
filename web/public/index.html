@@ -5,9 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AGT Studio · 多 Agent 工作台</title>
     <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/execution-view.css" />
     <script src="/commands.js" defer></script>
+    <script src="/tool-renderers.js" defer></script>
+    <script src="/tool-details.js" defer></script>
+    <script src="/tool-activity.js" defer></script>
+    <script src="/execution-view.js" defer></script>
     <script src="/app.js" defer></script>
     <script src="/tasks.js" defer></script>
+    <script src="/permission-mode.js" defer></script>
+    <script src="/approvals.js" defer></script>
     <script src="/settings.js" defer></script>
     <script src="/interaction-graph.js" defer></script>
     <script src="/interactions.js" defer></script>
@@ -126,7 +133,7 @@
               </div>
             </div>
             <button id="latest-message" class="latest-message hidden" type="button">↓ 回到最新消息</button>
-            <section id="live-replies" class="live-replies hidden" aria-label="Agent 实时生成预览"></section>
+            <section id="live-replies" class="live-replies hidden" aria-label="Agent 执行与工具记录"></section>
             <button id="older" class="older hidden">加载更早消息</button>
             <form id="composer" class="composer">
               <div id="mention-menu" class="mention-menu hidden" role="listbox" aria-label="选择提及成员"></div>
@@ -193,15 +200,15 @@
         </div></div>
       </section>
       <section id="page-interactions" class="page hidden">
-        <div class="ix-heading"><div><span class="eyebrow">INTERACTION OBSERVATORY</span><h1>交互观察</h1><p>连接、协作与回应，在一张图里发生。</p></div><button id="ix-refresh" class="secondary">刷新记录</button></div>
+        <div class="ix-heading"><div><span class="eyebrow">INTERACTION OBSERVATORY</span><h1>交互观察</h1><p>连接、协作与回应，在一张图里发生。</p></div><button id="ix-approvals" class="secondary">权限审批</button><button id="ix-refresh" class="secondary">刷新记录</button></div>
         <div class="ix-workspace">
           <details class="ix-filter-drawer"><summary>观察范围与筛选 <span>身份 · Agent · 会话 · 关键词</span></summary><div class="ix-filters">
             <label>观察身份<select id="ix-viewer" aria-label="观察身份"></select></label>
             <p class="ix-note">只读查看此身份可访问的会话。切换身份会清空当前记录。</p>
             <label>搜索内容<input id="ix-query" type="search" placeholder="消息、Agent 或关键词"></label>
-            <label>发送者<select id="ix-agent"><option value="">所有发送者</option></select></label>
+            <label>参与者<select id="ix-agent"><option value="">所有发送者</option></select></label>
             <label>会话<select id="ix-conversation"><option value="">已载入的会话</option></select></label>
-            <label>内容类型<select id="ix-kind"><option value="">全部消息</option><option value="agent">Agent 消息</option><option value="human">用户消息</option></select></label>
+            <label>内容类型<select id="ix-kind"><option value="">全部交互</option><option value="task">任务委派</option><option value="agent">Agent 消息</option><option value="human">用户消息</option></select></label>
             <button id="ix-clear" class="secondary">清除筛选</button>
             </div></details>
           <section class="ix-stream" aria-label="交互拓扑">
@@ -219,7 +226,7 @@
             <div class="ix-stream-head"><strong>消息流</strong><span id="ix-count"></span></div>
 
             <div id="ix-list"></div>
-            <div class="ix-load"><button id="ix-more" class="secondary hidden">载入更多会话</button><button id="ix-earlier" class="secondary hidden">载入更早消息</button></div></details>
+            <div class="ix-load"><button id="ix-more" class="secondary hidden">载入更多会话</button><button id="ix-tasks-more" class="secondary hidden">载入更多任务</button><button id="ix-earlier" class="secondary hidden">载入更早消息</button></div></details>
           </section>
           <aside id="ix-detail" class="ix-detail" aria-label="交互详情"></aside>
         </div>

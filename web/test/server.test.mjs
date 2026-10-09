@@ -595,3 +595,43 @@ test('workspace config uses validated CLI contract and rejects identity injectio
   assert.equal((await request('/api/config',{config:{scheduler:{concurrency:null}},expected:{scheduler:{concurrency:3}}})).status,200);
   assert.deepEqual(calls.at(-1),['config','update','--value','{"scheduler":{"concurrency":null}}','--expected','{"scheduler":{"concurrency":3}}']);
 });
+
+test('approval reads use viewer and decisions bind the startup operator', async t => {
+  const seen=[];
+  const {request}=await fixture(t, async args=>{seen.push(args);return [];});
+  assert.equal((await request('/api/approvals?viewer=lead&before=older')).status,200);
+  assert.deepEqual(seen.pop(),['permission','list','--principal','lead','--before','older']);
+  const choice={id:'approval',expected_revision:2,decision:{permissions:{},scope:'turn'},reason:'denied'};
+  for(const key of ['actor','viewer','principal']) assert.equal((await request('/api/approvals',{...choice,[key]:'lead'})).status,403);
+  assert.equal(seen.length,0);
+  assert.equal((await request('/api/approvals',{...choice,expected_revision:0})).status,400);
+  assert.equal((await request('/api/approvals',choice)).status,200);
+  assert.deepEqual(seen.pop(),['permission','decide','approval','--principal','operator','--expected-revision','2','--decision',JSON.stringify(choice.decision),'--reason','denied']);
+});
+
+
+test('raw tool details require execution scope and membership, and remain separate from calls', async t => {
+  const record={id:'run',request:{trigger:{conversation_id:'chat',principal:'agent'}},state:'completed'};
+  let active=true;const reads=[];
+  const {request}=await fixture(t,async args=>{
+    reads.push(args);
+    if(args.includes('member_list'))return active?[{principal_id:args[3],left_message_seq:null}]:[];
+    if(args[1]==='info')return record;
+    if(args[1]==='tool-detail')return args.at(-1)==='legacy'?null:{fields:{command:{text:'echo <script>raw</script>',truncated:false},output:{text:'private-output',truncated:false}}};
+    return [];
+  });
+  const payload={id:'run',activity:'call:1',conversation:'chat',viewer:'agent'};
+  const ok=await request('/api/tool-detail',payload);
+  assert.equal(ok.status,200);assert.equal((await ok.json()).fields.output.text,'private-output');
+  assert.equal((await request('/api/tool-detail',{...payload,viewer:'operator'})).status,200);
+  for(const patch of [{conversation:'other'},{viewer:'other-member'}]){
+    const before=reads.filter(a=>a[1]==='tool-detail').length;
+    const denied=await request('/api/tool-detail',{...payload,...patch});
+    assert.equal(denied.status,403);assert.doesNotMatch(await denied.text(),/private-output/);
+    assert.equal(reads.filter(a=>a[1]==='tool-detail').length,before);
+  }
+  assert.equal(await (await request('/api/tool-detail',{...payload,activity:'legacy'})).json(),null);
+  record.parent_run_id='parent';assert.equal((await request('/api/tool-detail',payload)).status,403);
+  delete record.parent_run_id;active=false;
+  assert.equal((await request('/api/tool-detail',payload)).status,403);
+});

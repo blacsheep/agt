@@ -10,6 +10,8 @@ let server, chrome, socket;
 try {
   await run(['init', home]);
   await run(['im', 'principal', 'create', 'operator']);
+  await run(['provider','create','fixture','--base-url','http://127.0.0.1:1/v1','--api-key','mock']);
+  await run(['model','create','reviewer','--provider','fixture','--model','mock']);
   ({ server } = createConsole({ run, home, principal: 'operator', token: 'browser-test-token' }));
   await new Promise(ok => server.listen(0, '127.0.0.1', ok));
   const url = `http://127.0.0.1:${server.address().port}`;
@@ -35,7 +37,10 @@ try {
   await click('[data-page="settings"]');
   await wait('!!document.querySelector("#runtime-config-form")');
   assert.match(await evaluate('document.querySelector("#runtime-settings").textContent'), /工作目录不是沙箱/);
-  assert.equal(await evaluate('document.querySelectorAll("[data-setting]").length'),9);
+  assert.equal(await evaluate('document.querySelectorAll("[data-setting]").length'),14);
+  assert.match(await evaluate('document.querySelector("#permission-review-status").textContent'),/尚未选择审核模型/);
+  assert.equal(await evaluate(`document.querySelector('[data-setting="permissions.reviewer_model"]').tagName`),'SELECT');
+  assert.deepEqual(await evaluate(`Array.from(document.querySelector('[data-setting="permissions.reviewer_model"]').options,o=>o.value)`),['','default/reviewer']);
   if(process.env.AGT_DESIGN_CAPTURE) {
     const shot=await cdp('Page.captureScreenshot',{format:'png'});
     await writeFile(process.env.AGT_DESIGN_CAPTURE,Buffer.from(shot.data,'base64'));
@@ -47,11 +52,25 @@ try {
   await evaluate(`document.querySelector('[data-unlimited="scheduler.replies_per_agent"]').click();document.querySelector('#runtime-config-form').requestSubmit();`);
   await wait('document.querySelector("#settings-feedback").textContent.startsWith("已保存")');
   assert.equal((await run(['config','show'])).scheduler.replies_per_agent,null);
+  assert.equal((await run(['config','show'])).permissions.mode,'model_review');
+  await evaluate(`document.querySelector('[data-setting="permissions.mode"]').value='manual';document.querySelector('[data-setting="permissions.reviewer_model"]').value='default/reviewer';document.querySelector('#runtime-config-form').requestSubmit();`);
+  await wait('document.querySelector("#settings-feedback").textContent.startsWith("已保存") && !document.querySelector("#runtime-config-form button[type=submit]").disabled');
+  const savedPolicy=(await run(['config','show'])).permissions;
+  assert.equal(savedPolicy.mode,'manual');assert.equal(savedPolicy.reviewer_model,'default/reviewer');
+
   await evaluate(`document.querySelector('[data-setting="scheduler.concurrency"]').value='7';document.querySelector('[data-setting="scheduler.concurrency"]').dispatchEvent(new Event('input',{bubbles:true}));`);
   await click('#reload-settings');
   assert.equal(await evaluate('document.querySelector("#modal").open'),true);
   await click('#confirm-settings-reload');
   await wait(`document.querySelector('[data-setting="scheduler.concurrency"]')?.value === "3"`);
+  assert.equal(await evaluate(`document.querySelector('[data-setting="permissions.reviewer_model"]').value`),'default/reviewer');
+  await evaluate(`window.savedModels=state.boot.resources.model;state.boot.resources.model=[];AgtSettings.open();`);
+  assert.equal(await evaluate(`document.querySelector('[data-setting="permissions.reviewer_model"]').value`),'default/reviewer');
+  assert.match(await evaluate(`document.querySelector('[data-setting="permissions.reviewer_model"]').selectedOptions[0].textContent`),/模型不可用/);
+  await evaluate(`state.boot.resources.model=window.savedModels;AgtSettings.open();`);
+  await evaluate(`document.querySelector('[data-setting="permissions.reviewer_model"]').value='';document.querySelector('#runtime-config-form').requestSubmit();`);
+  await wait('document.querySelector("#settings-feedback").textContent.startsWith("已保存") && !document.querySelector("#runtime-config-form button[type=submit]").disabled');
+  assert.equal((await run(['config','show'])).permissions.reviewer_model,null);
   await evaluate(`document.querySelector('#runtime-config-form').insertAdjacentHTML('beforeend', '<div id="builtin-preview">'+builtinFields(['task_collaboration','local_execution'])+'</div>')`);
   assert.equal(await evaluate('document.querySelectorAll("#builtin-preview input:checked").length'),2);
   assert.deepEqual(errors, []);

@@ -42,11 +42,11 @@ window.createInteractionGraph = (onSelect) => {
         const a = positions.get(e.from), b = positions.get(e.to), dx = b.x-a.x, dy = b.y-a.y, length = Math.hypot(dx,dy) || 1;
         const x1=a.x+dx/length*36, y1=a.y+dy/length*36, x2=b.x-dx/length*40, y2=b.y-dy/length*40;
         const cx=(x1+x2)/2-dy*.12, cy=(y1+y2)/2+dx*.12, d=`M${x1} ${y1} Q${cx} ${cy} ${x2} ${y2}`;
-        const lit = e.until > now, selected = e.messages.some(m => m.id === chosen);
-        return `<g class="ix-edge ${e.membership?'membership':''} ${lit?'fresh':''} ${selected?'chosen':''} ${focus && e.from!==focus && e.to!==focus?'dim':''}" data-edge="${i}" tabindex="0" role="button" aria-label="${esc(nodes.get(e.from).label+' → '+nodes.get(e.to).label+'，'+(e.membership?'成员关系':e.messages.length+' 条消息'))}">
+        const lit = e.until > now, selected = chosen?.kind==='task' ? e.workTasks?.some(t=>t.id===chosen.id) : e.messages.some(m => m.id === chosen);
+        return `<g class="ix-edge ${e.membership?'membership':''} ${e.workTasks?'delegation':''} ${lit?'fresh':''} ${selected?'chosen':''} ${focus && e.from!==focus && e.to!==focus?'dim':''}" data-edge="${i}" tabindex="0" role="button" aria-label="${esc(nodes.get(e.from).label+' → '+nodes.get(e.to).label+'，'+(e.membership?'成员关系':e.workTasks?e.workTasks.length+' 项任务委派':e.messages.length+' 条消息'))}">
           <path class="ix-edge-hit" d="${d}"/><path class="ix-edge-line" d="${d}" ${e.membership?'':'marker-end="url(#ix-arrow)"'}/>
           ${lit ? `<circle class="ix-packet" r="4"><animateMotion dur="1.3s" repeatCount="indefinite" path="${d}"/></circle>` : ''}
-          ${!e.membership ? `<text x="${cx}" y="${cy-7}" class="ix-edge-count">${e.messages.length}</text>` : ''}</g>`;
+          ${!e.membership ? `<text x="${cx}" y="${cy-7}" class="ix-edge-count">${e.workTasks?'委派 '+e.workTasks.length:e.messages.length}</text>` : ''}</g>`;
       }).join('')}
       ${[...nodes.values()].map(n => {
         const p=positions.get(n.id), lit=edges.some(e => e.until>now && (e.from===n.id || e.to===n.id));
@@ -54,7 +54,7 @@ window.createInteractionGraph = (onSelect) => {
           <circle class="ix-node-halo" r="43"/>${n.group?'<rect class="ix-node-face" x="-27" y="-27" width="54" height="54" rx="12" transform="rotate(45)"/>':'<circle class="ix-node-face" r="31"/>'}
           <text class="ix-node-initial" text-anchor="middle" y="6">${esc(n.group?'#':n.label.slice(0,2))}</text>
           <circle class="ix-node-state" cx="25" cy="22" r="6"/>
-          <text class="ix-node-label" text-anchor="middle" y="59">${esc(short(n.label))}</text><text class="ix-node-caption" text-anchor="middle" y="77">${esc(n.status)}</text></g>`;
+          <text class="ix-node-label" text-anchor="middle" y="59">${esc(short(n.label))}</text><text class="ix-node-caption" text-anchor="middle" y="77">${esc((n.engine?n.engine+' · ':'')+n.status)}</text></g>`;
       }).join('')}</g>`;
     transform();
     if (focusedKey) [...svg.querySelectorAll('[data-node]')].find(n=>n.dataset.node===focusedKey)?.focus({preventScroll:true});
@@ -70,7 +70,7 @@ window.createInteractionGraph = (onSelect) => {
     const relevant = node ? edges.filter(e=>e.from===node.id || e.to===node.id).flatMap(e=>e.messages) : edge?.messages || [];
     const latest = relevant.sort((a,b)=>b.created_at-a.created_at)[0];
     tip.textContent = [node ? node.label+' · '+node.status : nodes.get(edge.from).label+' → '+nodes.get(edge.to).label,
-      node?.reason, latest ? (latest.deleted_at?'消息已删除':latest.body).slice(0,220) : '成员关系，当前范围暂无消息', '点击聚焦 · 拖动节点调整位置'].filter(Boolean).join('\n');
+      node?.reason, edge?.workTasks ? edge.workTasks.length+' 项任务委派，点击查看任务' : latest ? (latest.deleted_at?'消息已删除':latest.body).slice(0,220) : '当前范围暂无聊天消息', '点击聚焦 · 拖动节点调整位置'].filter(Boolean).join('\n');
     tip.classList.remove('hidden');
   }
   function choose(element) {
@@ -82,6 +82,7 @@ window.createInteractionGraph = (onSelect) => {
       draw();
     } else if (edge) {
       focus = edge.from;
+      if(edge.workTasks){onSelect({kind:'task',id:edge.workTasks[0].id}, {taskIds:edge.workTasks.map(t=>t.id)});draw();return;}
       chosen=edge.messages[0]?.id || null; onSelect(chosen, {label:nodes.get(edge.from).label+' → '+nodes.get(edge.to).label,status:'成员关系',reason:'这条虚线表示群聊成员关系，不表示已发送或已读消息。'});
       draw();
     }
@@ -128,7 +129,7 @@ window.createInteractionGraph = (onSelect) => {
   $('#ix-fit').onclick=fit; $('#ix-layout').onclick=()=>{layout();draw();fit();};
   $('#ix-unfocus').onclick=()=>{focus=null;draw();};
   return {
-    update(rows, tasks, online, recent, selected) {
+    update(rows, tasks, online, recent, selected, workTasks = [], approvals = []) {
       chosen=selected;
       const next=new Map(), paths=new Map();
       const add=(id,label,group=false)=>{if(!next.has(id))next.set(id,{id,label,group,degree:0,status:group?'群聊':'暂无执行',running:false});return id;};
@@ -149,9 +150,17 @@ window.createInteractionGraph = (onSelect) => {
         if(!paths.has(key))paths.set(key,{from,to,messages:[],until:0});
         const edge=paths.get(key);edge.messages.push(m);edge.until=Math.max(edge.until,recent.get(m.id)||0);
       }
+      for(const task of workTasks) {
+        const from=add('p:'+task.request.requester,nameOf(task.request.requester));
+        const to=add('p:'+task.request.assignee,nameOf(task.request.assignee));
+        const key=JSON.stringify(['work',from,to]);
+        if(!paths.has(key))paths.set(key,{from,to,messages:[],workTasks:[],until:0});
+        paths.get(key).workTasks.push(task);
+      }
+      for(const a of approvals) if(a.principal) add('p:'+a.principal,nameOf(a.principal));
       nodes=next;edges=[...paths.values()];
       edges.forEach(e=>{nodes.get(e.from).degree++;nodes.get(e.to).degree++;});
-      const allowed=new Set(rows.map(r=>r.item.conversation.id));
+      const allowed=new Set([...rows.map(r=>r.item.conversation.id),...workTasks.map(t=>t.request.report_to),...approvals.map(a=>a.conversation)]);
       const activeStates=new Set(['running','responding','evaluating']);
       const ordered=tasks.filter(t=>allowed.has(t.conversation)).sort((a,b)=>Number(activeStates.has(b.state))-Number(activeStates.has(a.state)) || b.due_at-a.due_at);
       const seen=new Set();
@@ -162,6 +171,17 @@ window.createInteractionGraph = (onSelect) => {
         n.tone=online ? ({waiting:'waiting',queued:'waiting',failed:'failed'})[t.state] || '' : '';
         n.status=!online?'状态待确认':({running:'执行中',input:'已接入当前执行',responding:'回复中',evaluating:'判断中',waiting:'等待中',queued:'排队中',ready_to_reply:'等待回复',blocked:'受阻',limited:'已达限制',failed:'执行失败',canceled:'已取消',completed:'已完成',silent:'暂不发言'})[t.state]||t.state;
         n.reason=t.last_decision?.public_reason ? '公开理由：'+t.last_decision.public_reason : '';
+      }
+      for(const n of nodes.values()) {
+        if(n.group)continue;
+        const principal=n.id.slice(2), binding=state.boot?.bindings?.find(b=>b.principal===principal);
+        const agent=binding && items('agent').find(a=>ref(a)===binding.agent);
+        const harness=agent?.harness && items('harness').find(h=>ref(h)===ref(agent.harness));
+        n.engine=harness?.engine || (agent?.harness?'Harness':'');
+        const work=workTasks.filter(t=>t.request.assignee===principal && !['succeeded','failed','canceled','interrupted','outcome_unknown'].includes(t.state));
+        if(work.length){n.status=work.length+' 项活动任务';n.running=online&&work.some(t=>t.state==='running');}
+        n.approvalIds=approvals.filter(a=>a.principal===principal && ['reviewing','awaiting_human'].includes(a.state)&&a.delivery==='not_sent').map(a=>a.id);
+        if(n.approvalIds.length){n.status=n.approvalIds.length+' 项权限审核';n.tone='waiting';}
       }
       const initial=positions.size===0;
       if(initial)layout();

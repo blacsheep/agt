@@ -18,7 +18,7 @@ try {
   socket = new WebSocket(endpoint);
   await new Promise(ok => socket.addEventListener('open', ok, { once: true }));
   let sequence = 0; const pending = new Map(); const errors = [];
-  socket.addEventListener('message', event => { const value = JSON.parse(event.data); if (value.id) { const p = pending.get(value.id); pending.delete(value.id); value.error ? p.reject(value.error) : p.resolve(value.result); } else if (value.method === 'Runtime.exceptionThrown') errors.push(value.params.exceptionDetails.text); });
+  socket.addEventListener('message', event => { const value = JSON.parse(event.data); if (value.id) { const p = pending.get(value.id); pending.delete(value.id); value.error ? p.reject(value.error) : p.resolve(value.result); } else if (value.method === 'Runtime.exceptionThrown') errors.push(value.params.exceptionDetails.exception?.description || value.params.exceptionDetails.text); });
   const command = (method, params = {}, sessionId) => new Promise((resolve, reject) => { const id = ++sequence; pending.set(id, { resolve, reject }); socket.send(JSON.stringify({ id, method, params, sessionId })); });
   const { targetId } = await command('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await command('Target.attachToTarget', { targetId, flatten: true });
@@ -75,7 +75,7 @@ try {
   assert.equal(await evaluate('document.querySelector(".ix-message details").open'),false);
   await click('.ix-message summary');
   assert.equal(await evaluate('document.querySelector(".ix-message details").open'),true);
-  await evaluate('AgtInteractions.refresh()');
+  await evaluate("state.page='interactions';AgtInteractions.refresh()");
   assert.equal(await evaluate('document.querySelector(".ix-message details").open'),true);
   await evaluate('document.querySelector("#ix-query").value="测试完成";document.querySelector("#ix-query").dispatchEvent(new Event("input"));');
   assert.equal(await evaluate('document.querySelectorAll(".ix-row").length'),1);
@@ -164,8 +164,80 @@ try {
   await new Promise(resolve=>setTimeout(resolve,6600));
   assert.equal(await evaluate('document.querySelectorAll(".ix-packet").length'),0);
 
+
+  await evaluate(`
+    state.scheduler={online:true,tasks:[],discussions:[]};
+    window.delegated={id:'work-only',list_cursor:1,state:'running',run_id:'run-only',execution_engine:'codex',request:{requester:'lead',assignee:'coder',report_to:'task-chat',input:'implement <img src=x onerror="window.injected=true">'}};
+    window.approvalRecord={id:'approval-only',revision:1,source:'harness',principal:'coder',work_id:'work-only',run_id:'run-only',conversation:'task-chat',state:'awaiting_human',delivery:'not_sent',reason:'',expires_at:Date.now()+60000,request:{params:{command:'echo <script>unsafe</script>'},options:[{label:'批准本次',value:'accept'},{label:'拒绝本次',value:'decline'}]}};
+    window.approvalWrites=[];
+    state.boot.bindings.push({principal:'coder',agent:'default/coder'});
+    state.boot.resources.agent=[{category:'default',name:'coder',harness:{category:'default',name:'codex'}}];
+    state.boot.resources.harness=[{category:'default',name:'codex',engine:'codex'}];
+    api=async(path,data)=>{
+      if(path==='read'){
+        if(data.name==='task_list')return data.viewer==='operator'?[delegated,delegated]:[];
+        if(data.name==='task_get')return delegated;
+        if(data.name==='conversation_list')return [];
+        throw new Error('unexpected read '+data.name);
+      }
+      if(path==='approvals'&&data){approvalWrites.push(data);approvalRecord={...approvalRecord,revision:2,state:'denied',decision:data.decision};return approvalRecord;}
+      if(path.startsWith('approvals?')){const p=new URLSearchParams(path.split('?')[1]);return p.has('id')?approvalRecord:p.get('viewer')==='operator'?[approvalRecord]:[];}
+      if(path.startsWith('activity'))return {scheduler:{online:true,tasks:[]},runs:[]};
+      return originalApi(path,data);
+    };
+    document.querySelector('#ix-viewer').value='operator';document.querySelector('#ix-viewer').dispatchEvent(new Event('change'));
+  `);
+  await wait('document.querySelectorAll(".ix-edge.delegation").length===1 && document.querySelectorAll("[data-ix-task]").length===1');
+  assert.equal(await evaluate('document.querySelectorAll(".ix-node").length'),2);
+  assert.match(await evaluate('document.querySelector("#ix-graph").textContent'),/codex/);
+  await evaluate('document.querySelector(".ix-edge.delegation").dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true}))');
+  await wait('document.querySelector("#ix-detail").textContent.includes("执行引擎：codex")');
+  assert.equal(await evaluate('window.injected'),undefined);
+  await click('[data-task-approval]');
+  await wait('!!document.querySelector("#approval-form")');
+  assert.equal(await evaluate('document.querySelector("#approval-form select").value'),'');
+  await wait('!!document.querySelector(".permission-mode-form")');
+  assert.equal(await evaluate('!!document.querySelector("#approval-all")'),false);
+  assert.match(await evaluate('document.querySelector("#command-panel-body").textContent'),/不经过 Native 审核模型/);
+  assert.equal(await evaluate('document.querySelector("#approval-form").checkValidity()'),false);
+  assert.equal(await evaluate('document.querySelector("#approval-form").getBoundingClientRect().width>0'),true);
+  for(const width of [1280,390,360]) {
+    await cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+    assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+  }
+
+  await evaluate('document.querySelector("#approval-form select").value="1";document.querySelector("#approval-form").requestSubmit()');
+  await wait('approvalWrites.length===1 && !document.querySelector("#approval-form")');
+  assert.equal(await evaluate('approvalWrites[0].decision'),'decline');
+  assert.equal(await evaluate('approvalWrites[0].expected_revision'),1);
+  await evaluate(`approvalRecord={...approvalRecord,state:'approved',decision:'accept',decision_origin:'model_review',delivery:'not_sent'};AgtApprovals.refresh()`);
+  await wait('document.querySelector("#command-panel-body").textContent.includes("决定来源：模型审核")');
+  assert.match(await evaluate('document.querySelector("#command-panel-body").textContent'),/无需再次审批/);
+  await evaluate(`approvalRecord={...approvalRecord,delivery:'resolved'};AgtApprovals.refresh()`);
+  await wait('document.querySelector("#command-panel-body").textContent.includes("审批处理已结束")');
+  await evaluate(`approvalRecord={...approvalRecord,revision:3,state:'awaiting_human',delivery:'not_sent'};state.page='observer';AgtApprovals.open('approval-only')`);
+  await wait('!!document.querySelector(".permission-mode-form")');
+  await evaluate(`document.querySelector('.permission-mode-form [name="native"]').value='auto_allow';document.querySelector('.permission-mode-form [name="harness"]').value='auto_allow';document.querySelector('.permission-mode-form').requestSubmit()`);
+  await wait('document.querySelector(".permission-mode-feedback").textContent.startsWith("已保存")');
+  assert.equal(await evaluate('approvalWrites.length'),1);
+  assert.equal((await run(['config','show'])).permissions.harness_mode,'auto_allow');
+  await evaluate('AgtApprovals.open()');
+  await wait(`document.querySelector('.permission-mode-form [name="native"]')?.value==="auto_allow"`);
+  assert.equal(await evaluate(`document.querySelector('.permission-mode-form [name="harness"]').value`),'auto_allow');
+  await evaluate("state.page='interactions'");
+  await evaluate('AgtInteractions.refresh()');
+  assert.equal(await evaluate('document.querySelectorAll(".ix-edge.delegation").length'),1);
+  await evaluate('document.querySelector("#ix-viewer").value="coder";document.querySelector("#ix-viewer").dispatchEvent(new Event("change"))');
+  await wait('document.querySelectorAll(".ix-node").length===0 && !document.querySelector("#command-panel-body").textContent.includes("unsafe")');
+  assert.equal(await evaluate('document.querySelectorAll("#approval-form").length'),0);
+  await evaluate('AgtApprovals.open()');
+  await wait('!document.querySelector("#command-panel-body").textContent.includes("正在读取")');
+  assert.equal(await evaluate('document.querySelectorAll("#approval-all").length'),0);
+  await wait('!!document.querySelector(".permission-mode-form select")');
+  assert.equal(await evaluate('document.querySelector(".permission-mode-form select").disabled'),true);
+
   assert.deepEqual(errors,[]);
-  console.log('Interaction browser passed: scoped reads, filters, pagination, disclosure preservation, XSS, identity race and five viewport widths.');
+  console.log('Interaction browser passed: scoped messages and delegation edges, Harness identity, approval decisions, observer isolation, XSS and responsive widths.');
 } finally {
   socket?.close(); chrome?.kill('SIGTERM'); run.close(); server?.closeAllConnections(); server?.close();
   await new Promise(ok => setTimeout(ok, 500));

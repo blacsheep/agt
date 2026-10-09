@@ -1,4 +1,6 @@
 import http from 'node:http';
+import { activitySnapshot } from './activity.mjs';
+import { toolDetail } from './tool-details.mjs';
 import './public/commands.js';
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -11,7 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const readTools = new Set(['conversation_list', 'member_list', 'message_history', 'message_status', 'message_inbox', 'task_get', 'task_list', 'task_attention']);
 const writeTools = new Set(['direct_create', 'group_create', 'message_send', 'member_add', 'member_remove', 'resource_write', 'principal_create', 'agent_bind', 'agent_unbind', 'agent_set_enabled', 'task_cancel', 'task_reply', 'task_reprioritize', 'task_defer', 'task_resolve', 'task_retry', 'task_report']);
 const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent', 'harness'];
-const assets = new Map([['/interaction-graph.js', ['interaction-graph.js', 'text/javascript']], ['/interactions.js', ['interactions.js', 'text/javascript']], ['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/settings.js', ['settings.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
+const assets = new Map([['/permission-mode.js',['permission-mode.js','text/javascript']],['/tool-details.js',['tool-details.js','text/javascript']],['/execution-view.css',['execution-view.css','text/css']],['/tool-renderers.js',['tool-renderers.js','text/javascript']],['/tool-activity.js',['tool-activity.js','text/javascript']],['/execution-view.js',['execution-view.js','text/javascript']],['/approvals.js', ['approvals.js', 'text/javascript']], ['/interaction-graph.js', ['interaction-graph.js', 'text/javascript']], ['/interactions.js', ['interactions.js', 'text/javascript']], ['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/settings.js', ['settings.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
 
 export class ApiError extends Error {
   constructor(status, code, message, field) { super(message); Object.assign(this, { status, code, field }); }
@@ -155,30 +157,18 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         ]);
         send(200, { home, principal, principals, bindings, resources: Object.fromEntries(kinds.map((k, i) => [k, resources[i]])) });
       } else if (req.method === 'GET' && url.pathname === '/api/activity') {
-        const [runs, scheduler] = await Promise.all([run(['run', 'list', '--limit', '50']), run(['schedule', 'status'])]);
-        // Drafts are only returned for the selected, currently visible conversation.
-        const conversation = url.searchParams.get('conversation');
-        const viewer = url.searchParams.get('viewer') || principal;
-        let visible = false;
-        if (conversation && scheduler.online) {
-          const members = await tool('member_list', { conversation }, viewer).catch(() => []);
-          visible = members.some(m => m.principal_id === viewer && m.left_message_seq == null);
-        }
-        const progress = r => {
-          const p = r.progress, trigger = r.request.trigger;
-          if (!visible || !p || r.state !== 'running' || r.parent_run_id || trigger?.conversation_id !== conversation) return null;
-          const task = scheduler.tasks.find(t => t.id === p.task && t.version === p.task_version && t.state === 'responding' && t.principal === trigger.principal && t.conversation === conversation);
-          const round = task && scheduler.discussions.find(d => d.id === task.discussion);
-          if (!round || !['active', 'paused'].includes(round.state)) return null;
-          return { phase: p.phase, attempt: p.attempt, preview: typeof p.preview === 'string' ? p.preview.slice(-4096) : '', started_at: p.started_at, updated_at: p.updated_at, principal: task.principal,
-            ...(Number.isFinite(p.protocol_at) ? { protocol_at: p.protocol_at, local_checked_at: p.local_checked_at, meaningful_at: p.meaningful_at,
-              } : {}),
-            activities: (Array.isArray(p.activities) ? p.activities : []).slice(-40).filter(a => ['command','files','mcp','framework','input'].includes(a.kind) && ['running','completed','failed','canceled','unsupported','unknown'].includes(a.status)).map(a => ({kind:a.kind,status:a.status,started_at:a.started_at,updated_at:a.updated_at,
-              ...(typeof a.tool_name==='string' && /^[a-zA-Z0-9_.:/-]{1,128}$/.test(a.tool_name) ? {tool_name:a.tool_name}:{}),
-              ...(typeof a.label==='string'?{label:a.label.slice(0,80)}:{}),...(typeof a.summary==='string'?{summary:a.summary.slice(0,120)}:{})})) };
-        };
-        // Never serialize private Run input, final output, tool arguments or summaries.
-        send(200, { scheduler, runs: runs.map(r => ({ id: r.id, agent: r.request.agent, conversation: r.request.trigger?.conversation_id, state: r.state, model_steps: r.model_steps, tool_failures: r.tool_failures, error: r.error ? '执行失败，请查看消息投递了解原因。' : null, progress: progress(r) })) });
+        send(200, await activitySnapshot({ run, tool,
+          conversation: url.searchParams.get('conversation'),
+          viewer: url.searchParams.get('viewer') || principal }));
+      } else if (req.method === 'GET' && url.pathname === '/api/approvals') {
+        const viewer = str(url.searchParams.get('viewer') || principal), id = url.searchParams.get('id'), before = url.searchParams.get('before');
+        send(200, await run(['permission', id ? 'info' : 'list', ...(id ? [str(id)] : []), '--principal', viewer, ...(!id && before ? ['--before', str(before)] : [])]));
+      } else if (req.method === 'POST' && url.pathname === '/api/approvals') {
+        const data = await body(req);
+        if (Object.keys(data).some(k=>!['id','expected_revision','decision','reason'].includes(k))) throw new ApiError(403,'identity_fixed','审批操作身份由启动者固定。');
+        if (!Number.isSafeInteger(data.expected_revision) || data.expected_revision < 1) throw new ApiError(400,'invalid_revision','审批版本无效。');
+        if (typeof data.reason !== 'string' || data.reason.length > 2000 || data.decision === undefined) throw new ApiError(400,'invalid_decision','审批决定或理由无效。');
+        send(200, await run(['permission','decide',str(data.id),'--principal',principal,'--expected-revision',String(data.expected_revision),'--decision',JSON.stringify(data.decision),'--reason',data.reason]));
       } else if (req.method === 'POST' && url.pathname === '/api/harness') {
         const data = await body(req), operation = str(data.operation);
         if ('viewer' in data || 'actor' in data || 'principal' in data) throw new ApiError(403, 'identity_fixed', '操作身份由启动者固定。');
@@ -327,6 +317,12 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         if (paid && data.confirm !== true) throw new ApiError(400, 'confirmation_required', '请确认调用模型。');
         const scheduler = await run(['schedule', data.action, conversation]);
         send(202, { scheduler });
+      } else if (req.method === 'POST' && url.pathname === '/api/tool-detail') {
+        const data = await body(req);
+        const detail = await toolDetail({run, tool, operator: principal, viewer: str(data.viewer || principal),
+          conversation: str(data.conversation), id: str(data.id), activity: str(data.activity)});
+        if (detail === undefined) throw new ApiError(403, 'detail_denied', '仅执行者或本机操作员可在所属会话查看原始工具详情。');
+        send(200, detail);
       } else if (req.method === 'POST' && url.pathname === '/api/calls') {
         const data = await body(req);
         const after = data.after ?? 0;

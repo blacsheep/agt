@@ -54,7 +54,7 @@ try {
   assert.match(await evaluate('savedSummary.parentElement.textContent'), /重新判断中/);
   assert.match(await evaluate('savedSummary.parentElement.textContent'), /这是之前的判断/);
   await evaluate('state.scheduler.tasks[0].state = "queued"; state.scheduler.discussions[0].state = "paused"; renderActivity();');
-  assert.match(await evaluate('savedSummary.textContent'), /用户操作/);
+  assert.match(await evaluate('savedSummary.textContent'), /会话控制/);
   assert.match(await evaluate('savedSummary.textContent'), /已暂停/);
   await evaluate('state.scheduler.online = false; renderActivity();');
   assert.match(await evaluate('savedSummary.textContent'), /状态待确认/);
@@ -89,26 +89,57 @@ try {
   assert.match(await evaluate('document.querySelector(".live-phase").textContent'), /正在生成/);
   assert.equal(await evaluate('document.querySelector(".live-reply").open'), false);
   await evaluate(`state.runs[0].progress.activities = [
-    {kind:'framework',tool_name:'framework_harness_models',label:'查询可用模型',status:'running',started_at:Date.now()-2000,updated_at:Date.now()},
-    {kind:'mcp',tool_name:'search',status:'running',started_at:Date.now()-1000,updated_at:Date.now()},
-    {kind:'framework',tool_name:'framework_harness_session_configure',summary:'会话模型已更新',status:'completed',started_at:Date.now()-5000,updated_at:Date.now()-4000}
+    {id:'call:1',kind:'framework',tool_name:'framework_harness_models',label:'查询可用模型',status:'running',started_at:Date.now()-2000,updated_at:Date.now()},
+    {id:'call:2',kind:'mcp',tool_name:'search',status:'running',started_at:Date.now()-1000,updated_at:Date.now()},
+    {id:'call:3',kind:'framework',tool_name:'framework_harness_session_configure',summary:'会话模型已更新',status:'completed',started_at:Date.now()-5000,updated_at:Date.now()-4000}
   ]; renderActivity();`);
   assert.match(await evaluate('document.querySelector(".live-phase").textContent'), /正在执行 2 项操作/);
-  await click('.live-reply summary');
+  assert.equal(await evaluate('document.querySelector(".live-reply").open'),true);
   assert.match(await evaluate('document.querySelector(".harness-activity").textContent'), /framework_harness_models/);
   assert.match(await evaluate('document.querySelector(".harness-activity").textContent'), /会话模型已更新/);
-  assert.match(await evaluate('activityTimeline([{kind:"framework",status:"unknown",started_at:1,updated_at:2}])'), /状态待确认/);
+  assert.match(await evaluate('activityTimeline([{kind:"framework",status:"unknown",started_at:1,updated_at:2}])'), /结果待确认/);
 
+  await evaluate(`
+    window.detailReads=[];window.detailApi=api;window.detailFailure=false;window.detailDelay=false;
+    api=async(path,data)=>{
+      if(path!=='tool-detail')return detailApi(path,data);
+      detailReads.push(data);
+      if(detailDelay)return new Promise(resolve=>window.resolveDetail=resolve);
+      if(detailFailure){detailFailure=false;throw new Error('fixture detail unavailable');}
+      return {fields:{command:{text:'cargo test --offline',truncated:false},arguments:{text:'{"path":"src/a.rs"}',truncated:false},aggregatedOutput:{text:'<script>window.rawInjected=true</script>\\n'+('tool output '.repeat(100)),truncated:true},changes:{text:'--- a/src/a.rs\\n+++ b/src/a.rs\\n-old\\n+new',truncated:false}}};
+    };
+  `);
+  assert.equal(await evaluate('detailReads.length'),0);
+  await click('[data-activity="call:2"] > summary');
+  await wait(`document.querySelector('[data-activity="call:2"] .tool-payload pre')`);
+  assert.match(await evaluate(`document.querySelector('[data-activity="call:2"] .tool-payload').textContent`),/cargo test --offline/);
+  assert.match(await evaluate(`document.querySelector('[data-activity="call:2"] .tool-payload').textContent`),/已截断|\+new/);
+  assert.equal(await evaluate('window.rawInjected===undefined && !document.querySelector(".tool-payload script")'),true);
+  assert.equal(await evaluate('detailReads[0].conversation'), 'sample-chat');
+  assert.equal(await evaluate('detailReads[0].id'), 'live');
+  await evaluate('renderActivity();renderActivity()');
+  assert.equal(await evaluate('detailReads.length'),1);
+  await evaluate(`window.savedTool=document.querySelector('[data-activity="call:2"]');savedTool.querySelector('summary').focus();state.runs[0].progress.activities.reverse();state.runs[0].progress.activities.find(a=>a.id==='call:2').status='failed';renderActivity();`);
+  assert.equal(await evaluate(`savedTool===document.querySelector('[data-activity="call:2"]') && savedTool.open && savedTool.contains(document.activeElement)`),true);
+  assert.match(await evaluate(`savedTool.querySelector('.tool-status').textContent`),/失败/);
+  assert.equal(await evaluate('document.querySelectorAll(".tool-card").length'),3);
+  await wait('detailReads.length===2 && document.querySelector(".tool-payload pre")');
+  await evaluate('detailFailure=true');
+  await click('[data-activity="call:1"] > summary');
+  await wait(`document.querySelector('[data-activity="call:1"] .tool-payload button')`);
+  await click('[data-activity="call:1"] .tool-payload button');
+  await wait(`document.querySelector('[data-activity="call:1"] .tool-payload pre')`);
   await evaluate('window.liveSummary = document.querySelector(".live-reply summary"); liveSummary.focus(); renderActivity();');
   assert.equal(await evaluate('document.activeElement === liveSummary && liveSummary.parentElement.open'), true);
   for (const width of [1280, 768, 390, 360]) {
     await cdp('Emulation.setDeviceMetricsOverride', {width, height:900, deviceScaleFactor:1, mobile:width<761});
     await evaluate('liveSummary.parentElement.open = true');
     assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true, `live overflow at ${width}`);
-    assert.equal(await evaluate('document.querySelector("#live-replies").getBoundingClientRect().height <= 261'), true);
+    assert.equal(await evaluate('document.querySelector("#live-replies").getBoundingClientRect().height <= 301'), true);
   }
   if (process.env.AGT_DESIGN_CAPTURE) {
     await cdp('Emulation.setDeviceMetricsOverride', {width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    await evaluate(`document.querySelector('[data-activity="call:2"] .tool-payload').scrollIntoView({block:'start'})`);
     const shot = await cdp('Page.captureScreenshot', {format:'png'});
     await writeFile('/tmp/agt-stream-preview.png', Buffer.from(shot.data, 'base64'));
   }
@@ -119,8 +150,65 @@ try {
   assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'), 0);
   await evaluate('state.runs[0].state = "running"; renderActivity(); state.conversation = {id:"elsewhere",state:"active"}; renderActivity();');
   assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'), 0);
+  // A fresh API snapshot restores finished tool cards without keeping live draft text.
+  await evaluate(`
+    state.conversation={id:'sample-chat',state:'active'};
+    const retainedToolItems=state.runs[0].progress.activities.map(a=>({...a,status:a.id==='call:1'?'completed':a.status}));
+    state.runs=[{id:'live',agent:'default/a',conversation:'sample-chat',state:'completed',progress:null,tool_activity:{principal:'sample-0',engine:'native',items:retainedToolItems,started_at:Date.now()-10000,ended_at:Date.now(),approvals:[]}}];
+    renderActivity();
+  `);
+  assert.equal(await evaluate('document.querySelectorAll(".tool-card").length'),3);
+  assert.match(await evaluate('document.querySelector(".live-phase").textContent'),/执行已结束/);
+  assert.equal(await evaluate('document.querySelector(".live-preview").textContent'),'');
+  await evaluate('document.querySelector("#live-replies").replaceChildren();renderActivity();');
+  assert.equal(await evaluate('document.querySelectorAll(".tool-card").length'),3);
+  await click('.live-reply > summary');
+  await click('[data-activity="call:2"] > summary');
+  await wait(`document.querySelector('[data-activity="call:2"] .tool-payload pre')`);
+  await evaluate('state.scheduler.online=false;renderActivity()');
+  assert.equal(await evaluate('document.querySelectorAll(".tool-card").length'),3);
+  await evaluate(`state.scheduler.online=true;state.runs[0].state='running';state.runs[0].progress={phase:'tool_running',started_at:Date.now(),preview:''};state.runs[0].tool_activity.approvals=[{id:'permission',source:'native',state:'awaiting_human'}];renderActivity();`);
+  assert.match(await evaluate('document.querySelector(".live-phase").textContent'),/等待人工审批/);
+  assert.equal(await evaluate('document.querySelector(".run-approval-actions button").textContent'),'查看工具权限');
+  await evaluate(`window.openedApproval=null;window.savedApprovals=AgtApprovals;window.AgtApprovals={open:id=>openedApproval=id};document.querySelector('.run-approval-actions button').click();window.AgtApprovals=savedApprovals;`);
+  assert.equal(await evaluate('openedApproval'),'permission');
+  await evaluate(`state.runs[0].tool_activity.approvals=[];state.runs[0].tool_activity.items=[{id:'call:9',kind:'files',status:'running',started_at:Date.now()-2000,updated_at:Date.now(),summary:'<img src=x onerror="window.toolInjected=true">'}];renderActivity();`);
+  assert.equal(await evaluate('window.toolInjected===undefined && !document.querySelector(".tool-card img")'),true);
+  assert.equal(await evaluate('document.querySelectorAll(".run-approval-actions button").length'),0);
+  if(process.env.AGT_DESIGN_CAPTURE){
+    await evaluate(`state.runs[0].tool_activity.items[0].summary='等待引擎报告文件更新结果';state.runs[0].tool_activity.items.push({id:'call:10',kind:'framework',tool_name:'framework_harness_models',status:'completed',started_at:Date.now()-3000,updated_at:Date.now()-1000,summary:'找到 3 个模型'});document.querySelector('.live-reply').open=true;renderActivity();`);
+    await cdp('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+    const shot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile('/tmp/agt-tool-cards.png',Buffer.from(shot.data,'base64'));
+  }
+  await evaluate(`detailDelay=true;document.querySelector('[data-activity="call:9"]').open=true`);
+  await wait('typeof resolveDetail==="function"');
+  await evaluate('state.viewer="sample-1";clearConversation();resolveDetail({fields:{output:{text:"stale-private-detail",truncated:false}}});');
+  assert.doesNotMatch(await evaluate('document.querySelector("#live-replies").textContent'),/stale-private-detail/);
+  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),0);
+  // A failed refresh also clears retained facts whose membership can no longer be verified.
+  await evaluate(`state.conversation={id:'sample-chat',state:'active'};state.runs[0].state='completed';state.runs[0].progress=null;renderActivity();`);
+  await evaluate('(async()=>{const original=api;api=async()=>{throw new Error("revoked")};try{await activity()}catch{}finally{api=original}})()');
+  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),0);
+  // Terminal notices can be dismissed without deleting records or hiding resumed work.
+  await evaluate(`state.viewer='operator';state.conversation={id:'sample-chat',state:'active'};state.scheduler.online=true;
+    state.runs=[{id:'dismiss-me',agent:'default/a',conversation:'sample-chat',state:'canceled',tool_activity:{principal:'a',items:[{id:'call:99',kind:'command',status:'unknown'}]}}];renderActivity();`);
+  assert.match(await evaluate('document.querySelector(".live-phase").textContent'),/执行已取消/);
+  await click('.run-dismiss');
+  await evaluate('renderActivity();renderActivity()');
+  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),0);
+  assert.equal(await evaluate('state.runs.length'),1);
+  await evaluate(`state.viewer='another-viewer';renderActivity()`);
+  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),1);
+  await evaluate(`state.viewer='operator';renderActivity()`);
+  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),0);
+  // Reload the view module to check persisted dismissal, not just the in-memory set.
+  await evaluate(`(async()=>{const script=document.createElement('script');script.src='/execution-view.js?reload=1';await new Promise((ok,fail)=>{script.onload=ok;script.onerror=fail;document.head.append(script)});renderActivity()})()`);
+  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),0);
+  await evaluate(`state.runs[0].state='running';state.runs[0].progress={phase:'waiting',principal:'a'};renderActivity()`);
+  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),1);
+  assert.equal(await evaluate('document.querySelector(".run-dismiss").hidden'),true);
   assert.deepEqual(errors, []);
-  console.log('Presence browser passed: 14 members, source separation, public reason escaping/clamp, stable expansion/focus, stale decisions, pause/offline, legacy records, conversation switch, 6 viewport sizes.');
+  console.log('Execution browser passed: keyed tool cards, retained results, approval actions, XSS, stable expansion/focus, identity cleanup and responsive widths.');
 } finally {
   socket?.close(); chrome?.kill('SIGTERM'); run.close(); server?.closeAllConnections(); server?.close();
   await new Promise(ok => setTimeout(ok, 500));

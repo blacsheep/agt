@@ -3,14 +3,18 @@
   const batchSize = 6;
   const recent = new Map();
   const graph = createInteractionGraph((id, node) => {
+    if(id?.kind==='task'){selected=null;selectedTask=id.id;render();showTask(id.id,node.taskIds);return;}
+    selectedTask=null;
     selected = id; detailSignature = ''; render();
     if (id) showDetail();
     else {
       ++detailEpoch;
-      $('#ix-detail').innerHTML = `<div class="ix-detail-heading"><span class="eyebrow">NETWORK DETAIL</span><h2>${esc(node.label)}</h2><p>${esc(node.status)}</p></div><section class="ix-message"><p class="ix-body">${esc(node.reason || '当前筛选范围内没有相关消息。')}</p></section>`;
+      $('#ix-detail').innerHTML = `<div class="ix-detail-heading"><span class="eyebrow">NETWORK DETAIL</span><h2>${esc(node.label)}</h2><p>${esc(node.status)}</p></div><section class="ix-message"><p class="ix-body">${esc(node.reason || '当前筛选范围内没有相关消息。')}</p>${node.approvalIds?.length?'<button id="ix-node-approvals" class="secondary">查看权限审批</button>':''}</section>`;
+      $('#ix-node-approvals')?.addEventListener('click',()=>AgtApprovals.open(node.approvalIds[0]));
     }
   });
   let epoch = 0, viewer, entries = [], loaded = new Map(), selected = null;
+  let workTasks=[], approvals=[], taskPages=1, tasksMore=false, selectedTask=null;
   let busy = false, refreshPending = false, detailEpoch = 0, detailSignature = '', status = '';
   const stamp = value => new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   const active = generation => generation === epoch && state.page === 'interactions';
@@ -31,14 +35,19 @@
   }
   function render() {
     const all = rows();
-    selectOptions('#ix-agent', option('', '所有发送者') + [...new Set(all.map(x => x.message.sender_id))].map(id => option(id, nameOf(id))).join(''));
+    selectOptions('#ix-agent', option('', '所有参与者') + [...new Set([...all.map(x => x.message.sender_id),...workTasks.flatMap(t=>[t.request.requester,t.request.assignee])])].map(id => option(id, nameOf(id))).join(''));
     selectOptions('#ix-conversation', option('', '已载入的会话') + entries.map(x => option(x.conversation.id, title(x))).join(''));
     const query = $('#ix-query').value.trim().toLowerCase(), agent = $('#ix-agent').value, conversation = $('#ix-conversation').value, kind = $('#ix-kind').value;
-    const filtered = all.filter(({ item, message: m }) => (!agent || m.sender_id === agent) && (!conversation || item.conversation.id === conversation)
+    const filtered = all.filter(({ item, message: m }) => kind!=='task' && (!agent || m.sender_id === agent) && (!conversation || item.conversation.id === conversation)
       && (!kind || (principalOf(m.sender_id)?.kind === 'agent' ? 'agent' : 'human') === kind)
       && (!query || `${m.body} ${nameOf(m.sender_id)} ${title(item)}`.toLowerCase().includes(query)));
-    graph.update(filtered, state.scheduler.tasks || [], state.scheduler.online, recent, selected);
-    $('#ix-count').textContent = `${filtered.length} 条 / 已载入 ${all.length} 条`;
+    const work=workTasks.filter(t=>(!agent||[t.request.requester,t.request.assignee].includes(agent))&&(!conversation||t.request.report_to===conversation)&&(!kind||kind==='task')&&(!query||`${t.request.input} ${nameOf(t.request.requester)} ${nameOf(t.request.assignee)}`.toLowerCase().includes(query)));
+    const visibleApprovals=approvals.filter(a=>(!conversation||a.conversation===conversation)&&(!agent||a.principal===agent)&&!query&&!kind);
+    graph.update(filtered, state.scheduler.tasks || [], state.scheduler.online, recent, selectedTask ? {kind:'task',id:selectedTask} : selected, work, visibleApprovals);
+    $('#ix-tasks-more').classList.toggle('hidden',!tasksMore);
+    $('#ix-tasks-more').disabled=busy;
+    $('#ix-approvals').textContent='权限审批'+(approvals.some(AgtApprovals.pending)?' · 待处理':'');
+    $('#ix-count').textContent = `${filtered.length} 条消息 / ${work.length} 项任务 · 已载入 ${all.length} 条消息`;
     $('#ix-status').textContent = status || `已载入 ${loaded.size}/${entries.length} 个会话，每个会话初次读取最近 30 条；执行状态为当前快照。`;
     $('#ix-refresh').disabled = busy;
     $('#ix-more').classList.toggle('hidden', loaded.size >= entries.length);
@@ -46,7 +55,7 @@
     const current = loaded.get(conversation);
     $('#ix-earlier').classList.toggle('hidden', !current?.cursor);
     $('#ix-earlier').disabled = busy;
-    const markup = filtered.map(({ item, message: m }) => `<button class="ix-row ${selected === m.id ? 'selected' : ''}" data-ix-message="${esc(m.id)}" aria-pressed="${selected === m.id}">
+    const markup = work.map(t=>`<button class="ix-row" data-ix-task="${esc(t.id)}"><span><strong>任务委派 · ${esc(nameOf(t.request.requester))} → ${esc(nameOf(t.request.assignee))}</strong><span class="ix-preview">${esc(t.request.input.slice(0,180))}</span><small>${esc(t.execution_status||t.state)}</small></span></button>`).join('') + filtered.map(({ item, message: m }) => `<button class="ix-row ${selected === m.id ? 'selected' : ''}" data-ix-message="${esc(m.id)}" aria-pressed="${selected === m.id}">
       <span class="ix-dot" aria-hidden="true">${esc(nameOf(m.sender_id).slice(0, 1))}</span>
       <span class="ix-row-main"><span class="ix-direction"><strong>${esc(nameOf(m.sender_id))}</strong><span aria-hidden="true"> → </span><span>${esc(target(item, m))}</span></span>
       <span class="ix-preview">${esc(m.deleted_at ? '消息已删除' : m.body)}</span><span class="ix-meta">${esc(title(item))} · #${m.seq}</span></span>
@@ -55,13 +64,14 @@
     if ($('#ix-list').innerHTML !== markup) {
       const focused = document.activeElement?.dataset.ixMessage;
       $('#ix-list').innerHTML = markup;
+      $$('#ix-list [data-ix-task]').forEach(b=>b.onclick=()=>{selected=null;selectedTask=b.dataset.ixTask;render();showTask(selectedTask);});
       $$('#ix-list [data-ix-message]').forEach(button => button.onclick = () => {
-        selected = button.dataset.ixMessage; detailSignature = ''; render(); showDetail();
+        selectedTask=null; selected = button.dataset.ixMessage; detailSignature = ''; render(); showDetail();
         if (matchMedia('(max-width:1200px)').matches) $('#ix-detail').scrollIntoView({ block: 'start' });
       });
       if (focused) $$('#ix-list [data-ix-message]').find(b => b.dataset.ixMessage === focused)?.focus({ preventScroll: true });
     }
-    if (!selected) $('#ix-detail').innerHTML = '<div class="ix-detail-empty"><span aria-hidden="true">↗</span><h2>从一个节点开始</h2><p>点击 Agent 聚焦它的协作关系，点击连线查看最近交流。</p><p>悬停预览 · 拖动布局 · 滚轮缩放</p><p>执行光环来自当前运行状态；沿线流动表示刚收到新消息。</p></div>';
+    if (!selected && !selectedTask) $('#ix-detail').innerHTML = '<div class="ix-detail-empty"><span aria-hidden="true">↗</span><h2>从一个节点开始</h2><p>点击 Agent 聚焦它的协作关系，点击连线查看最近交流。</p><p>悬停预览 · 拖动布局 · 滚轮缩放</p><p>执行光环来自当前运行状态；沿线流动表示刚收到新消息。</p></div>';
   }
   async function fetchConversation(entry, generation, earlier = false, live = false) {
     const id = entry.conversation.id, existing = loaded.get(id);
@@ -82,8 +92,25 @@
   async function load(mode = 'initial') {
     if (state.page !== 'interactions') return;
     if (busy) { if (mode === 'refresh') refreshPending = true; return; }
-    busy = true; const generation = epoch; status = '正在同步可见消息…'; render();
+    busy = true; const generation = epoch; status = '';  render();
     try {
+      if (mode === 'initial' || mode === 'refresh' || mode==='tasks') {
+        const next=new Map();let before;
+        try {
+          for(let page=0;page<taskPages;page++) {
+            const rows=await read('task_list',{limit:100,...(before?{before}:{})},viewer);
+            if(!active(generation))return;
+            rows.forEach(t=>next.set(t.id,t));tasksMore=rows.length===100;before=rows.at(-1)?.list_cursor;
+            if(!tasksMore||!before)break;
+          }
+          workTasks=[...next.values()];
+        } catch(e) {if(!active(generation))return;workTasks=[];status='任务读取失败：'+e.message;}
+        try {
+          const nextApprovals=await api('approvals?'+new URLSearchParams({viewer}));
+          if(!active(generation))return;approvals=nextApprovals;
+        } catch(e) {if(!active(generation))return;approvals=[];status+=' 审批读取失败：'+e.message;}
+        if(selectedTask&&!workTasks.some(t=>t.id===selectedTask)){selectedTask=null;detailSignature='';++detailEpoch;}
+      }
       if (mode === 'initial' || mode === 'refresh') {
         const result = await read('conversation_list', { include_hidden: true }, viewer);
         if (!active(generation)) return;
@@ -104,9 +131,9 @@
         failures += results.filter(r => r.status === 'rejected').length;
       }
       if (!active(generation)) return;
-      status = failures ? `${failures} 个会话读取失败，可点击刷新重试；当前记录可能不完整。` : '';
+      if(failures)status=`${failures} 个会话读取失败，可点击刷新重试；当前记录可能不完整。`;
     } catch (e) { if (active(generation)) status = `读取失败：${e.message}`; }
-    finally { if (active(generation)) { busy = false; render(); if (selected) showDetail(); if (refreshPending) { refreshPending = false; load('refresh'); } } }
+    finally { if (active(generation)) { busy = false; render(); if (selected) showDetail(); if(selectedTask)showTask(selectedTask); AgtApprovals.refresh(); if (refreshPending) { refreshPending = false; load('refresh'); } } }
   }
   async function showDetail() {
     const row = rows().find(x => x.message.id === selected);
@@ -137,17 +164,30 @@
       if (box.innerHTML !== html) box.innerHTML = html;
     } catch (e) { if (active(generation) && request === detailEpoch) $('#ix-execution-body').textContent = `状态读取失败：${e.message}`; }
   }
+  async function showTask(id,related=[id]) {
+    const generation=epoch,request=++detailEpoch;
+    try {
+      const t=await read('task_get',{task_id:id},viewer);
+      if(!active(generation)||request!==detailEpoch||selectedTask!==id)return;
+      const relevant=approvals.filter(a=>a.work_id===id);
+      $('#ix-detail').innerHTML=`<div class="ix-detail-heading"><span class="eyebrow">TASK DELEGATION</span><h2>${esc(nameOf(t.request.requester))} → ${esc(nameOf(t.request.assignee))}</h2><p>${esc(t.execution_status||t.state)}${t.execution_engine ? ' · 执行引擎：'+esc(t.execution_engine) : ''}</p></div><section class="ix-message"><pre class="ix-body">${esc(t.request.input)}</pre><p class="ix-note">任务 ${esc(t.id)} · Run ${esc(t.run_id||'尚未执行')}</p>${t.output?`<h3>结果</h3><pre class="ix-body">${esc(t.output)}</pre>`:''}${related.length>1?related.map(other=>`<button class="secondary" data-related-task="${esc(other)}">${esc(other.slice(0,8))}</button>`).join(''):''}<h3>权限审批</h3>${relevant.map(a=>`<button class="secondary" data-task-approval="${esc(a.id)}">${esc(a.source==='harness'?'引擎原生':'Native')} · ${esc(AgtApprovals.labels[a.state]||a.state)}</button>`).join('')||'<p>当前已载入范围无审批记录。</p>'}</section>`;
+      $$('[data-related-task]').forEach(b=>b.onclick=()=>{selectedTask=b.dataset.relatedTask;showTask(selectedTask,related)});
+      $$('[data-task-approval]').forEach(b=>b.onclick=()=>AgtApprovals.open(b.dataset.taskApproval));
+    }catch(e){if(active(generation)&&request===detailEpoch)$('#ix-detail').textContent='任务读取失败：'+e.message;}
+  }
   function reset() {
-    graph.reset(); recent.clear();
+    graph.reset(); recent.clear(); workTasks=[];approvals=[];selectedTask=null;taskPages=1;tasksMore=false;
     ++epoch; ++detailEpoch; loaded = new Map(); entries = []; selected = null; detailSignature = ''; status = ''; busy = false; refreshPending = false;
     for (const id of ['#ix-query', '#ix-agent', '#ix-conversation', '#ix-kind']) $(id).value = '';
     render();
   }
   function changeViewer() {
     reset(); viewer = $('#ix-viewer').value; state.viewer = viewer;
-    state.conversations = []; clearConversation(); ensureEvents(); load();
+    state.conversations = []; clearConversation(); AgtApprovals.refresh(); ensureEvents(); load();
   }
   $('#ix-viewer').onchange = changeViewer;
+  $('#ix-approvals').onclick=()=>AgtApprovals.open();
+  $('#ix-tasks-more').onclick=()=>{taskPages++;load('tasks');};
   $('#ix-query').oninput = render;
   $('#ix-agent').onchange = render;
   $('#ix-kind').onchange = render;
