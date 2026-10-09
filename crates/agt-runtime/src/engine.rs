@@ -198,7 +198,7 @@ impl<'a> Runtime<'a> {
     }
 }
 
-fn check_canceled(token: &CancellationToken) -> Result<()> {
+pub(crate) fn check_canceled(token: &CancellationToken) -> Result<()> {
     if token.is_canceled() {
         Err(RuntimeError::Stopped(crate::StopCode::token(token)))
     } else {

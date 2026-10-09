@@ -33,6 +33,12 @@ pub struct ExecutionConfig {
     pub timeout_seconds: Option<u32>,
     pub output_bytes: usize,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ConfigStamp {
+    inode: u64,
+    modified: Option<std::time::SystemTime>,
+    len: u64,
+}
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PermissionMode {
@@ -171,7 +177,24 @@ impl RuntimeConfig {
             serde_yaml::to_string(self)?.as_bytes(),
         )?;
         drop(lock);
+        // Running hosts hold a snapshot and reload only when woken or the stamp changes.
+        agt_storage::wake::notify(home);
         Ok(())
+    }
+
+    /// Cheap identity of the saved file. Saves replace the file atomically, so any
+    /// change yields a different stamp without parsing YAML.
+    pub fn stamp(home: &Path) -> Option<ConfigStamp> {
+        let metadata = std::fs::metadata(home.join("config.yaml")).ok()?;
+        #[cfg(unix)]
+        let inode = std::os::unix::fs::MetadataExt::ino(&metadata);
+        #[cfg(not(unix))]
+        let inode = 0;
+        Some(ConfigStamp {
+            inode,
+            modified: metadata.modified().ok(),
+            len: metadata.len(),
+        })
     }
     pub fn expires_at(&self, now: i64) -> i64 {
         // Exact JS-safe sentinel; the public API separately identifies unlimited policy.

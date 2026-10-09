@@ -23,11 +23,7 @@ impl<'run, 'host> NativeRun<'run, 'host> {
                 "model tool_call capability is disabled".into(),
             ));
         }
-        let permission_config = agt_config::RuntimeConfig::load(&runtime.home)
-            .map_err(|e| RuntimeError::Invalid(e.to_string()))?
-            .permissions;
-        let permissions =
-            crate::permission::PermissionLoop::new(&runtime.home, permission_config.clone());
+        let permissions = crate::permission::PermissionLoop::load(&runtime.home)?;
         runtime.store.save(record)?;
         runtime.check_schedule()?;
         crate::progress::stage(

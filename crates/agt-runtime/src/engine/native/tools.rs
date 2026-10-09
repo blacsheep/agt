@@ -78,17 +78,29 @@ impl NativeRun<'_, '_> {
             }
             let scope =
                 crate::approval::Scope::new(self.record, self.runtime.scheduled_task.as_ref());
-            let allowed = self.permissions.authorize(
-                &scope,
-                &call.id,
-                &call.function.name,
-                &arguments,
-                &self.record.request.input,
-                &|| {
-                    check_canceled(self.cancellation)?;
-                    self.runtime.check_schedule()
+            let (allowed, policy_changed) = self.permissions.authorize(
+                crate::permission::Request {
+                    scope: &scope,
+                    call: &call.id,
+                    tool: &call.function.name,
+                    arguments: &arguments,
+                    input: &self.record.request.input,
                 },
+                self.cancellation,
+                &|| self.runtime.check_schedule(),
             )?;
+            if policy_changed {
+                // The fingerprint records the policy actually applied, so resume checks
+                // compare against what this Run used.
+                self.record.config_fingerprint = Some(super::refresh::execution_fingerprint(
+                    &self.agent,
+                    self.agents,
+                    self.record.parent_run_id.is_none(),
+                    &self.permissions,
+                    &self.tools.schemas,
+                )?);
+                self.runtime.store.save(self.record)?;
+            }
             if !allowed {
                 self.messages.push(json!({"role":"tool","tool_call_id":call.id,"content":"Permission denied. This tool was not executed. Do not repeat the same request without new authorization."}));
                 continue;

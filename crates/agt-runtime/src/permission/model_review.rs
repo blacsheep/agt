@@ -14,6 +14,7 @@ pub(super) struct ModelReview {
 }
 impl ModelReview {
     pub(super) fn begin(
+        home: &Path,
         agent: Option<ResolvedAgent>,
         config: &PermissionConfig,
         input: Value,
@@ -22,6 +23,7 @@ impl ModelReview {
         let canceled = Arc::new(AtomicBool::new(false));
 
         let stop = canceled.clone();
+        let home = home.to_owned();
         if input.to_string().len() > 32768 {
             let _ = tx.send(Err(anyhow::anyhow!("review context exceeds limit")));
         } else {
@@ -53,6 +55,8 @@ impl ModelReview {
                     )?)
                 })();
                 let _ = tx.send(result);
+                // Wake the waiting request; its next database check applies the result.
+                agt_storage::wake::notify(&home);
             });
         }
         Self {

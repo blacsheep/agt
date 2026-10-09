@@ -1,25 +1,40 @@
 //! Native-only permission stages. Policies cannot execute tools or bypass service authorization.
 use crate::approval::{ApprovalState, ApprovalStore, DecisionOrigin, Delivery, Scope};
+use crate::engine::check_canceled;
 use crate::{Result, RuntimeError};
-use agt_config::runtime::{PermissionConfig, PermissionMode};
+use agt_config::runtime::{ConfigStamp, PermissionConfig, PermissionMode, RuntimeConfig};
+use agt_core::CancellationToken;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 mod model_review;
 mod policy;
 use policy::{Decision, PermissionPolicy};
 
+/// Native requests wait on wake hints; this fallback bounds lease renewal, expiry and
+/// review-timeout checks when no hint arrives.
+const RECHECK: Duration = Duration::from_secs(1);
+/// Cancellation is in-memory and checked at this cadence without touching the database.
+const TICK: Duration = Duration::from_millis(100);
+
+/// Holds the workspace permission snapshot for one Run. The snapshot is reloaded only
+/// when `config.yaml` changes, so every request still applies the current policy.
 pub(crate) struct PermissionLoop {
     home: PathBuf,
     config: PermissionConfig,
+    stamp: Option<ConfigStamp>,
     reviewer: Option<crate::ResolvedAgent>,
 }
 impl PermissionLoop {
-    pub(crate) fn new(home: &Path, config: PermissionConfig) -> Self {
-        Self {
+    pub(crate) fn load(home: &Path) -> Result<Self> {
+        let stamp = RuntimeConfig::stamp(home);
+        let config = load_config(home)?;
+        Ok(Self {
             reviewer: model_review::load(home, &config).ok(),
             home: home.into(),
             config,
-        }
+            stamp,
+        })
     }
     pub(crate) fn config(&self) -> &PermissionConfig {
         &self.config
@@ -27,25 +42,39 @@ impl PermissionLoop {
     pub(crate) fn reviewer_fingerprint(&self) -> Option<&str> {
         self.reviewer.as_ref().map(|r| r.fingerprint.as_str())
     }
+    /// Reload after the saved configuration changed. Returns whether the policy differs.
+    fn refresh(&mut self) -> Result<bool> {
+        let stamp = RuntimeConfig::stamp(&self.home);
+        if stamp == self.stamp {
+            return Ok(false);
+        }
+        let config = load_config(&self.home)?;
+        self.stamp = stamp;
+        if config == self.config {
+            return Ok(false);
+        }
+        self.config = config;
+        self.reviewer = model_review::load(&self.home, &self.config).ok();
+        Ok(true)
+    }
+    /// Returns whether the call may run, and whether the policy snapshot changed so the
+    /// caller can refresh its execution fingerprint.
     pub(crate) fn authorize(
-        &self,
-        scope: &Scope,
-        call: &str,
-        tool: &str,
-        args: &Value,
-        input: &str,
-        check: &dyn Fn() -> Result<()>,
-    ) -> Result<bool> {
-        let config = agt_config::runtime::RuntimeConfig::load(&self.home)
-            .map_err(|e| {
-                RuntimeError::Configuration(crate::Reason::because(
-                    "cannot load permission policy",
-                    e,
-                ))
-            })?
-            .permissions;
-        Self::new(&self.home, config)
-            .run(scope, call, tool, args, input, check)
+        &mut self,
+        request: Request<'_>,
+        cancellation: &CancellationToken,
+        fence: &dyn Fn() -> Result<()>,
+    ) -> Result<(bool, bool)> {
+        let mut changed = self.refresh()?;
+        if self.config.mode == PermissionMode::ModelReview {
+            // Edits to the reviewer Model resource apply to the next request.
+            let reviewer = model_review::load(&self.home, &self.config).ok();
+            changed |= reviewer.as_ref().map(|r| &r.fingerprint)
+                != self.reviewer.as_ref().map(|r| &r.fingerprint);
+            self.reviewer = reviewer;
+        }
+        let allowed = self
+            .run(request, cancellation, fence, &mut changed)
             .map_err(|e| {
                 e.downcast::<RuntimeError>().unwrap_or_else(|e| {
                     RuntimeError::Tool(crate::Reason::because(
@@ -53,7 +82,8 @@ impl PermissionLoop {
                         e,
                     ))
                 })
-            })
+            })?;
+        Ok((allowed, changed))
     }
     fn start_policy(
         &self,
@@ -66,6 +96,7 @@ impl PermissionLoop {
             PermissionMode::Manual => Box::new(policy::Manual),
             PermissionMode::AutoAllow => Box::new(policy::AutoAllow),
             PermissionMode::ModelReview => Box::new(model_review::ModelReview::begin(
+                &self.home,
                 self.reviewer.clone(),
                 &self.config,
                 context,
@@ -73,16 +104,27 @@ impl PermissionLoop {
         })
     }
     fn run(
-        &self,
-        scope: &Scope,
-        call: &str,
-        tool: &str,
-        args: &Value,
-        input: &str,
-        check: &dyn Fn() -> Result<()>,
+        &mut self,
+        request: Request<'_>,
+        cancellation: &CancellationToken,
+        fence: &dyn Fn() -> Result<()>,
+        changed: &mut bool,
     ) -> anyhow::Result<bool> {
+        let check = || -> Result<()> {
+            check_canceled(cancellation)?;
+            fence()
+        };
         check()?;
+        // Subscribe before creating the request so no decision hint is missed.
+        let listener = agt_storage::wake::Listener::open(&self.home)?;
         let store = ApprovalStore::open(&self.home)?;
+        let Request {
+            scope,
+            call,
+            tool,
+            arguments: args,
+            input,
+        } = request;
         let request = json!({"tool":tool,"arguments":args,"policy":self.config,"reviewer_fingerprint":self.reviewer_fingerprint(),"options":[{"label":"批准本次调用","value":"allow"},{"label":"拒绝本次调用","value":"deny"},{"label":"取消执行","value":"cancel"}]});
         let item = store.create(
             scope,
@@ -98,10 +140,17 @@ impl PermissionLoop {
             }
         }
         let _guard = Guard(&store, &scope.run_id);
-        let mut active = Self::new(&self.home, self.config.clone());
         let context = json!({"tool":tool,"arguments":args,"task":input});
-        let mut plugin = active.start_policy(&store, &item.id, context.clone())?;
+        let mut plugin = self.start_policy(&store, &item.id, context.clone())?;
+        let mut hinted = true;
+        let mut checked = Instant::now();
         loop {
+            check_canceled(cancellation)?;
+            if !hinted && checked.elapsed() < RECHECK {
+                hinted = listener.wait(TICK)?;
+                continue;
+            }
+            checked = Instant::now();
             check()?;
             let current = store.poll(&item.id)?;
             if current.delivery == Delivery::Invalidated
@@ -123,18 +172,21 @@ impl PermissionLoop {
                 store.change(&item.id, None, Some(Delivery::Resolved))?;
                 return Ok(decision == "allow");
             }
-            let config = agt_config::runtime::RuntimeConfig::load(&self.home)?.permissions;
-            if config.mode != active.config.mode
-                || config.reviewer_model != active.config.reviewer_model
-                || config.review_timeout_seconds != active.config.review_timeout_seconds
-            {
-                plugin.cancel();
-                active = Self::new(&self.home, config);
-                plugin = active.start_policy(&store, &item.id, context.clone())?;
-                continue;
+            let previous = self.config.clone();
+            if self.refresh()? {
+                *changed = true;
+                if self.config.mode != previous.mode
+                    || self.config.reviewer_model != previous.reviewer_model
+                    || self.config.review_timeout_seconds != previous.review_timeout_seconds
+                {
+                    plugin.cancel();
+                    plugin = self.start_policy(&store, &item.id, context.clone())?;
+                    hinted = true;
+                    continue;
+                }
             }
             if current.state == ApprovalState::Reviewing
-                || active.config.mode == PermissionMode::AutoAllow
+                || self.config.mode == PermissionMode::AutoAllow
             {
                 match plugin.poll() {
                     decision @ (Decision::Allow(_) | Decision::Deny(_)) => {
@@ -149,7 +201,7 @@ impl PermissionLoop {
                                 json!(if allow { "allow" } else { "deny" }),
                                 &reason,
                                 None,
-                                Some(if active.config.mode == PermissionMode::AutoAllow {
+                                Some(if self.config.mode == PermissionMode::AutoAllow {
                                     DecisionOrigin::AutoAllow
                                 } else {
                                     DecisionOrigin::ModelReview
@@ -169,7 +221,103 @@ impl PermissionLoop {
                     Decision::Pending => {}
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            hinted = listener.wait(TICK)?;
         }
+    }
+}
+
+pub(crate) struct Request<'a> {
+    pub scope: &'a Scope,
+    pub call: &'a str,
+    pub tool: &'a str,
+    pub arguments: &'a Value,
+    pub input: &'a str,
+}
+
+fn load_config(home: &Path) -> Result<PermissionConfig> {
+    Ok(RuntimeConfig::load(home)
+        .map_err(|e| {
+            RuntimeError::Configuration(crate::Reason::because("cannot load permission policy", e))
+        })?
+        .permissions)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    fn home(mode: PermissionMode) -> tempfile::TempDir {
+        let home = tempfile::tempdir().unwrap();
+        agt_config::initialize_home(Some(home.path().into())).unwrap();
+        let mut config = RuntimeConfig::load(home.path()).unwrap();
+        config.permissions.mode = mode;
+        config.save(home.path()).unwrap();
+        home
+    }
+
+    #[test]
+    fn snapshot_reloads_only_after_the_file_changes() {
+        let home = home(PermissionMode::Manual);
+        let mut permissions = PermissionLoop::load(home.path()).unwrap();
+        assert!(!permissions.refresh().unwrap());
+        let mut config = RuntimeConfig::load(home.path()).unwrap();
+        config.permissions.mode = PermissionMode::AutoAllow;
+        config.save(home.path()).unwrap();
+        assert!(permissions.refresh().unwrap());
+        assert_eq!(permissions.config().mode, PermissionMode::AutoAllow);
+        assert!(!permissions.refresh().unwrap());
+        // Saving identical content is not a policy change.
+        config.save(home.path()).unwrap();
+        assert!(!permissions.refresh().unwrap());
+    }
+
+    #[test]
+    fn waiting_request_checks_storage_rarely_and_wakes_on_decision() {
+        let home = home(PermissionMode::Manual);
+        let (record, _) = crate::RunStore::open(home.path())
+            .unwrap()
+            .claim(&crate::RunRequest::new("a", "task"), None)
+            .unwrap();
+        let scope = Scope::new(&record, None);
+        let path = home.path().to_owned();
+        let decided = std::thread::spawn(move || {
+            let store = ApprovalStore::open(&path).unwrap();
+            let item = loop {
+                if let Some(item) = store.list(None, None).unwrap().pop() {
+                    break item;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            };
+            std::thread::sleep(Duration::from_millis(2500));
+            store
+                .decide(&item.id, item.revision, json!("allow"), "ok", None)
+                .unwrap();
+            Instant::now()
+        });
+        let fences = Cell::new(0);
+        let mut permissions = PermissionLoop::load(home.path()).unwrap();
+        let (allowed, changed) = permissions
+            .authorize(
+                Request {
+                    scope: &scope,
+                    call: "call-1",
+                    tool: "framework_message_send",
+                    arguments: &json!({}),
+                    input: "task",
+                },
+                &CancellationToken::new(),
+                &|| {
+                    fences.set(fences.get() + 1);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        let woke = Instant::now();
+        let decided_at = decided.join().unwrap();
+        assert!(allowed && !changed);
+        assert!(woke.duration_since(decided_at) < Duration::from_millis(500));
+        // About one storage check per second while idle, instead of one per 100 ms.
+        assert!(fences.get() <= 8, "fence checks: {}", fences.get());
     }
 }
