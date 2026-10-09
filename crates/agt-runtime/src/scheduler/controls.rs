@@ -60,7 +60,8 @@ pub fn delete_scheduled_conversation(
     actor: &str,
 ) -> Result<agt_im::Conversation> {
     let store = ScheduleStore::open(home)?;
-    store.connection.execute_batch("BEGIN IMMEDIATE")?;
+    let tx_db = store.connection.clone();
+    let tx = agt_storage::sqlite::write(&tx_db)?;
     // IM checks owner/admin permissions before any discussion is modified.
     let result = im(home)?
         .delete_conversation(&ConversationId::new(conversation), &PrincipalId::new(actor))?;
@@ -68,7 +69,7 @@ pub fn delete_scheduled_conversation(
         "UPDATE discussions SET state='ended' WHERE conversation=?1",
         [conversation],
     )?;
-    store.connection.execute_batch("COMMIT")?;
+    tx.commit()?;
     agt_storage::wake::notify(home);
     crate::HarnessSessions::open(home)?.cancel_conversation(conversation)?;
     Ok(result)
@@ -76,13 +77,14 @@ pub fn delete_scheduled_conversation(
 
 pub fn dissolve_scheduled_group(home: &Path, conversation: &str, actor: &str) -> Result<()> {
     let store = ScheduleStore::open(home)?;
-    store.connection.execute_batch("BEGIN IMMEDIATE")?;
+    let tx_db = store.connection.clone();
+    let tx = agt_storage::sqlite::write(&tx_db)?;
     im(home)?.dissolve_group(&ConversationId::new(conversation), &PrincipalId::new(actor))?;
     store.connection.execute(
         "UPDATE discussions SET state='ended' WHERE conversation=?1",
         [conversation],
     )?;
-    store.connection.execute_batch("COMMIT")?;
+    tx.commit()?;
     agt_storage::wake::notify(home);
     crate::HarnessSessions::open(home)?.cancel_conversation(conversation)?;
     Ok(())
@@ -95,7 +97,8 @@ pub fn reset_conversation_context(
     actor: &str,
 ) -> Result<serde_json::Value> {
     let store = ScheduleStore::open(home)?;
-    store.connection.execute_batch("BEGIN IMMEDIATE")?;
+    let tx_db = store.connection.clone();
+    let tx = agt_storage::sqlite::write(&tx_db)?;
     let im = im(home)?;
     let id = ConversationId::new(conversation);
     let principal = PrincipalId::new(actor);
@@ -112,16 +115,15 @@ pub fn reset_conversation_context(
     {
         bail!("only an active human direct participant or group owner/admin may reset context");
     }
-    // Epoch and discussion cancellation commit together in scheduler.db. Removing a
-    // cached summary before that commit is safe: on failure it can be rebuilt from IM.
+    // Epoch, cached summary removal and discussion cancellation commit together.
     store.connection.execute("INSERT INTO context_resets VALUES(?1,?2) ON CONFLICT(conversation) DO UPDATE SET through_seq=MAX(through_seq,excluded.through_seq)", rusqlite::params![conversation, chat.last_message_seq])?;
     store.connection.execute(
         "INSERT INTO context_reset_events(conversation,through_seq,created_at) VALUES(?1,?2,?3)",
         rusqlite::params![conversation, chat.last_message_seq, now_ms()],
     )?;
-    crate::context_store::ContextStore::open(home)?.clear(conversation)?;
+    crate::context_store::ContextStore::clear(&store.connection, conversation)?;
     store.connection.execute("UPDATE discussions SET state='ended' WHERE conversation=?1 OR id IN (SELECT discussion FROM tasks WHERE conversation=?1)", [conversation])?;
-    store.connection.execute_batch("COMMIT")?;
+    tx.commit()?;
     agt_storage::wake::notify(home);
     crate::HarnessSessions::open(home)?.cancel_conversation(conversation)?;
     Ok(

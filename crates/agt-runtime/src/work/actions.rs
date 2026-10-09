@@ -114,9 +114,10 @@ impl TaskControl {
             .map_err(Into::into)
         } else {
             let store = ScheduleStore::open(&self.home)?;
-            store.connection.execute_batch("BEGIN IMMEDIATE")?;
+            let tx_db = store.connection.clone();
+            let tx = agt_storage::sqlite::write(&tx_db)?;
             let result = operation(&store)?;
-            store.connection.execute_batch("COMMIT")?;
+            tx.commit()?;
             agt_storage::wake::notify(&self.home);
             Ok(result)
         }
@@ -282,9 +283,10 @@ impl TaskControl {
             .map_err(Into::into)
         } else {
             let store = ScheduleStore::open(&self.home)?;
-            store.connection.execute_batch("BEGIN IMMEDIATE")?;
+            let tx_db = store.connection.clone();
+            let tx = agt_storage::sqlite::write(&tx_db)?;
             let result = operation(&store)?;
-            store.connection.execute_batch("COMMIT")?;
+            tx.commit()?;
             agt_storage::wake::notify(&self.home);
             Ok(result)
         }

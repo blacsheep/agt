@@ -47,7 +47,7 @@ Codex 自身配置中的工具仍由 Codex 管理，其权限和认证不由 AGT
 
 ## 会话与恢复
 
-`runtime/harnesses.db` 保存外部 thread、配置快照、历史游标、已发送历史摘要哈希及 dirty 标记。
+`runtime/runtime.db` 的 harness_sessions 表保存外部 thread、配置快照、历史游标、已发送历史摘要哈希及 dirty 标记。
 作用域包括 Agent 配置、principal、聊天 conversation 和上下文 reset cutoff；资源默认值不纳入会话标识。
 无聊天身份的显式 agent run 每次新建独立线程。
 恢复时校验已发送历史仍可见且未被修改；不匹配则新建线程。正常恢复只发送增量历史。

@@ -4,7 +4,7 @@
 //! Callers must enforce actor visibility and scheduler admission before mutations.
 //! Model/CLI access is mediated by TaskControl and the scheduler.
 use anyhow::{Result, bail};
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -21,85 +21,43 @@ pub(crate) mod wait;
 pub use control::TaskControl;
 pub(crate) use dispatch::*;
 
-pub(crate) fn migrate(c: &Connection) -> Result<()> {
-    let version: u32 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    if version >= 14 {
-        return Ok(());
-    }
-    if version < 5 {
-        c.execute_batch(
-            "CREATE TABLE work_items(
+pub(crate) const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Schema {
+    module: "work",
+    version: 1,
+    ddl: "CREATE TABLE work_items(
             id TEXT PRIMARY KEY, requester TEXT NOT NULL, request_key TEXT NOT NULL,
             request_json TEXT NOT NULL, revision INTEGER NOT NULL, record TEXT NOT NULL,
             UNIQUE(requester,request_key));
+        CREATE INDEX work_execution_state ON work_items(json_extract(record,'$.state'));
         CREATE TABLE work_outbox(
             seq INTEGER PRIMARY KEY AUTOINCREMENT, work_id TEXT NOT NULL,
             revision INTEGER NOT NULL, kind TEXT NOT NULL, created_at INTEGER NOT NULL,
-            UNIQUE(work_id,revision));
+            payload TEXT NOT NULL DEFAULT '{}', UNIQUE(work_id,revision));
         CREATE TABLE work_inbox(
             recipient TEXT NOT NULL, event_seq INTEGER NOT NULL,
             state TEXT NOT NULL CHECK(state IN ('pending','handled')),
             PRIMARY KEY(recipient,event_seq));
         CREATE TABLE work_publications(
             event_seq INTEGER PRIMARY KEY, request_key TEXT NOT NULL UNIQUE,
-            destination TEXT NOT NULL, message_id TEXT);
-        PRAGMA user_version=5;",
-        )?;
-    }
-    if version < 6 {
-        c.execute_batch("ALTER TABLE work_publications ADD COLUMN error TEXT; CREATE INDEX work_execution_state ON work_items(json_extract(record,'$.state')); PRAGMA user_version=6;")?;
-    }
-    if version < 7 {
-        c.execute_batch("CREATE TABLE work_dependencies(work_id TEXT PRIMARY KEY, depends_on TEXT NOT NULL); CREATE INDEX work_dependency_target ON work_dependencies(depends_on); PRAGMA user_version=7;")?;
-    }
-    if version < 8 {
-        c.execute_batch("CREATE TABLE work_waits(run_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, dependency TEXT NOT NULL, deadline INTEGER NOT NULL, outcome TEXT); CREATE INDEX work_wait_dependency ON work_waits(dependency); PRAGMA user_version=8;")?;
-    }
-    if version < 10 {
-        c.execute_batch("ALTER TABLE work_waits RENAME TO work_waits_old;
-      CREATE TABLE work_waits(run_id TEXT NOT NULL,work_id TEXT NOT NULL,dependency TEXT NOT NULL,deadline INTEGER NOT NULL,outcome TEXT, PRIMARY KEY(run_id,dependency));
-      INSERT INTO work_waits SELECT * FROM work_waits_old; DROP TABLE work_waits_old;
-      CREATE INDEX work_wait_dependency ON work_waits(dependency);
-      ALTER TABLE work_dependencies RENAME TO work_dependencies_old;
-      CREATE TABLE work_dependencies(work_id TEXT NOT NULL,depends_on TEXT NOT NULL,PRIMARY KEY(work_id,depends_on));
-      INSERT INTO work_dependencies SELECT * FROM work_dependencies_old; DROP TABLE work_dependencies_old;
-      CREATE INDEX work_dependency_target ON work_dependencies(depends_on); PRAGMA user_version=10;")?;
-    }
-    if version < 11 {
-        c.execute_batch("CREATE TABLE work_fairness(principal TEXT PRIMARY KEY,notices INTEGER NOT NULL); PRAGMA user_version=11;")?;
-    }
-    c.execute_batch("ALTER TABLE work_waits ADD COLUMN kind TEXT NOT NULL DEFAULT 'dependency'; ALTER TABLE work_waits ADD COLUMN payload TEXT NOT NULL DEFAULT '{}'; ALTER TABLE work_outbox ADD COLUMN payload TEXT NOT NULL DEFAULT '{}'; PRAGMA user_version=12;")?;
-    if version < 13 {
-        c.execute_batch("CREATE TABLE IF NOT EXISTS change_outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, conversation TEXT, kind TEXT NOT NULL, at INTEGER NOT NULL);
-            CREATE TRIGGER IF NOT EXISTS work_change AFTER INSERT ON work_outbox BEGIN
-                INSERT INTO change_outbox(conversation,kind,at) SELECT json_extract(record,'$.request.report_to'),'work',NEW.created_at FROM work_items WHERE id=NEW.work_id;
-            END;
-            CREATE TRIGGER IF NOT EXISTS scheduled_created AFTER INSERT ON tasks BEGIN
-                INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record,'$.conversation'),'schedule',CAST(unixepoch('subsec')*1000 AS INTEGER));
-            END;
-            CREATE TRIGGER IF NOT EXISTS scheduled_changed AFTER UPDATE ON tasks WHEN OLD.record<>NEW.record BEGIN
-                INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record,'$.conversation'),'schedule',CAST(unixepoch('subsec')*1000 AS INTEGER));
-            END;
-            CREATE TRIGGER IF NOT EXISTS discussion_changed AFTER UPDATE ON discussions BEGIN
-                INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'schedule',CAST(unixepoch('subsec')*1000 AS INTEGER));
-            END;
-            PRAGMA user_version=13;")?;
-    }
-
-    if version < 14 {
-        c.execute_batch("CREATE TABLE IF NOT EXISTS work_reports(event_seq INTEGER PRIMARY KEY,work_id TEXT NOT NULL,body TEXT,actor TEXT,message_id TEXT,error TEXT,created_at INTEGER NOT NULL,attention_at INTEGER);
-            INSERT OR IGNORE INTO work_reports(event_seq,work_id,created_at) SELECT seq,work_id,created_at FROM work_outbox WHERE kind IN ('succeeded','failed','canceled','interrupted','outcome_unknown','resolved');
-            CREATE TRIGGER IF NOT EXISTS report_changed AFTER UPDATE ON work_reports WHEN OLD.message_id IS NOT NEW.message_id OR OLD.error IS NOT NEW.error OR OLD.body IS NOT NEW.body BEGIN
-                INSERT INTO change_outbox(conversation,kind,at) SELECT json_extract(record,'$.request.report_to'),'work',CAST(unixepoch('subsec')*1000 AS INTEGER) FROM work_items WHERE id=NEW.work_id;
-            END;
-            CREATE TRIGGER IF NOT EXISTS report_overdue AFTER UPDATE ON work_reports WHEN OLD.attention_at IS NULL AND NEW.attention_at IS NOT NULL BEGIN
-                INSERT INTO change_outbox(kind,at) VALUES('attention',NEW.attention_at);
-            END;
-            PRAGMA user_version=14;")?;
-    }
-
-    Ok(())
-}
+            destination TEXT NOT NULL, message_id TEXT, error TEXT);
+        CREATE TABLE work_waits(run_id TEXT NOT NULL,work_id TEXT NOT NULL,dependency TEXT NOT NULL,deadline INTEGER NOT NULL,outcome TEXT,
+            kind TEXT NOT NULL DEFAULT 'dependency', payload TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(run_id,dependency));
+        CREATE INDEX work_wait_dependency ON work_waits(dependency);
+        CREATE TABLE work_dependencies(work_id TEXT NOT NULL,depends_on TEXT NOT NULL,PRIMARY KEY(work_id,depends_on));
+        CREATE INDEX work_dependency_target ON work_dependencies(depends_on);
+        CREATE TABLE work_fairness(principal TEXT PRIMARY KEY,notices INTEGER NOT NULL);
+        CREATE TABLE work_execution_policy(work_id TEXT PRIMARY KEY,policy TEXT NOT NULL,requested TEXT NOT NULL);
+        CREATE TABLE work_reports(event_seq INTEGER PRIMARY KEY,work_id TEXT NOT NULL,body TEXT,actor TEXT,message_id TEXT,error TEXT,created_at INTEGER NOT NULL,attention_at INTEGER);
+        CREATE TRIGGER work_change AFTER INSERT ON work_outbox BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) SELECT json_extract(record,'$.request.report_to'),'work',NEW.created_at FROM work_items WHERE id=NEW.work_id;
+        END;
+        CREATE TRIGGER report_changed AFTER UPDATE ON work_reports WHEN OLD.message_id IS NOT NEW.message_id OR OLD.error IS NOT NEW.error OR OLD.body IS NOT NEW.body BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) SELECT json_extract(record,'$.request.report_to'),'work',CAST(unixepoch('subsec')*1000 AS INTEGER) FROM work_items WHERE id=NEW.work_id;
+        END;
+        CREATE TRIGGER report_overdue AFTER UPDATE ON work_reports WHEN OLD.attention_at IS NULL AND NEW.attention_at IS NOT NULL BEGIN
+            INSERT INTO change_outbox(kind,at) VALUES('attention',NEW.attention_at);
+        END;",
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -270,10 +228,7 @@ impl WorkLedger {
     /// Persist a validated request and its assignee inbox item atomically.
     /// Replaying the same key returns the original task; different input conflicts.
     pub fn enqueue(&mut self, request: WorkRequest) -> Result<WorkItem> {
-        let tx = self
-            .store
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.store.connection)?;
         let item = Self::enqueue_on(&tx, request)?;
         tx.commit()?;
         agt_storage::wake::notify(&self.store.home);
@@ -470,10 +425,7 @@ impl WorkLedger {
         revision: i64,
         apply: impl FnOnce(&mut WorkItem) -> Result<(&'static str, bool)>,
     ) -> Result<WorkItem> {
-        let tx = self
-            .store
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.store.connection)?;
         let mut item = read(&tx, id)?;
         if item.revision != revision {
             bail!("stale work revision");

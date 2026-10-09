@@ -36,7 +36,7 @@ flowchart TB
     Run -.->|若要求成为可用队友| Activate["principal_create → agent_bind<br/>binding_list 核验"]
     Activate --> Service
     Service -->|创建 Agent 身份| Identity["im/im.db"]
-    Service -->|保存托管绑定| Bindings["runtime/bindings.db"]
+    Service -->|保存托管绑定| Bindings["runtime/runtime.db<br/>bindings"]
     Run -->|形成最终回答| Publish["调度结算与幂等发布"]
     Publish --> IM
     IM --> Refresh["变化 outbox → events watch<br/>Node SSE → Web 刷新"]

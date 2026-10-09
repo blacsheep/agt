@@ -353,11 +353,7 @@ fn deleting_hosted_agent_requires_explicit_unbinding() {
             json!({"principal":"a","agent":"a","working_directory":home.path(),"max_steps":3}),
         )
         .unwrap();
-    // Existing v1 bindings migrate as enabled; disabling survives reopen and keeps settings.
-    let db = rusqlite::Connection::open(home.path().join("runtime/bindings.db")).unwrap();
-    db.execute_batch("ALTER TABLE bindings DROP COLUMN enabled; DROP TABLE binding_origins; PRAGMA user_version=1;")
-        .unwrap();
-    drop(db);
+    // Disabling survives reopen and keeps settings.
     let principal = PrincipalId::new("a");
     let store = agt_service::BindingStore::open(home.path()).unwrap();
     assert!(store.get(&principal).unwrap().is_some());

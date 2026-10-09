@@ -4,7 +4,7 @@ Current implementation · 2026-09-08. See [operator acceptance](framework-accept
 and [document index](README.md).
 
 The scheduler owns discussion rounds, independent input tasks, waits, leases and reply
-allowances in runtime/scheduler.db. IM stays generic. Explicit runs retain their
+allowances in runtime/runtime.db. IM stays generic. Explicit runs retain their
 own execution rules; automatic message execution uses only the scheduler.
 
 ## Module boundaries
@@ -167,9 +167,9 @@ Already-issued external MCP requests cannot be recalled. A publication failure i
 interrupted and requires inspection; a Run result is not an automatic replay plan.
 Web launches a watch coordinator; takeover after an abnormal exit may wait for the 15-second lease.
 
-Storage: im/im.db holds messages/deliveries; runtime/bindings.db holds identities
-and policies; runtime/runs.db holds formal Runs and call diagnostics;
-runtime/scheduler.db holds discussions, task decisions, waits and reply counters.
+Storage: im/im.db holds messages/deliveries; runtime/runtime.db holds identities
+and policies, formal Runs and call diagnostics, and discussions, task decisions,
+waits and reply counters, each module in its own tables.
 An evaluation/ready/wait may have no Run. `schedule status` includes reply usage;
 Web debug mode shows counts, safe reasons and states, never model reasoning.
 

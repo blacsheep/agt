@@ -8,6 +8,8 @@ version.workspace = true
 
 [dependencies]
 agt-core.workspace = true
+rusqlite.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

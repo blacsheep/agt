@@ -1,4 +1,5 @@
 pub mod fs;
+pub mod sqlite;
 pub mod wake;
 
 pub use fs::{

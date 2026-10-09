@@ -1,6 +1,6 @@
 # 整体架构
 
-最近代码核对：2026-10-09。箭头表示调用或数据流，不是严格的 crate 依赖关系。
+最近代码核对：2026-10-10。箭头表示调用或数据流，不是严格的 crate 依赖关系。
 
 ```mermaid
 flowchart TB
@@ -67,24 +67,23 @@ flowchart TB
 
 ## 持久化职责
 
-以下路径均相对于资源 home。各数据库是独立事务域，不能视为一个全局事务。
+以下路径均相对于资源 home。`runtime/runtime.db` 是 Runtime 侧的单一事务域；
+`im/im.db` 和 `memory/memory.db` 是独立领域，与它之间不构成全局事务。
 
 | 路径 | 主要内容 |
 | --- | --- |
 | `config.yaml` 与资源目录 | 运行策略、Agent、Model、Provider、Prompt、Skill、MCP、Harness 配置 |
 | `.resources.lock` | 配置资源管理读写、分类修改与删除执行的共享锁；不是数据库事务 |
 | `im/im.db` | 参与者、会话、消息、投递和可见性 |
-| `runtime/bindings.db` | 身份绑定、启停与响应策略 |
-| `runtime/scheduler.db` | Discussion、调度任务、WorkItem、依赖、通知和汇报 |
-| `runtime/runs.db` | Run、调用诊断、进度和恢复检查点 |
-| `runtime/contexts.db` | 按会话和身份保存的上下文压缩摘要 |
-| `runtime/harnesses.db` | 外部会话、线程映射、配置快照与执行围栏 |
-| `runtime/approvals.db` | 审批请求与决定 |
-| `runtime/events.db` | 可重建事件投影及消费游标 |
+| `runtime/runtime.db` | 按模块分表：身份绑定与响应策略（bindings）、Discussion 与调度任务（scheduler）、WorkItem 与汇报（work）、Run 与调用诊断及检查点（runs）、会话摘要（contexts）、Harness 会话与执行围栏（harness_sessions）、审批（approvals）、事件投影（events）；共用 `change_outbox`，`schema_modules` 记录各模块版本 |
 | `memory/memory.db` | Agent 私有、关联原消息来源的长期摘要 |
 
 原始聊天、上下文压缩摘要和长期 Memory 各有职责；重置上下文不会删除聊天或长期记忆。
-事件通知用于触发刷新，SQLite 业务记录仍是状态依据。跨库传播依靠 outbox、幂等键和对账。
+事件通知用于触发刷新，SQLite 业务记录仍是状态依据。与 IM 之间的传播依靠 outbox、幂等键和对账。
+
+同一线程内的 Runtime 存储共享一个 `runtime.db` 连接；调度围栏内的写入以 savepoint 加入围栏事务，
+因此围栏检查与受保护的写入原子提交。不同线程（调度并发任务）使用各自连接，由 SQLite 锁串行化写入。
+数据库版本按模块记录；当前开发阶段不提供旧库升级，旧的分库文件不再读取，需重建 Runtime 状态。
 
 ## 代码入口
 

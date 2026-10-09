@@ -27,7 +27,9 @@ pub(crate) fn guarded_store<T>(
     let store = ScheduleStore::open(home).map_err(|e| {
         RuntimeError::Configuration(crate::Reason::because("scheduler unavailable", e))
     })?;
-    store.connection.execute_batch("BEGIN IMMEDIATE")?;
+    // Early returns roll the fence back; nested fences on this thread become savepoints.
+    let fence_db = store.connection.clone();
+    let fence = agt_storage::sqlite::write(&fence_db)?;
     let cutoff = store.context_cutoff(&task.conversation).map_err(|e| {
         RuntimeError::Configuration(crate::Reason::because("context reset state unavailable", e))
     })?;
@@ -82,7 +84,7 @@ pub(crate) fn guarded_store<T>(
     }
     let changes = store.connection.total_changes();
     let result = operation(&store)?;
-    store.connection.execute_batch("COMMIT")?;
+    fence.commit()?;
     if store.connection.total_changes() != changes {
         agt_storage::wake::notify(home);
     }

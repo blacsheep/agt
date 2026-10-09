@@ -333,26 +333,3 @@ fn killed_owner_is_recovered_without_replaying_submitted_work() {
         assert_eq!(sessions.execution_lock(&session.id).is_ok(), !submitted);
     }
 }
-
-#[cfg(unix)]
-#[test]
-fn legacy_dirty_session_is_migrated_to_review_without_active_owner() {
-    let (home, user, _) = external_fixture();
-    let chat = user
-        .call("direct_create", json!({"principal":"a"}))
-        .unwrap()["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let sessions = crate::HarnessSessions::open(home.path()).unwrap();
-    let session = sessions.current(home.path(), "a", &chat).unwrap();
-    sessions.db.execute_batch("DROP TABLE harness_operations; DROP TABLE change_outbox; ALTER TABLE harness_sessions ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1; ALTER TABLE harness_sessions ADD COLUMN cancel INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=0;").unwrap();
-    drop(sessions);
-    let migrated = crate::HarnessSessions::open(home.path()).unwrap();
-    let current = migrated.get(&session.id).unwrap();
-    assert_eq!(
-        current.execution.unwrap().state,
-        crate::harness_sessions::ExecutionState::NeedsReview
-    );
-    assert!(migrated.execution_lock(&session.id).is_err());
-}

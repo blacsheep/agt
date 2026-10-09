@@ -1,16 +1,25 @@
 //! Durable, permission-filtered invalidations. Never carries message text or private Run data.
 use agt_im::{ConversationId, ImStore, PrincipalId};
 use anyhow::{Result, bail};
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
 
+pub(crate) const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Schema {
+    module: "events",
+    version: 1,
+    ddl: "CREATE TABLE feed(seq INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL, source_seq INTEGER NOT NULL, conversation TEXT, kind TEXT NOT NULL, at INTEGER NOT NULL, UNIQUE(source,source_seq));
+        CREATE INDEX feed_age ON feed(at);
+        CREATE TABLE cursors(source TEXT PRIMARY KEY, seq INTEGER NOT NULL);
+        CREATE TABLE feed_meta(id INTEGER PRIMARY KEY CHECK(id=1), generation TEXT NOT NULL, floor INTEGER NOT NULL);",
+};
+
 pub struct Events {
     home: PathBuf,
-    connection: Connection,
+    connection: agt_storage::sqlite::Db,
     generation: String,
 }
 #[derive(Debug, Serialize)]
@@ -34,20 +43,8 @@ impl Events {
         crate::HarnessSessions::open(home)?;
         crate::approval::ApprovalStore::open(home)?;
         agt_service::BindingStore::open(home)?;
-        let mut connection =
-            Connection::open(agt_storage::database_path(home, "runtime", "events.db")?)?;
-        connection.busy_timeout(Duration::from_secs(5))?;
-        connection.pragma_update(None, "journal_mode", "WAL")?;
-        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let version: u32 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 1 {
-            bail!("unsupported event database version");
-        }
-        tx.execute_batch("CREATE TABLE IF NOT EXISTS feed(seq INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL, source_seq INTEGER NOT NULL, conversation TEXT, kind TEXT NOT NULL, at INTEGER NOT NULL, UNIQUE(source,source_seq));
-            CREATE INDEX IF NOT EXISTS feed_age ON feed(at);
-            CREATE TABLE IF NOT EXISTS cursors(source TEXT PRIMARY KEY, seq INTEGER NOT NULL);
-            CREATE TABLE IF NOT EXISTS feed_meta(id INTEGER PRIMARY KEY CHECK(id=1), generation TEXT NOT NULL, floor INTEGER NOT NULL);
-            PRAGMA user_version=1;")?;
+        let connection = crate::store::runtime_db(home)?;
+        let tx = agt_storage::sqlite::write(&connection)?;
         tx.execute(
             "INSERT OR IGNORE INTO feed_meta VALUES(1,?1,0)",
             [uuid::Uuid::new_v4().to_string()],
@@ -65,19 +62,13 @@ impl Events {
     /// Source cursors and projection rows commit together. Notifications are only hints.
     pub fn project(&mut self) -> Result<bool> {
         let mut more = false;
-        for (source, directory, name) in [
-            ("im", "im", "im.db"),
-            ("run", "runtime", "runs.db"),
-            ("schedule", "runtime", "scheduler.db"),
-            ("binding", "runtime", "bindings.db"),
-            ("harness", "runtime", "harnesses.db"),
-            ("approval", "runtime", "approvals.db"),
+        for (source, (directory, name)) in [
+            ("im", ("im", "im.db")),
+            ("runtime", agt_storage::sqlite::RUNTIME_DB),
         ] {
             let db = Connection::open(agt_storage::database_path(&self.home, directory, name)?)?;
             db.busy_timeout(Duration::from_secs(5))?;
-            let tx = self
-                .connection
-                .transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let tx = agt_storage::sqlite::write(&self.connection)?;
             let cursor = tx
                 .query_row("SELECT seq FROM cursors WHERE source=?1", [source], |r| {
                     r.get::<_, i64>(0)
@@ -109,9 +100,7 @@ impl Events {
             db.execute("DELETE FROM change_outbox WHERE seq<=?1", [last])?;
         }
         let cutoff = crate::schedule_store::now_ms() - 7 * 24 * 60 * 60 * 1000;
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         // Trim a prefix so all cursors at/above floor remain replayable even with clock skew.
         let prefix: Option<i64> =
             tx.query_row("SELECT MIN(seq)-1 FROM feed WHERE at>=?1", [cutoff], |r| {
@@ -148,13 +137,7 @@ impl Events {
             bail!("subscription membership revoked");
         }
         // Heartbeats detect a crashed coordinator even when no data changed.
-        let scheduler = Connection::open(agt_storage::database_path(
-            &self.home,
-            "runtime",
-            "scheduler.db",
-        )?)?;
-        scheduler.busy_timeout(Duration::from_secs(5))?;
-        let scheduler_online = scheduler.query_row(
+        let scheduler_online = self.connection.query_row(
             "SELECT EXISTS(SELECT 1 FROM coordinator WHERE expires>?1 AND owner LIKE 'scheduler:%')",
             [crate::schedule_store::now_ms()],
             |r| r.get::<_, bool>(0),
@@ -250,7 +233,7 @@ mod tests {
         let (home, feed, _im, _) = setup();
         let initial = feed.page("a", None, None).unwrap();
         assert!(!initial.scheduler_online);
-        let db = Connection::open(home.path().join("runtime/scheduler.db")).unwrap();
+        let db = Connection::open(home.path().join("runtime/runtime.db")).unwrap();
         db.execute(
             "INSERT INTO coordinator VALUES(1,'scheduler:test',?1)",
             [crate::schedule_store::now_ms() + 60_000],
@@ -356,7 +339,7 @@ mod tests {
             .unwrap();
         feed.project().unwrap();
         let cursor = feed.page("outsider", None, None).unwrap().cursor;
-        let db = Connection::open(home.path().join("runtime/scheduler.db")).unwrap();
+        let db = Connection::open(home.path().join("runtime/runtime.db")).unwrap();
         db.execute(
             "INSERT INTO change_outbox(conversation,kind,at) VALUES(?1,'work',?2)",
             params![chat, crate::schedule_store::now_ms()],

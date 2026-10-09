@@ -130,25 +130,21 @@ impl Scope {
         }
     }
 }
+pub(crate) const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Schema {
+    module: "approvals",
+    version: 1,
+    ddl: "CREATE TABLE approvals(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,request_key TEXT NOT NULL,scope TEXT NOT NULL,value TEXT NOT NULL,lease_until INTEGER NOT NULL,UNIQUE(run_id,request_key));",
+};
 pub struct ApprovalStore {
     home: PathBuf,
-    db: Connection,
+    db: agt_storage::sqlite::Db,
 }
 fn now() -> i64 {
     crate::schedule_store::now_ms()
 }
 impl ApprovalStore {
     pub fn open(home: &Path) -> Result<Self> {
-        let db = Connection::open(agt_storage::database_path(home, "runtime", "approvals.db")?)?;
-        db.busy_timeout(std::time::Duration::from_secs(5))?;
-        let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 1 {
-            bail!("unsupported approval schema");
-        }
-        db.execute_batch("BEGIN IMMEDIATE;
-            CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,request_key TEXT NOT NULL,scope TEXT NOT NULL,value TEXT NOT NULL,lease_until INTEGER NOT NULL,UNIQUE(run_id,request_key));
-            CREATE TABLE IF NOT EXISTS change_outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT,conversation TEXT,kind TEXT NOT NULL,at INTEGER NOT NULL);
-            PRAGMA user_version=1; COMMIT;")?;
+        let db = crate::store::runtime_db(home)?;
         Ok(Self {
             home: home.into(),
             db,
@@ -162,10 +158,7 @@ impl ApprovalStore {
         request: Value,
         timeout: u64,
     ) -> Result<Approval> {
-        let tx = rusqlite::Transaction::new_unchecked(
-            &self.db,
-            rusqlite::TransactionBehavior::Immediate,
-        )?;
+        let tx = agt_storage::sqlite::write(&self.db)?;
         if let Some((value, stored_scope)) = tx
             .query_row(
                 "SELECT value,scope FROM approvals WHERE run_id=?1 AND request_key=?2",
@@ -234,7 +227,7 @@ impl ApprovalStore {
         Ok(serde_json::from_str(&text)?)
     }
     fn update(&self, previous: &Approval, next: &Approval) -> Result<()> {
-        let tx = self.db.unchecked_transaction()?;
+        let tx = agt_storage::sqlite::write(&self.db)?;
         if tx.execute(
             "UPDATE approvals SET value=?2 WHERE id=?1 AND value=?3",
             params![

@@ -212,43 +212,6 @@ fn unknown_outcome_cannot_be_reexecuted_or_overwritten() {
 }
 
 #[test]
-fn migration_preserves_scheduler_data_and_rejects_future_schema() {
-    let home = tempfile::tempdir().unwrap();
-    let store = ScheduleStore::open(home.path()).unwrap();
-    store.start("existing", "chat", 0).unwrap();
-    // Reconstruct the previous v4 shape, preserving its actual scheduler tables.
-    store.connection.execute_batch("DROP TABLE context_reset_events; DROP TABLE work_reports; DROP TABLE work_fairness; DROP TABLE work_waits; DROP TABLE work_dependencies; DROP TABLE work_publications; DROP TABLE work_inbox; DROP TABLE work_outbox; DROP TABLE work_items; ALTER TABLE discussions ADD COLUMN allow_mcp INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=4;").unwrap();
-    drop(store);
-    let ledger = WorkLedger::open(home.path()).unwrap();
-    assert_eq!(
-        ledger.store.snapshot().unwrap().discussions[0].id,
-        "existing"
-    );
-    assert_eq!(
-        ledger
-            .store
-            .connection
-            .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
-            .unwrap(),
-        18
-    );
-    ledger
-        .store
-        .connection
-        .pragma_update(None, "user_version", 99)
-        .unwrap();
-    assert!(ScheduleStore::open(home.path()).is_err());
-    assert_eq!(
-        ledger
-            .store
-            .connection
-            .pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
-            .unwrap(),
-        99
-    );
-}
-
-#[test]
 fn publication_key_fits_messaging_limit_for_long_destination() {
     let home = tempfile::tempdir().unwrap();
     let mut ledger = WorkLedger::open(home.path()).unwrap();
@@ -262,65 +225,4 @@ fn publication_key_fits_messaging_limit_for_long_destination() {
     let publication = ledger.pending_publications(1).unwrap().remove(0);
     assert!(publication.request_key.len() <= 256);
     assert_eq!(publication.destination, "x".repeat(256));
-}
-
-#[test]
-fn version_five_upgrade_preserves_existing_work() {
-    let home = tempfile::tempdir().unwrap();
-    let mut ledger = WorkLedger::open(home.path()).unwrap();
-    let item = ledger.enqueue(request("existing-v5")).unwrap();
-    ledger.store.connection.execute_batch("ALTER TABLE work_outbox DROP COLUMN payload; DROP TABLE context_reset_events; DROP TABLE work_reports; DROP TABLE work_fairness; DROP TABLE work_waits; DROP TABLE work_dependencies; ALTER TABLE work_publications DROP COLUMN error; DROP INDEX work_execution_state; ALTER TABLE discussions ADD COLUMN allow_mcp INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=5;").unwrap();
-    drop(ledger);
-    let ledger = WorkLedger::open(home.path()).unwrap();
-    assert_eq!(ledger.get(&item.id).unwrap(), item);
-    assert_eq!(ledger.inbox("codex", 0, 10).unwrap().len(), 1);
-    assert_eq!(ledger.pending_execution().unwrap().len(), 1);
-    assert_eq!(
-        ledger
-            .store
-            .connection
-            .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
-            .unwrap(),
-        18
-    );
-}
-
-#[test]
-fn version_six_requests_without_priority_replay_after_upgrade() {
-    let home = tempfile::tempdir().unwrap();
-    let mut ledger = WorkLedger::open(home.path()).unwrap();
-    let item = ledger.enqueue(request("old-v6")).unwrap();
-    ledger.store.connection.execute_batch("ALTER TABLE work_outbox DROP COLUMN payload; DROP TABLE context_reset_events; DROP TABLE work_reports; DROP TABLE work_fairness; DROP TABLE work_waits; DROP TABLE work_dependencies; ALTER TABLE discussions ADD COLUMN allow_mcp INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=6; UPDATE work_items SET request_json=json_remove(request_json,'$.priority'), record=json_remove(record,'$.request.priority','$.priority','$.priority_reason','$.deferred');").unwrap();
-    drop(ledger);
-    let mut ledger = WorkLedger::open(home.path()).unwrap();
-    assert_eq!(ledger.enqueue(request("old-v6")).unwrap(), item);
-}
-
-#[test]
-fn version_seven_upgrade_preserves_barriers_and_replay() {
-    let home = tempfile::tempdir().unwrap();
-    let mut ledger = WorkLedger::open(home.path()).unwrap();
-    let item = ledger.enqueue(request("v7-wait")).unwrap();
-    let other = ledger.enqueue(request("v7-target")).unwrap();
-    queue::set_dependency(&ledger.store.connection, &item.id, &other.id).unwrap();
-    ledger.store.connection.execute_batch("ALTER TABLE work_outbox DROP COLUMN payload; DROP TABLE context_reset_events; DROP TABLE work_reports; DROP TABLE work_fairness; DROP TABLE work_waits; ALTER TABLE discussions ADD COLUMN allow_mcp INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=7; UPDATE work_items SET record=json_remove(record,'$.resume_from');").unwrap();
-    drop(ledger);
-    let mut ledger = WorkLedger::open(home.path()).unwrap();
-    assert_eq!(ledger.enqueue(request("v7-wait")).unwrap(), item);
-    let target: String = ledger
-        .store
-        .connection
-        .query_row(
-            "SELECT depends_on FROM work_dependencies WHERE work_id=?1",
-            [&item.id],
-            |r| r.get(0),
-        )
-        .unwrap();
-    assert_eq!(target, other.id);
-    let count: i64 = ledger
-        .store
-        .connection
-        .query_row("SELECT count(*) FROM work_waits", [], |r| r.get(0))
-        .unwrap();
-    assert_eq!(count, 0);
 }

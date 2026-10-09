@@ -1039,28 +1039,6 @@ fn conversation_summary_survives_reopen_is_private_and_invalidates_deleted_sourc
 }
 
 #[test]
-fn reset_schema_upgrade_preserves_existing_discussions() {
-    let home = tempfile::tempdir().unwrap();
-    let store = ScheduleStore::open(home.path()).unwrap();
-    store.start("existing", "chat", now_ms()).unwrap();
-    store
-        .connection
-        .execute_batch("DROP TABLE context_reset_events; DROP TABLE context_resets; DROP TABLE work_reports; DROP TABLE work_fairness; DROP TABLE work_waits; DROP TABLE work_dependencies; DROP TABLE work_publications; DROP TABLE work_inbox; DROP TABLE work_outbox; DROP TABLE work_items; ALTER TABLE discussions ADD COLUMN allow_mcp INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=3;")
-        .unwrap();
-    drop(store);
-    let migrated = ScheduleStore::open(home.path()).unwrap();
-    assert!(migrated.discussion("existing").unwrap().is_some());
-    assert_eq!(migrated.context_cutoff("chat").unwrap(), 0);
-    assert_eq!(
-        migrated
-            .connection
-            .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
-            .unwrap(),
-        18
-    );
-}
-
-#[test]
 fn reset_during_summary_generation_cannot_recreate_the_summary() {
     struct ResetSummary {
         home: PathBuf,

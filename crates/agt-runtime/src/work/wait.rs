@@ -129,10 +129,7 @@ pub(super) fn reconcile(
         crate::RunStore::open(home)?.checkpoint(&run_id)?;
     }
     let scope_store = ScheduleStore::open(home)?;
-    let tx = ledger
-        .store
-        .connection
-        .transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let tx = agt_storage::sqlite::write(&ledger.store.connection)?;
     let mut current = read(&tx, &item.id)?;
     if current.revision != item.revision {
         return Ok(());

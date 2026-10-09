@@ -533,7 +533,7 @@ fn checkpoint_crash_gap_recovers_but_uncheckpointed_intent_is_unknown() {
             let mut record = runs.get(adapter.run_id.as_deref().unwrap()).unwrap();
             record.state = RunState::Running;
             runs.save(&record).unwrap();
-            rusqlite::Connection::open(home.path().join("runtime/runs.db"))
+            rusqlite::Connection::open(home.path().join("runtime/runtime.db"))
                 .unwrap()
                 .execute("DELETE FROM run_checkpoints", [])
                 .unwrap();

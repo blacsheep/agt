@@ -268,22 +268,6 @@ fn model_errors_and_invalid_batches_have_safe_audit_records() {
 }
 
 #[test]
-fn runtime_rejects_unsupported_schema_without_changing_it() {
-    for version in [1, 99] {
-        let home = home();
-        drop(RunStore::open(home.path()).unwrap());
-        let db = rusqlite::Connection::open(home.path().join("runtime/runs.db")).unwrap();
-        db.pragma_update(None, "user_version", version).unwrap();
-        assert!(RunStore::open(home.path()).is_err());
-        assert_eq!(
-            db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
-                .unwrap(),
-            version
-        );
-    }
-}
-
-#[test]
 fn completed_run_replays_after_reopening_without_loading_changed_configuration() {
     let home = home();
     let mut model = Script::new(vec![("default/a", text("done"))]);
@@ -570,18 +554,26 @@ fn concurrent_runtime_observes_claim_without_duplicate_model_call() {
 #[test]
 fn unknown_schema_version_is_rejected_without_downgrading() {
     let home = home();
-    drop(RunStore::open(home.path()).unwrap());
-    let db = rusqlite::Connection::open(home.path().join("runtime/runs.db")).unwrap();
-    db.pragma_update(None, "user_version", 99).unwrap();
+    // Install a future module version before this process ever opens the database.
+    std::fs::create_dir(home.path().join("runtime")).unwrap();
+    let db = rusqlite::Connection::open(home.path().join("runtime/runtime.db")).unwrap();
+    db.execute_batch(
+        "CREATE TABLE schema_modules(module TEXT PRIMARY KEY, version INTEGER NOT NULL);
+         INSERT INTO schema_modules VALUES('runs', 99);",
+    )
+    .unwrap();
     assert!(matches!(
         RunStore::open(home.path()),
         Err(RuntimeError::Configuration(_))
     ));
-    assert_eq!(
-        db.pragma_query_value(None, "user_version", |row| row.get::<_, u32>(0))
-            .unwrap(),
-        99
-    );
+    let version: u32 = db
+        .query_row(
+            "SELECT version FROM schema_modules WHERE module='runs'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(version, 99);
 }
 
 #[test]
@@ -728,7 +720,7 @@ fn runtime_rejects_database_sidecar_symlinks() {
     let home = home();
     let outside = tempfile::NamedTempFile::new().unwrap();
     std::fs::create_dir(home.path().join("runtime")).unwrap();
-    std::os::unix::fs::symlink(outside.path(), home.path().join("runtime/runs.db-wal")).unwrap();
+    std::os::unix::fs::symlink(outside.path(), home.path().join("runtime/runtime.db-wal")).unwrap();
     assert!(matches!(
         RunStore::open(home.path()),
         Err(RuntimeError::Configuration(_))

@@ -119,9 +119,10 @@ impl TaskControl {
             .map_err(Into::into)
         } else {
             let store = ScheduleStore::open(&self.home)?;
-            store.connection.execute_batch("BEGIN IMMEDIATE")?;
+            let tx_db = store.connection.clone();
+            let tx = agt_storage::sqlite::write(&tx_db)?;
             let result = operation(&store)?;
-            store.connection.execute_batch("COMMIT")?;
+            tx.commit()?;
             agt_storage::wake::notify(&self.home);
             Ok(result)
         }
@@ -211,7 +212,8 @@ pub(super) fn publish(home: &Path, store: &ScheduleStore) -> Result<()> {
     };
     let im = open_im(home)?;
     for (seq, id) in rows {
-        store.connection.execute_batch("BEGIN IMMEDIATE")?;
+        let tx_db = store.connection.clone();
+        let tx = agt_storage::sqlite::write(&tx_db)?;
         let result = (|| -> Result<bool> {
             let item = read(&store.connection, &id)?;
             let (body, actor, message): (Option<String>, Option<String>, Option<String>) =
@@ -255,9 +257,11 @@ pub(super) fn publish(home: &Path, store: &ScheduleStore) -> Result<()> {
             }
             Ok(false)
         })();
-        store
-            .connection
-            .execute_batch(if result.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
+        if result.is_ok() {
+            tx.commit()?;
+        } else {
+            drop(tx);
+        }
         let changed=match result {Ok(changed)=>changed,Err(_)=>store.connection.execute("UPDATE work_reports SET error='report_unavailable' WHERE event_seq=?1 AND error IS NOT 'report_unavailable'",[seq])?>0};
         if changed {
             agt_storage::wake::notify(home);
@@ -277,7 +281,8 @@ pub(super) fn expired_barrier(
     {
         return Ok(item);
     }
-    store.connection.execute_batch("BEGIN IMMEDIATE")?;
+    let tx_db = store.connection.clone();
+    let tx = agt_storage::sqlite::write(&tx_db)?;
     let operation = (|| -> Result<WorkItem> {
         let mut current = read(&store.connection, &item.id)?;
         if queue::blocker(&store.connection, &current, crate::schedule_store::now_ms())?
@@ -297,11 +302,11 @@ pub(super) fn expired_barrier(
         }
         Ok(current)
     })();
-    store.connection.execute_batch(if operation.is_ok() {
-        "COMMIT"
+    if operation.is_ok() {
+        tx.commit()?;
     } else {
-        "ROLLBACK"
-    })?;
+        drop(tx);
+    }
     let current = operation?;
     if current.revision != item.revision {
         agt_storage::wake::notify(home);

@@ -1,8 +1,8 @@
 use std::path::Path;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, bail};
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 pub(crate) const LEASE_MS: i64 = 15_000;
@@ -111,91 +111,47 @@ pub struct ReplyUsage {
     pub replies: u32,
 }
 
+pub(crate) const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Schema {
+    module: "scheduler",
+    version: 1,
+    ddl: "CREATE TABLE coordinator(id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, expires INTEGER NOT NULL);
+        CREATE TABLE discussions(id TEXT PRIMARY KEY,conversation TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('active','paused','limited','ended')),calls INTEGER NOT NULL DEFAULT 0,expires INTEGER NOT NULL,last_human_seq INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE tasks(id TEXT PRIMARY KEY,discussion TEXT NOT NULL,principal TEXT NOT NULL,conversation TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN ('queued','evaluating','ready_to_reply','responding','waiting','limited','blocked','input','suspended','completed','silent','skipped','failed','canceled','interrupted','outcome_unknown')),due INTEGER NOT NULL,quiet INTEGER NOT NULL,version INTEGER NOT NULL,owner TEXT,record TEXT NOT NULL);
+        CREATE UNIQUE INDEX autonomous_reply_slot ON tasks(conversation) WHERE state='responding' AND json_extract(record,'$.decision_required')=1;
+        CREATE INDEX task_queue ON tasks(state,due);
+        CREATE INDEX active_identity ON tasks(principal,state);
+        CREATE TABLE assigned(delivery INTEGER PRIMARY KEY,task TEXT NOT NULL);
+        CREATE TABLE usage(discussion TEXT NOT NULL,principal TEXT NOT NULL,replies INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(discussion,principal));
+        CREATE TABLE reconciled(task TEXT PRIMARY KEY);
+        CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
+        CREATE TABLE context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);
+        CREATE TABLE context_reset_events(id INTEGER PRIMARY KEY AUTOINCREMENT,conversation TEXT NOT NULL,through_seq INTEGER NOT NULL,created_at INTEGER NOT NULL);
+        CREATE INDEX context_reset_range ON context_reset_events(conversation,through_seq);
+        CREATE TABLE run_inputs(input_task TEXT PRIMARY KEY,parent_task TEXT NOT NULL,run_id TEXT NOT NULL,mode TEXT NOT NULL,accepted_at INTEGER NOT NULL);
+        CREATE INDEX run_input_parent ON run_inputs(parent_task);
+        CREATE TRIGGER scheduled_created AFTER INSERT ON tasks BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record,'$.conversation'),'schedule',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        CREATE TRIGGER scheduled_changed AFTER UPDATE ON tasks WHEN OLD.record<>NEW.record BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record,'$.conversation'),'schedule',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        CREATE TRIGGER discussion_changed AFTER UPDATE ON discussions BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'schedule',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        CREATE TRIGGER context_reset_added AFTER INSERT ON context_reset_events BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'context_reset',NEW.created_at);
+        END;",
+};
+
 pub struct ScheduleStore {
     pub(crate) home: std::path::PathBuf,
     config: agt_config::RuntimeConfig,
-    pub(crate) connection: Connection,
+    pub(crate) connection: agt_storage::sqlite::Db,
 }
 
 impl ScheduleStore {
     pub fn open(home: &Path) -> Result<Self> {
-        let mut connection = Connection::open(crate::store::database_path(
-            home,
-            "runtime",
-            "scheduler.db",
-        )?)?;
-        connection.busy_timeout(Duration::from_secs(5))?;
-        // SQLite's journal-mode transition can return BUSY immediately even
-        // with busy_timeout when the coordinator and status reader open a new DB.
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            match connection.pragma_update(None, "journal_mode", "WAL") {
-                Ok(()) => break,
-                Err(error)
-                    if matches!(
-                        error.sqlite_error_code(),
-                        Some(
-                            rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
-                        )
-                    ) && Instant::now() < deadline =>
-                {
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                Err(error) => return Err(error.into()),
-            }
-        }
-        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let version: u32 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        match version {
-            0 => tx.execute_batch("CREATE TABLE coordinator(id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, expires INTEGER NOT NULL);
-                CREATE TABLE discussions(id TEXT PRIMARY KEY,conversation TEXT NOT NULL,state TEXT NOT NULL,calls INTEGER NOT NULL DEFAULT 0,expires INTEGER NOT NULL,last_human_seq INTEGER NOT NULL DEFAULT 0);
-                CREATE TABLE tasks(id TEXT PRIMARY KEY,discussion TEXT NOT NULL,principal TEXT NOT NULL,conversation TEXT NOT NULL,state TEXT NOT NULL,due INTEGER NOT NULL,quiet INTEGER NOT NULL,version INTEGER NOT NULL,owner TEXT,record TEXT NOT NULL);
-                CREATE UNIQUE INDEX active_principal ON tasks(principal) WHERE state IN ('evaluating','ready_to_reply','responding');
-                CREATE UNIQUE INDEX autonomous_reply_slot ON tasks(conversation) WHERE state='responding' AND json_extract(record,'$.decision_required')=1;
-                CREATE INDEX task_queue ON tasks(state,due);
-                CREATE TABLE assigned(delivery INTEGER PRIMARY KEY,task TEXT NOT NULL);
-                CREATE TABLE usage(discussion TEXT NOT NULL,principal TEXT NOT NULL,replies INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(discussion,principal));
-                CREATE TABLE reconciled(task TEXT PRIMARY KEY);
-                CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
-                PRAGMA user_version=3;")?,
-            3..=18 => {},
-            _ => bail!("unsupported scheduler database version"),
-        }
-        tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
-        crate::work::migrate(&tx)?;
-        if version < 15 {
-            tx.execute_batch("CREATE TABLE context_reset_events(id INTEGER PRIMARY KEY AUTOINCREMENT,conversation TEXT NOT NULL,through_seq INTEGER NOT NULL,created_at INTEGER NOT NULL);
-                CREATE INDEX context_reset_range ON context_reset_events(conversation,through_seq);
-                CREATE TRIGGER context_reset_added AFTER INSERT ON context_reset_events BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'context_reset',NEW.created_at); END;
-                PRAGMA user_version=15;")?;
-        }
-        if version < 16 {
-            tx.execute_batch("DROP INDEX IF EXISTS active_principal;
-                CREATE INDEX IF NOT EXISTS active_identity ON tasks(principal,state);
-                CREATE TABLE IF NOT EXISTS work_execution_policy(work_id TEXT PRIMARY KEY,policy TEXT NOT NULL,requested TEXT NOT NULL);
-                PRAGMA user_version=16;")?;
-        }
-        if version < 17 {
-            tx.execute_batch("CREATE TABLE IF NOT EXISTS run_inputs(input_task TEXT PRIMARY KEY,parent_task TEXT NOT NULL,run_id TEXT NOT NULL,mode TEXT NOT NULL,accepted_at INTEGER NOT NULL);
-                CREATE INDEX IF NOT EXISTS run_input_parent ON run_inputs(parent_task);
-                PRAGMA user_version=17;")?;
-        }
-        if version < 18 {
-            if version != 0 {
-                tx.execute_batch("ALTER TABLE discussions DROP COLUMN allow_mcp;")?;
-            }
-            tx.pragma_update(None, "user_version", 18)?;
-            // Only the retired MCP gate is released. Other blockers and discussion
-            // lifecycle checks keep their existing semantics.
-            for mut task in query_tasks(
-                &tx,
-                "SELECT record FROM tasks WHERE state='blocked' AND json_extract(record,'$.reason')='MCP execution needs binding and discussion authorization'",
-            )? {
-                task.wake_for_human(now_ms());
-                save_task(&tx, &task)?;
-            }
-        }
-        tx.commit()?;
+        let connection = crate::store::runtime_db(home)?;
         Ok(Self {
             connection,
             home: home.into(),
@@ -228,9 +184,7 @@ impl ScheduleStore {
         seq: i64,
         now: i64,
     ) -> Result<()> {
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         if tx
             .query_row(
                 "SELECT 1 FROM human_messages WHERE message=?1",
@@ -287,9 +241,7 @@ impl ScheduleStore {
     }
 
     pub fn control(&mut self, conversation: &str, action: &str, now: i64) -> Result<()> {
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         match action {
             "pause" | "end" => {
                 tx.execute(
@@ -336,9 +288,7 @@ impl ScheduleStore {
     }
 
     pub(crate) fn acquire(&mut self, owner: &str, now: i64) -> Result<bool> {
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         let active: Option<String> = tx
             .query_row(
                 "SELECT owner FROM coordinator WHERE id=1 AND expires>?1",
@@ -379,9 +329,7 @@ impl ScheduleStore {
     }
 
     pub(crate) fn ingest(&mut self, task: ScheduledTask) -> Result<()> {
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         if tx
             .query_row(
                 "SELECT 1 FROM assigned WHERE delivery=?1",
@@ -456,9 +404,7 @@ impl ScheduleStore {
         owner: &str,
         now: i64,
     ) -> Result<Option<ScheduledTask>> {
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         let record: String =
             tx.query_row("SELECT record FROM tasks WHERE id=?1", [id], |r| r.get(0))?;
         let mut task: ScheduledTask = serde_json::from_str(&record)?;
@@ -556,9 +502,7 @@ impl ScheduleStore {
 
     pub(crate) fn update(&mut self, task: &ScheduledTask, now: i64) -> Result<bool> {
         let task = task.clone();
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         let valid=tx.query_row("SELECT 1 FROM tasks t JOIN coordinator c ON c.owner=t.owner WHERE t.id=?1 AND t.version=?2 AND t.owner=?3 AND t.state IN ('evaluating','responding') AND c.expires>?4",params![task.id,task.version,task.owner,now], |_|Ok(())).optional()?.is_some();
         if !valid {
             return Ok(false);
@@ -579,9 +523,7 @@ impl ScheduleStore {
     }
 
     pub(crate) fn invalidate_ready(&mut self, id: &str, seq: i64, now: i64) -> Result<()> {
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         let record: String =
             tx.query_row("SELECT record FROM tasks WHERE id=?1", [id], |r| r.get(0))?;
         let mut task: ScheduledTask = serde_json::from_str(&record)?;
@@ -595,9 +537,7 @@ impl ScheduleStore {
     }
 
     pub(crate) fn debit(&mut self, task: &ScheduledTask, now: i64) -> Result<bool> {
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         let valid=tx.query_row("SELECT 1 FROM tasks t JOIN coordinator c ON c.owner=t.owner WHERE t.id=?1 AND t.version=?2 AND t.owner=?3 AND t.state IN ('evaluating','responding') AND c.expires>?4",params![task.id,task.version,task.owner,now], |_|Ok(())).optional()?.is_some();
         if !valid {
             return Ok(false);
@@ -763,61 +703,6 @@ mod tests {
     }
 
     #[test]
-    fn legacy_mcp_gate_migrates_without_releasing_other_blockers() {
-        let (home, mut store) = fixture();
-        for (id, state, reason) in [
-            (
-                1,
-                "blocked",
-                "MCP execution needs binding and discussion authorization",
-            ),
-            (2, "blocked", "dependency unresolved"),
-            (
-                3,
-                "failed",
-                "MCP execution needs binding and discussion authorization",
-            ),
-        ] {
-            let mut task = task(id, &format!("agent-{id}"), "chat", false);
-            task.state = state.parse().unwrap();
-            task.reason = Some(reason.into());
-            store.ingest(task).unwrap();
-        }
-        store.control("chat", "pause", 0).unwrap();
-        store.connection.execute_batch("ALTER TABLE discussions ADD COLUMN allow_mcp INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=17;").unwrap();
-        drop(store);
-        let store = ScheduleStore::open(home.path()).unwrap();
-        assert_eq!(
-            store.discussion("round").unwrap().unwrap().state,
-            DiscussionState::Paused
-        );
-        assert!(store.candidates().unwrap().is_empty());
-        let resumed = store.get("1").unwrap();
-        assert_eq!(resumed.state, TaskState::Queued);
-        assert_eq!(resumed.version, 1);
-        assert!(resumed.reason.is_none());
-        assert!(resumed.owner.is_none());
-        assert_eq!(store.get("2").unwrap().state, TaskState::Blocked);
-        assert_eq!(store.get("3").unwrap().state, TaskState::Failed);
-        assert!(
-            store
-                .connection
-                .prepare("SELECT allow_mcp FROM discussions")
-                .is_err()
-        );
-        assert!(
-            serde_json::to_value(store.snapshot().unwrap()).unwrap()["discussions"][0]
-                .get("allow_mcp")
-                .is_none()
-        );
-        drop(store);
-        let mut store = ScheduleStore::open(home.path()).unwrap();
-        assert_eq!(store.get("1").unwrap().version, 1);
-        store.control("chat", "resume", now_ms()).unwrap();
-        assert!(store.candidates().unwrap().iter().any(|t| t.id == "1"));
-    }
-
-    #[test]
     fn ending_target_conversation_stops_incoming_cross_conversation_work() {
         let (_home, mut store) = fixture();
         store.ingest(task(1, "agent", "target", false)).unwrap();
@@ -867,26 +752,6 @@ mod tests {
         old.as_object_mut().unwrap().remove("last_decision");
         let restored: ScheduledTask = serde_json::from_value(old).unwrap();
         assert!(restored.last_decision.is_none());
-    }
-
-    #[test]
-    fn rejects_unsupported_schema_without_changing_it() {
-        for version in [1, 2, 99] {
-            let home = tempfile::tempdir().unwrap();
-            let store = ScheduleStore::open(home.path()).unwrap();
-            store
-                .connection
-                .pragma_update(None, "user_version", version)
-                .unwrap();
-            assert!(ScheduleStore::open(home.path()).is_err());
-            assert_eq!(
-                store
-                    .connection
-                    .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
-                    .unwrap(),
-                version
-            );
-        }
     }
 
     #[test]

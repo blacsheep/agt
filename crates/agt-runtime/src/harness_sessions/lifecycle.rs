@@ -49,28 +49,6 @@ pub struct SessionExecution {
     pub generation: i64,
     pub reason: Option<String>,
 }
-pub(super) fn migrate(db: &Connection) -> Result<()> {
-    db.execute_batch("BEGIN IMMEDIATE")?;
-    let result = (|| -> Result<()> {
-        let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 1 {
-            bail!("unsupported harness session schema");
-        }
-        if version == 0 {
-            db.execute_batch("CREATE TABLE harness_operations(scope TEXT PRIMARY KEY REFERENCES harness_sessions(scope),id TEXT NOT NULL,state TEXT NOT NULL,owner TEXT,generation INTEGER NOT NULL,expires INTEGER NOT NULL,submitted INTEGER NOT NULL DEFAULT 0,cancel INTEGER NOT NULL DEFAULT 0,reason TEXT,output TEXT);
-                INSERT INTO harness_operations(scope,id,state,generation,expires,submitted,reason) SELECT scope,scope,'needs_review',1,0,1,'Legacy interrupted execution; inspect before starting a new context' FROM harness_sessions WHERE dirty=1;
-                ALTER TABLE harness_sessions DROP COLUMN dirty;
-                ALTER TABLE harness_sessions DROP COLUMN cancel;
-                CREATE TABLE change_outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT,conversation TEXT,kind TEXT NOT NULL,at INTEGER NOT NULL);
-                CREATE TRIGGER operation_created AFTER INSERT ON harness_operations BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES((SELECT conversation FROM harness_sessions WHERE scope=NEW.scope),'harness',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
-                CREATE TRIGGER operation_changed AFTER UPDATE ON harness_operations WHEN OLD.id<>NEW.id OR OLD.state<>NEW.state OR OLD.reason IS NOT NEW.reason BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES((SELECT conversation FROM harness_sessions WHERE scope=NEW.scope),'harness',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
-                PRAGMA user_version=1;")?;
-        }
-        Ok(())
-    })();
-    db.execute_batch(if result.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
-    result
-}
 impl HarnessSessions {
     /// Recovery never treats an expired lease as permission to replay external effects.
     pub fn reconcile(&self) -> Result<()> {
@@ -108,7 +86,8 @@ impl HarnessSessions {
         self.reconcile()?;
         let owner = uuid::Uuid::new_v4().to_string();
         let now = crate::schedule_store::now_ms();
-        self.db.execute_batch("BEGIN IMMEDIATE")?;
+        let tx_db = self.db.clone();
+        let tx = agt_storage::sqlite::write(&tx_db)?;
         let acquired = (|| -> Result<i64> {
             let exists: bool = self.db.query_row(
                 "SELECT EXISTS(SELECT 1 FROM harness_sessions WHERE scope=?1)",
@@ -130,11 +109,11 @@ impl HarnessSessions {
                 |r| r.get(0),
             )?)
         })();
-        self.db.execute_batch(if acquired.is_ok() {
-            "COMMIT"
+        if acquired.is_ok() {
+            tx.commit()?;
         } else {
-            "ROLLBACK"
-        })?;
+            drop(tx);
+        }
         let generation = acquired?;
         agt_storage::wake::notify(&self.home);
         let path = self
@@ -178,7 +157,8 @@ pub(crate) struct ExecutionLock<'a> {
 impl ExecutionLock<'_> {
     pub(crate) fn fenced<T>(&self, operation: impl FnOnce() -> Result<T>) -> Result<T> {
         let before = self.sessions.db.total_changes();
-        self.sessions.db.execute_batch("BEGIN IMMEDIATE")?;
+        let tx_db = self.sessions.db.clone();
+        let tx = agt_storage::sqlite::write(&tx_db)?;
         let result = (|| {
             let owns:bool=self.sessions.db.query_row("SELECT EXISTS(SELECT 1 FROM harness_operations WHERE scope=?1 AND owner=?2 AND generation=?3 AND expires>?4)",params![self.id,self.owner,self.generation,crate::schedule_store::now_ms()],|r|r.get(0))?;
             if !owns {
@@ -186,9 +166,11 @@ impl ExecutionLock<'_> {
             }
             operation()
         })();
-        self.sessions
-            .db
-            .execute_batch(if result.is_ok() { "COMMIT" } else { "ROLLBACK" })?;
+        if result.is_ok() {
+            tx.commit()?;
+        } else {
+            drop(tx);
+        }
         if result.is_ok() && self.sessions.db.total_changes() != before {
             agt_storage::wake::notify(&self.sessions.home);
         }

@@ -11,15 +11,22 @@ pub(crate) struct ConversationSummary {
     pub agent_fingerprint: String,
     pub text: String,
 }
+pub(crate) const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Schema {
+    module: "contexts",
+    version: 1,
+    ddl: "CREATE TABLE conversation_summaries(conversation TEXT NOT NULL,principal TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(conversation,principal));",
+};
 pub(crate) struct ContextStore {
-    connection: Connection,
+    connection: agt_storage::sqlite::Db,
 }
 impl ContextStore {
     pub fn open(home: &Path) -> Result<Self> {
-        let connection =
-            Connection::open(crate::store::database_path(home, "runtime", "contexts.db")?)?;
-        connection.busy_timeout(std::time::Duration::from_secs(5))?;
-        connection.execute_batch("CREATE TABLE IF NOT EXISTS conversation_summaries(conversation TEXT NOT NULL,principal TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(conversation,principal));")?;
+        let connection = crate::store::runtime_db(home).map_err(|e| {
+            crate::RuntimeError::Configuration(crate::Reason::because(
+                "runtime database unavailable",
+                e,
+            ))
+        })?;
         Ok(Self { connection })
     }
     pub fn load(&self, conversation: &str, principal: &str) -> Result<Option<ConversationSummary>> {
@@ -33,18 +40,19 @@ impl ContextStore {
             .optional()?;
         value.map(|s| Ok(serde_json::from_str(&s)?)).transpose()
     }
-    /// Caller holds the scheduler fence and revalidates source visibility after inference.
+    /// Runs on the fence connection; the caller revalidates source visibility after inference.
     pub fn save(
-        &self,
+        connection: &Connection,
         conversation: &str,
         principal: &str,
         summary: &ConversationSummary,
     ) -> Result<()> {
-        self.connection.execute("INSERT INTO conversation_summaries VALUES(?1,?2,?3) ON CONFLICT(conversation,principal) DO UPDATE SET record=excluded.record", params![conversation,principal,serde_json::to_string(summary)?])?;
+        connection.execute("INSERT INTO conversation_summaries VALUES(?1,?2,?3) ON CONFLICT(conversation,principal) DO UPDATE SET record=excluded.record", params![conversation,principal,serde_json::to_string(summary)?])?;
         Ok(())
     }
-    pub fn clear(&self, conversation: &str) -> Result<()> {
-        self.connection.execute(
+    /// Runs on the caller's connection so it commits with the reset epoch.
+    pub fn clear(connection: &Connection, conversation: &str) -> Result<()> {
+        connection.execute(
             "DELETE FROM conversation_summaries WHERE conversation=?1",
             [conversation],
         )?;

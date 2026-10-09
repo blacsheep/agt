@@ -189,7 +189,7 @@ Runtime 数据库直接创建 v2 结构，旧版本结构会被拒绝，不在�
   先检查 Run 与实际外部结果，不会自动重跑。Web debug_mode 展示更多诊断信息。
 - 不接话时检查绑定、manual/mentions、讨论是否授权/暂停/结束。
   模型协议必须与 Provider 实际接口一致；支持文本 Chat Completions 和 Responses，
-  不会自动探测切换。调度判断在 scheduler.db 中记录，正式 Run 使用 `run calls`。
+  不会自动探测切换。调度判断在 runtime.db 中记录，正式 Run 使用 `run calls`。
 
 ## 已知限制
 

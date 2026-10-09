@@ -62,7 +62,7 @@ deadline 使用实际的未来 Unix 毫秒时间。可用 task_id 等待一个�
 
 Runtime 保存模型上下文、已完成工具结果和发送去重信息，然后结束本段 Run 为 `suspended`。
 执行返回后才释放该 Agent 的槽位；WorkItem 显示 `waiting_dependency`，其他任务仍可运行。
-检查点留在 runs.db 私有表中，不通过 task_get 或结果通知返回原始上下文。
+检查点留在 runtime.db 的私有 run_checkpoints 表中，不通过 task_get 或结果通知返回原始上下文。
 依赖成功、失败、取消、结果不确定或截止时间到达，会排队一个新的 continuation Run。
 新 Run 读取检查点和明确的依赖状态；用 task_get 查看完整结果，之前成功的工具不会自动重放。
 父任务直到真正返回最终结果才对上游汇报成功；“正在等待”不是任务完成。

@@ -1,7 +1,6 @@
 use std::path::Path;
-use std::time::Duration;
 
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 
 use crate::{Result, RunRequest, RuntimeError, fingerprint};
@@ -43,66 +42,62 @@ pub struct RunRecord {
     pub execution: Option<serde_json::Value>,
 }
 
+/// Every module in the shared runtime database. Opening any runtime store installs
+/// all of them, so a later open never needs the write lock while another connection
+/// in this process holds a transaction.
+const RUNTIME_SCHEMAS: &[&agt_storage::sqlite::Schema] = &[
+    &agt_storage::sqlite::OUTBOX,
+    &SCHEMA,
+    &crate::schedule_store::SCHEMA,
+    &crate::work::SCHEMA,
+    &crate::context_store::SCHEMA,
+    &crate::harness_sessions::SCHEMA,
+    &crate::approval::SCHEMA,
+    &crate::events::SCHEMA,
+    &agt_service::BINDINGS_SCHEMA,
+];
+
+pub(crate) fn runtime_db(
+    home: &Path,
+) -> std::result::Result<agt_storage::sqlite::Db, agt_storage::sqlite::SchemaError> {
+    agt_storage::sqlite::open(home, agt_storage::sqlite::RUNTIME_DB, RUNTIME_SCHEMAS)
+}
+
+pub(crate) const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Schema {
+    module: "runs",
+    version: 1,
+    ddl: "CREATE TABLE runs(
+            id TEXT PRIMARY KEY,
+            request_key TEXT NOT NULL UNIQUE,
+            request_hash TEXT NOT NULL,
+            parent_run_id TEXT REFERENCES runs(id),
+            record_json TEXT NOT NULL);
+        CREATE INDEX runs_parent ON runs(parent_run_id);
+        CREATE TABLE run_calls(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL REFERENCES runs(id),
+            record_json TEXT NOT NULL);
+        CREATE INDEX run_calls_run ON run_calls(run_id, id);
+        CREATE TABLE run_checkpoints(run_id TEXT PRIMARY KEY, checkpoint TEXT NOT NULL);
+        CREATE TABLE tool_details(run_id TEXT NOT NULL REFERENCES runs(id), activity_id TEXT NOT NULL, detail_json TEXT NOT NULL, PRIMARY KEY(run_id, activity_id));
+        CREATE TRIGGER run_created AFTER INSERT ON runs BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record_json,'$.request.trigger.conversation_id'),'run',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        CREATE TRIGGER run_changed AFTER UPDATE ON runs WHEN OLD.record_json<>NEW.record_json BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record_json,'$.request.trigger.conversation_id'),'run',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;",
+};
+
 pub struct RunStore {
     home: std::path::PathBuf,
-    pub(crate) connection: Connection,
+    pub(crate) connection: agt_storage::sqlite::Db,
 }
 
 impl RunStore {
     pub fn open(home: &Path) -> Result<Self> {
-        let path = database_path(home, "runtime", "runs.db")?;
-        let mut connection = Connection::open(path)?;
-        connection.busy_timeout(Duration::from_secs(5))?;
-        let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let version: u32 = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        match version {
-            0 => tx.execute_batch(
-                "CREATE TABLE runs (
-                    id TEXT PRIMARY KEY,
-                    request_key TEXT NOT NULL UNIQUE,
-                    request_hash TEXT NOT NULL,
-                    parent_run_id TEXT REFERENCES runs(id),
-                    record_json TEXT NOT NULL
-                 );
-                 CREATE INDEX runs_parent ON runs(parent_run_id);
-                 CREATE TABLE run_calls (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    run_id TEXT NOT NULL REFERENCES runs(id),
-                    record_json TEXT NOT NULL
-                 );
-                 CREATE INDEX run_calls_run ON run_calls(run_id, id);
-                 PRAGMA user_version = 2;",
-            )?,
-            2 => {}
-            3..=6 => {}
-            _ => {
-                return Err(RuntimeError::Configuration(
-                    "unsupported runtime database version".into(),
-                ));
-            }
-        }
-        if version < 3 {
-            tx.execute_batch("CREATE TABLE native_checkpoints(run_id TEXT PRIMARY KEY, checkpoint TEXT NOT NULL); PRAGMA user_version=3;")?;
-        }
-        if version < 4 {
-            tx.execute_batch("UPDATE native_checkpoints SET checkpoint=json_set(checkpoint,'$.engine','native'); ALTER TABLE native_checkpoints RENAME TO run_checkpoints; PRAGMA user_version=4;")?;
-        }
-        if version < 5 {
-            tx.execute_batch("CREATE TABLE IF NOT EXISTS change_outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT, conversation TEXT, kind TEXT NOT NULL, at INTEGER NOT NULL);
-                CREATE TRIGGER IF NOT EXISTS run_created AFTER INSERT ON runs BEGIN
-                    INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record_json,'$.request.trigger.conversation_id'),'run',CAST(unixepoch('subsec')*1000 AS INTEGER));
-                END;
-                CREATE TRIGGER IF NOT EXISTS run_changed AFTER UPDATE ON runs WHEN OLD.record_json<>NEW.record_json BEGIN
-                    INSERT INTO change_outbox(conversation,kind,at) VALUES(json_extract(NEW.record_json,'$.request.trigger.conversation_id'),'run',CAST(unixepoch('subsec')*1000 AS INTEGER));
-                END;
-                PRAGMA user_version=5;")?;
-        }
-        if version < 6 {
-            tx.execute_batch("CREATE TABLE IF NOT EXISTS tool_details(run_id TEXT NOT NULL REFERENCES runs(id), activity_id TEXT NOT NULL, detail_json TEXT NOT NULL, PRIMARY KEY(run_id, activity_id)); PRAGMA user_version=6;")?;
-        }
-        tx.commit()?;
-        connection.pragma_update(None, "journal_mode", "WAL")?;
-        connection.pragma_update(None, "foreign_keys", "ON")?;
+        let connection = runtime_db(home).map_err(|e| {
+            RuntimeError::Configuration(crate::Reason::because("runtime database unavailable", e))
+        })?;
         Ok(Self {
             connection,
             home: home.into(),
@@ -166,9 +161,7 @@ impl RunStore {
             None => format!("root:{}", request.request_key),
         };
         let hash = fingerprint(&serde_json::to_vec(&(request, parent))?);
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         let existing: Option<(String, String)> = tx
             .query_row(
                 "SELECT request_hash, record_json FROM runs WHERE request_key = ?1",
@@ -221,9 +214,7 @@ impl RunStore {
     ) -> Result<()> {
         let mut record = record.clone();
         self.merge_tool_progress(&mut record)?;
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         tx.execute(
             "INSERT INTO run_checkpoints VALUES(?1,?2)",
             params![record.id, serde_json::to_string(checkpoint)?],
@@ -327,37 +318,4 @@ pub(crate) fn database_path(
             e,
         ))
     })
-}
-
-#[cfg(test)]
-mod checkpoint_migration_tests {
-    use super::*;
-    #[test]
-    fn version_two_upgrade_preserves_run_claims_and_rejects_future_schema() {
-        let home = tempfile::tempdir().unwrap();
-        let mut store = RunStore::open(home.path()).unwrap();
-        let request = RunRequest::new("example", "existing work");
-        let (record, _) = store.claim(&request, None).unwrap();
-        store
-            .connection
-            .execute_batch("DROP TABLE run_checkpoints; PRAGMA user_version=2;")
-            .unwrap();
-        drop(store);
-        let mut store = RunStore::open(home.path()).unwrap();
-        let (replayed, claimed) = store.claim(&request, None).unwrap();
-        assert!(!claimed);
-        assert_eq!(replayed.id, record.id);
-        assert_eq!(replayed.state, RunState::Running);
-        let count: i64 = store
-            .connection
-            .query_row("SELECT count(*) FROM run_checkpoints", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(count, 0);
-        store
-            .connection
-            .pragma_update(None, "user_version", 99)
-            .unwrap();
-        drop(store);
-        assert!(RunStore::open(home.path()).is_err());
-    }
 }

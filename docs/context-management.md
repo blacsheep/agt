@@ -12,12 +12,12 @@
 | runtime/context.rs | token 估算、输入预算、工具输出裁剪、无工具摘要调用 |
 | runtime/engine/native/request.rs | 在完整工具批次结束后压缩、保留固定指令与当前请求、Run 压缩诊断 |
 | runtime/conversation_context.rs | 为一个 principal / conversation 组装可见历史、更新会话摘要 |
-| runtime/context_store.rs | `runtime/contexts.db` 的摘要持久化 |
-| runtime/scheduler.rs | 摘要调用的调度授权、重置权限、与旧任务发布之间的围栏；schedule_store 在 scheduler.db 保存重置起点 |
+| runtime/context_store.rs | `runtime/runtime.db` 中 conversation_summaries 表的摘要持久化 |
+| runtime/scheduler.rs | 摘要调用的调度授权、重置权限、与旧任务发布之间的围栏；schedule_store 在 runtime.db 保存重置起点 |
 | agt-im | 原始消息、分页与成员可见区间；不依赖模型或 Runtime |
 | CLI / Web | 同一 Runtime 重置接口的适配和交互；Node 不生成或管理摘要 |
 
-Agent 私有工具执行摘要仅存于 `runs.db` 的 Run `context` 字段；不写入 IM，
+Agent 私有工具执行摘要仅存于 `runtime.db` 的 Run `context` 字段；不写入 IM，
 也不注入其他 Agent 的上下文。会话摘要只提取该 principal 可见的公共对话消息，
 按 `(conversation, principal)` 保存，与 Agent 配置指纹和来源内容摘要绑定。
 这不是所有 Agent 共用的全局记忆。
@@ -91,7 +91,7 @@ CLI：`agt schedule reset <conversation> --actor <human-principal>`。
 3. 后续模型请求、工具调用、摘要写入与自动发布复查围栏。已发出的外部请求不能撤销。
 4. 新消息才能开始新讨论；重复授权旧消息、点击继续、服务重启不会恢复旧上下文。
 
-重置序号和讨论结束状态在 scheduler.db 同一个事务提交，避免跨会话任务在进程崩溃后继续。
+重置序号、摘要清除和讨论结束状态在 runtime.db 同一个事务提交，避免跨会话任务在进程崩溃后继续。
 摘要缓存先清除；若事务未提交即中断，最多重建缓存，不会丢失 IM 历史。
 Scheduler schema 从 v3 加法升级到 v4，保留现有讨论与任务；更早的不兼容版本仍拒绝。
 重置保留聊天记录、历史 Run 与资源配置。当前请求和工具 transcript 随旧 Run 停止；

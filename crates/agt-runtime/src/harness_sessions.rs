@@ -20,8 +20,21 @@ pub struct HarnessSession {
     pub busy: bool,
     pub execution: Option<SessionExecution>,
 }
+pub(crate) const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Schema {
+    module: "harness_sessions",
+    version: 1,
+    ddl: "CREATE TABLE harness_sessions(scope TEXT PRIMARY KEY,principal TEXT NOT NULL,conversation TEXT NOT NULL,agent TEXT NOT NULL,harness TEXT NOT NULL,config TEXT NOT NULL,title TEXT NOT NULL DEFAULT '',thread TEXT,through_seq INTEGER NOT NULL DEFAULT 0,source_hash TEXT NOT NULL DEFAULT '');
+        CREATE TABLE harness_operations(scope TEXT PRIMARY KEY REFERENCES harness_sessions(scope),id TEXT NOT NULL,state TEXT NOT NULL,owner TEXT,generation INTEGER NOT NULL,expires INTEGER NOT NULL,submitted INTEGER NOT NULL DEFAULT 0,cancel INTEGER NOT NULL DEFAULT 0,reason TEXT,output TEXT);
+        CREATE TRIGGER operation_created AFTER INSERT ON harness_operations BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) VALUES((SELECT conversation FROM harness_sessions WHERE scope=NEW.scope),'harness',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;
+        CREATE TRIGGER operation_changed AFTER UPDATE ON harness_operations WHEN OLD.id<>NEW.id OR OLD.state<>NEW.state OR OLD.reason IS NOT NEW.reason BEGIN
+            INSERT INTO change_outbox(conversation,kind,at) VALUES((SELECT conversation FROM harness_sessions WHERE scope=NEW.scope),'harness',CAST(unixepoch('subsec')*1000 AS INTEGER));
+        END;",
+};
+
 pub struct HarnessSessions {
-    pub(crate) db: Connection,
+    pub(crate) db: agt_storage::sqlite::Db,
     home: std::path::PathBuf,
 }
 mod lifecycle;
@@ -29,14 +42,7 @@ pub(crate) use lifecycle::ExecutionLock;
 pub use lifecycle::{ExecutionState, SessionExecution};
 impl HarnessSessions {
     pub fn open(home: &Path) -> Result<Self> {
-        let db = Connection::open(crate::store::database_path(
-            home,
-            "runtime",
-            "harnesses.db",
-        )?)?;
-        db.busy_timeout(std::time::Duration::from_secs(5))?;
-        db.execute_batch("CREATE TABLE IF NOT EXISTS harness_sessions(scope TEXT PRIMARY KEY,principal TEXT NOT NULL,conversation TEXT NOT NULL,agent TEXT NOT NULL,harness TEXT NOT NULL,config TEXT NOT NULL,title TEXT NOT NULL DEFAULT '',thread TEXT,through_seq INTEGER NOT NULL DEFAULT 0,source_hash TEXT NOT NULL DEFAULT '',dirty INTEGER NOT NULL DEFAULT 0,cancel INTEGER NOT NULL DEFAULT 0);")?;
-        lifecycle::migrate(&db)?;
+        let db = crate::store::runtime_db(home)?;
         Ok(Self {
             db,
             home: home.into(),

@@ -1,10 +1,9 @@
 use agt_agent::AgentStore;
 use agt_im::{ConversationId, ImStore, PrincipalId, PrincipalKind};
 use anyhow::{Result, bail};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -35,49 +34,31 @@ pub struct BindingStatus {
     pub enabled: bool,
 }
 
+pub const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Schema {
+    module: "bindings",
+    version: 1,
+    ddl: "CREATE TABLE bindings(principal TEXT PRIMARY KEY, agent TEXT NOT NULL, definition TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1);
+        CREATE TABLE response_policies(conversation TEXT NOT NULL,principal TEXT NOT NULL,policy TEXT NOT NULL,PRIMARY KEY(conversation,principal));
+        CREATE TABLE binding_origins(principal TEXT PRIMARY KEY, agent TEXT NOT NULL);
+        CREATE TRIGGER binding_added AFTER INSERT ON bindings BEGIN INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
+        CREATE TRIGGER binding_changed AFTER UPDATE ON bindings BEGIN INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
+        CREATE TRIGGER binding_removed AFTER DELETE ON bindings BEGIN INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
+        CREATE TRIGGER policy_added AFTER INSERT ON response_policies BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'binding',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
+        CREATE TRIGGER policy_changed AFTER UPDATE ON response_policies BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'binding',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;",
+};
+
 pub struct BindingStore {
-    connection: Connection,
+    connection: agt_storage::sqlite::Db,
     home: PathBuf,
 }
 
 impl BindingStore {
     pub fn open(home: &Path) -> Result<Self> {
-        let mut connection =
-            Connection::open(crate::database_path(home, "runtime", "bindings.db")?)?;
-        connection.busy_timeout(Duration::from_secs(5))?;
-        let tx = connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        let version: u32 = tx.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        match version {
-            0 => tx.execute_batch("CREATE TABLE bindings(principal TEXT PRIMARY KEY, agent TEXT NOT NULL, definition TEXT NOT NULL);
-                CREATE TABLE response_policies(conversation TEXT NOT NULL,principal TEXT NOT NULL,policy TEXT NOT NULL,PRIMARY KEY(conversation,principal)); PRAGMA user_version=1;")?,
-            1..=5 => {},
-            _ => bail!("unsupported bindings database version"),
-        }
-        if version < 2 {
-            tx.execute_batch("ALTER TABLE bindings ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1; PRAGMA user_version=2;")?;
-        }
-        if version < 3 {
-            tx.execute_batch("CREATE TABLE IF NOT EXISTS binding_origins(principal TEXT PRIMARY KEY, agent TEXT NOT NULL);
-                INSERT OR REPLACE INTO binding_origins SELECT principal,agent FROM bindings;
-                PRAGMA user_version=3;")?;
-        }
-        if version < 4 {
-            tx.execute_batch("CREATE TABLE IF NOT EXISTS change_outbox(seq INTEGER PRIMARY KEY AUTOINCREMENT,conversation TEXT,kind TEXT NOT NULL,at INTEGER NOT NULL);
-                CREATE TRIGGER IF NOT EXISTS binding_added AFTER INSERT ON bindings BEGIN INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
-                CREATE TRIGGER IF NOT EXISTS binding_changed AFTER UPDATE ON bindings BEGIN INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
-                CREATE TRIGGER IF NOT EXISTS binding_removed AFTER DELETE ON bindings BEGIN INSERT INTO change_outbox(kind,at) VALUES('access',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
-                CREATE TRIGGER IF NOT EXISTS policy_added AFTER INSERT ON response_policies BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'binding',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
-                CREATE TRIGGER IF NOT EXISTS policy_changed AFTER UPDATE ON response_policies BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'binding',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
-                PRAGMA user_version=4;")?;
-        }
-        if version < 5 {
-            // Remove the retired gate from strict Binding JSON, including disabled bindings.
-            tx.execute_batch(
-                "UPDATE bindings SET definition=json_remove(definition,'$.allow_mcp');
-                PRAGMA user_version=5;",
-            )?;
-        }
-        tx.commit()?;
+        let connection = agt_storage::sqlite::open(
+            home,
+            agt_storage::sqlite::RUNTIME_DB,
+            &[&agt_storage::sqlite::OUTBOX, &SCHEMA],
+        )?;
         Ok(Self {
             connection,
             home: home.to_owned(),
@@ -108,7 +89,7 @@ impl BindingStore {
         if !binding.working_directory.is_dir() {
             bail!("invalid binding working directory");
         }
-        let tx = self.connection.unchecked_transaction()?;
+        let tx = agt_storage::sqlite::write(&self.connection)?;
         tx.execute("INSERT INTO bindings(principal,agent,definition) VALUES(?1,?2,?3)
             ON CONFLICT(principal) DO UPDATE SET agent=excluded.agent,definition=excluded.definition",
             params![binding.principal.as_str(),binding.agent,serde_json::to_string(&binding)?])?;
@@ -233,53 +214,5 @@ impl BindingStore {
             Some(value) => serde_json::from_str(&value)?,
             None => binding.policy,
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn legacy_mcp_flag_is_removed_from_enabled_and_disabled_bindings() {
-        let home = tempfile::tempdir().unwrap();
-        let store = BindingStore::open(home.path()).unwrap();
-        for (principal, enabled) in [("a", true), ("b", false)] {
-            let definition = serde_json::json!({"principal":principal,"agent":"default/test",
-                "working_directory":home.path(),"policy":"mentioned","max_steps":0,"allow_mcp":enabled});
-            store.connection.execute("INSERT INTO bindings(principal,agent,definition,enabled) VALUES(?1,'default/test',?2,?3)",
-                params![principal,definition.to_string(),enabled]).unwrap();
-        }
-        store
-            .connection
-            .pragma_update(None, "user_version", 4)
-            .unwrap();
-        drop(store);
-        let store = BindingStore::open(home.path()).unwrap();
-        let bindings = store.list_with_state().unwrap();
-        assert_eq!(bindings.len(), 2);
-        assert!(bindings[0].enabled);
-        assert!(!bindings[1].enabled);
-        assert_eq!(store.list().unwrap().len(), 1);
-        for binding in bindings {
-            assert!(
-                serde_json::to_value(binding)
-                    .unwrap()
-                    .get("allow_mcp")
-                    .is_none()
-            );
-        }
-        let remaining: i64 = store.connection.query_row(
-            "SELECT COUNT(*) FROM bindings WHERE json_type(definition,'$.allow_mcp') IS NOT NULL", [], |r| r.get(0)).unwrap();
-        assert_eq!(remaining, 0);
-        drop(store);
-        assert_eq!(
-            BindingStore::open(home.path())
-                .unwrap()
-                .list_with_state()
-                .unwrap()
-                .len(),
-            2
-        );
     }
 }

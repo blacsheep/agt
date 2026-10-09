@@ -70,7 +70,7 @@ agt --home ~/.agt --output json permission decide REQUEST_ID \
 Harness 使用其原生选项。CLI 不带 `--principal` 表示本机管理员；带身份则强制执行可见性和拥有者校验。
 列表每页最多 100 条，使用 `--before` 加上一页最后一个审批 ID 查询下一页。
 
-审批存储为 `runtime/approvals.db`，变化进入 Events outbox，不在 SSE 广播请求正文。
+审批存储在 `runtime/runtime.db` 的 approvals 表，变化进入 Events outbox，不在 SSE 广播请求正文。
 人工决定使用 revision 条件更新；审批绑定 Run、执行实例和原请求。
 审批过期、取消或宿主丢失后不能继续批准。宿主异常退出的记录通过 30 秒租约失效；
 新执行实例不能复用旧决定，不跨进程重新发送审批响应。

@@ -208,7 +208,8 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                 continue;
             } else if adapter.is_none() {
                 // Permission and context control are fenced against /new/end during publication.
-                ledger.store.connection.execute_batch("BEGIN IMMEDIATE")?;
+                let tx_db = ledger.store.connection.clone();
+                let tx = agt_storage::sqlite::write(&tx_db)?;
                 let result = (|| -> Result<()> {
                     check_scope(home, &ledger.store, &item)?;
                     open_im(home)?.send_message(SendMessageRequest {
@@ -220,11 +221,11 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                     })?;
                     Ok(())
                 })();
-                ledger.store.connection.execute_batch(if result.is_ok() {
-                    "COMMIT"
+                if result.is_ok() {
+                    tx.commit()?;
                 } else {
-                    "ROLLBACK"
-                })?;
+                    drop(tx);
+                }
                 result?;
             }
         }
@@ -244,7 +245,8 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
         for publication in page {
             after = publication.event_seq;
             let item = ledger.get(&publication.work_id)?;
-            ledger.store.connection.execute_batch("BEGIN IMMEDIATE")?;
+            let tx_db = ledger.store.connection.clone();
+            let tx = agt_storage::sqlite::write(&tx_db)?;
             let result = (|| -> Result<()> {
                 check_scope(home, &ledger.store, &item)?;
                 let event_kind: String = ledger.store.connection.query_row(
@@ -340,11 +342,11 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                 ledger.confirm_publication(publication.event_seq, sent.message.id.as_str())?;
                 Ok(())
             })();
-            ledger.store.connection.execute_batch(if result.is_ok() {
-                "COMMIT"
+            if result.is_ok() {
+                tx.commit()?;
             } else {
-                "ROLLBACK"
-            })?;
+                drop(tx);
+            }
             if result.is_err() {
                 ledger.store.connection.execute("UPDATE work_publications SET error='publication_unavailable' WHERE event_seq=?1 AND message_id IS NULL",[publication.event_seq])?;
             }

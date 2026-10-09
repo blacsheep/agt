@@ -123,12 +123,17 @@ pub(crate) fn prepare(
             agent_fingerprint: agent.fingerprint.clone(),
             text: summary.clone(),
         };
-        crate::scheduler::guarded(home, task, || {
+        crate::scheduler::guarded_store(home, task, |fence| {
             // A delete/leave/reset during inference must not revive stale or invisible data.
             if visible_history(im, task, cutoff)? != history {
                 return Err(RuntimeError::Canceled);
             }
-            store.save(&task.conversation, &task.principal, &checkpoint)
+            ContextStore::save(
+                &fence.connection,
+                &task.conversation,
+                &task.principal,
+                &checkpoint,
+            )
         })?;
     }
     Ok(json!({"summary":summary,"history":&history[split..],"reset_through_seq":cutoff}))

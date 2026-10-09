@@ -82,10 +82,8 @@ cargo run -q -p agt-cli -- init /tmp/agt-home
   im/                         # 首次使用 agt im 时自动创建
     im.db
   runtime/                    # 按首次使用相应功能创建
-    bindings.db               # 托管身份与会话响应策略
-    runs.db                   # Run 与模型/工具调用诊断
-    scheduler.db              # 讨论、任务、提醒、租约和预算
-    contexts.db               # 各身份的会话摘要（重置起点在 scheduler.db）
+    runtime.db                # 托管绑定、讨论与任务、Run 与调用诊断、会话摘要、
+                              # Harness 会话、审批和事件投影（按模块分表）
 ```
 
 资源 home 及其内部的 domain、category、resource 目录/配置文件不接受
@@ -287,7 +285,7 @@ agt run children <run-id>
 开始时加入系统提示词。`--delegate` 是本次执行的允许名单，不保证模型一定委派。
 子 Agent 不可继续委派；所有父子模型调用共享 `--max-steps`（1–100，默认 12）。
 
-每次调用生成独立 Run，状态保存在 `<home>/runtime/runs.db`。同一 `--request-key`
+每次调用生成独立 Run，状态保存在 `<home>/runtime/runtime.db`。同一 `--request-key`
 和相同输入、Agent、允许名单、步数与规范化工作目录会返回原记录，不重新调用模型；
 参数不同会冲突。省略 key 时自动生成新 key。失败和取消也是该 key 的终态，重试
 必须显式使用新 key。非 `completed` 状态会输出记录并返回非零退出码。

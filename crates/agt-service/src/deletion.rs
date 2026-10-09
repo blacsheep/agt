@@ -96,7 +96,7 @@ fn plan_delete_locked(
     for item in &selected {
         ensure_delete_allowed(home, item)?;
     }
-    if home.join("runtime/bindings.db").exists() {
+    if home.join("runtime/runtime.db").exists() {
         for status in crate::BindingStore::open(home)?.list_with_state()? {
             let binding = status.binding;
             if selected.iter().any(|item| {
