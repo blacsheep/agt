@@ -67,3 +67,6 @@ impl RunStore {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

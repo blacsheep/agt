@@ -1043,7 +1043,6 @@ fn deleted_agent_identity_keeps_history_but_cannot_join_new_conversations() {
     );
 }
 
-#[path = "memory/recall.rs"]
 mod memory_tests;
 
 #[test]

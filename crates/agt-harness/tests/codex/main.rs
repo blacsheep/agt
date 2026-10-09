@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 fn fixture() -> (tempfile::TempDir, HarnessConfig) {
     let dir = tempfile::tempdir().unwrap();
     let exe = dir.path().join("codex");
-    std::fs::write(&exe, include_str!("fixtures/codex.py")).unwrap();
+    std::fs::write(&exe, include_str!("../fixtures/codex.py")).unwrap();
     std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
     let config = HarnessConfig {
         engine: "codex".into(),
@@ -210,11 +210,8 @@ fn activity_is_structured_and_disconnect_has_no_confirmed_terminal_event() {
     }
 }
 
-#[path = "codex/cancellation.rs"]
 mod cancellation;
 
-#[path = "codex/tools.rs"]
 mod tools;
 
-#[path = "codex/approvals.rs"]
 mod approvals;

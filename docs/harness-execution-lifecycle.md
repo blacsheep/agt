@@ -57,7 +57,7 @@ SIGKILL 不运行析构函数。过期租约由 scheduler 的修复扫描、会�
 
 ## 验证
 
-`crates/agt-runtime/src/tests/harness/session_lock.rs` 集中覆盖启动失败、明确拒绝、失败后继续、
+`crates/agt-runtime/src/scheduler/tests/harness_session_lock_tests.rs` 集中覆盖启动失败、明确拒绝、失败后继续、
 取消确认、压缩取消、真实子进程强杀、租约到期、旧归属隔离和旧数据迁移。
 协议桩位于 `crates/agt-harness/tests/fixtures/codex.py`，不调用真实模型。
 

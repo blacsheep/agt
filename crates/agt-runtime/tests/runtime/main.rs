@@ -1754,13 +1754,10 @@ fn live_progress_is_bounded_retry_replaces_draft_and_completion_clears_it() {
     );
 }
 
-#[path = "context/recovery.rs"]
 mod context_recovery;
 
-#[path = "../src/tests/engine/stages.rs"]
 mod loop_stages;
 
-#[path = "permission/cases.rs"]
 mod permissions;
 
 mod tool_contract;

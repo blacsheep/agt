@@ -1018,5 +1018,5 @@ mod tests {
             thread.join().unwrap();
         }
     }
-    include!("tests/scheduling/policies.rs");
+    mod policies;
 }

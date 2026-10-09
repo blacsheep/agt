@@ -327,5 +327,4 @@ impl Drop for Scheduler {
 }
 
 #[cfg(test)]
-#[path = "scheduler_tests.rs"]
 mod tests;

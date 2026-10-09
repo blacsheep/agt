@@ -104,10 +104,10 @@ follow-up 开始新的发送去重范围；steering 保留当前范围。回复�
 
 `cargo test -p agt-runtime --offline` 使用本地模型桩及 MCP 测试进程。
 原有回归覆盖整批预验证、取消、委派、去重、挂起恢复与 checkpoint 崩溃间隙。
-`src/tests/engine/stages.rs` 补充业务错误后继续批次、致命错误/取消阻止后续副作用，
+`tests/runtime/loop_stages.rs` 补充业务错误后继续批次、致命错误/取消阻止后续副作用，
 以及成功工具回合之后恢复额度重新生效的测试。
 
-`src/tests/scheduler/run_inputs.rs` 覆盖 steering/follow-up 顺序、工具批次边界、
+`src/scheduler/tests/run_input_tests.rs` 覆盖 steering/follow-up 顺序、工具批次边界、
 参与判断、跨会话隔离、删除围栏、重试快照、压缩、额度、暂停及接管后的终态。
 
 Native 权限配置、人工队列与独立审核模型的边界见 [权限审批与交互观察](permissions.md)。

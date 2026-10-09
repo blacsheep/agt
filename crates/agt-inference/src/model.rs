@@ -448,7 +448,6 @@ mod usage_tests {
 }
 
 #[cfg(test)]
-#[path = "tests/context/provider_errors.rs"]
 mod provider_errors;
 
 #[cfg(test)]

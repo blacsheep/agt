@@ -1103,7 +1103,7 @@ fn external_fixture() -> (tempfile::TempDir, ToolService, String) {
     let exe = path.join("codex-fixture");
     std::fs::write(
         &exe,
-        include_str!("../../agt-harness/tests/fixtures/codex.py"),
+        include_str!("../../../agt-harness/tests/fixtures/codex.py"),
     )
     .unwrap();
     std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
@@ -1507,34 +1507,24 @@ fn harness_session_snapshots_models_names_and_compaction_are_isolated() {
     assert_eq!(fresh.config, changed);
 }
 
-#[path = "scheduler_work_tests.rs"]
 mod work_tests;
 
-#[path = "scheduler_queue_tests.rs"]
 mod queue_tests;
 
-#[path = "scheduler_wait_tests.rs"]
 mod wait_tests;
 
-#[path = "scheduler_action_tests.rs"]
 mod action_tests;
 
-#[path = "scheduler_triage_tests.rs"]
 mod triage_tests;
 
-#[path = "scheduler_input_tests.rs"]
 mod input_tests;
 
-#[path = "tests/harness/session_lock.rs"]
 mod harness_session_lock_tests;
 
-#[path = "tests/context/reset_history.rs"]
 mod reset_history_tests;
 
-#[path = "tests/harness/tools.rs"]
 mod harness_tool_tests;
 
-#[path = "tests/scheduler/run_inputs.rs"]
 mod run_input_tests;
 
 #[test]

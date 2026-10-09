@@ -195,7 +195,7 @@ lead 修改 reviewer 不会自动刷新 reviewer 当前正在执行的 Run，后
 - [Agent 存储](../../crates/agt-agent/src/store.rs)：`AgentStore::create_in`、引用校验与原子写入。
 - [身份绑定](../../crates/agt-service/src/bindings.rs)：`BindingStore::bind`、`set_enabled`。
 - [Harness 工具桥](../../crates/agt-runtime/src/harness/tools.rs)：`ToolBridge`。
-- [已有集成测试](../../crates/agt-runtime/tests/runtime.rs)：`resource_agent_can_create_enable_disable_and_resume_a_teammate`，覆盖创建后未启用、绑定后启用、停用与恢复；本次文档更新未重新执行该测试。
+- [已有集成测试](../../crates/agt-runtime/tests/runtime/main.rs)：`resource_agent_can_create_enable_disable_and_resume_a_teammate`，覆盖创建后未启用、绑定后启用、停用与恢复；本次文档更新未重新执行该测试。
 
 更新资源工具名称、能力范围、activation 返回值或绑定行为时，应同步更新本场景。
 返回[架构图导航](README.md)。

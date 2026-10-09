@@ -131,7 +131,3 @@ pub use harness_control::SessionControl;
 mod tool_details;
 mod tool_progress;
 pub use tool_details::{ToolDetail, ToolDetailField};
-
-#[cfg(test)]
-#[path = "tests/progress/tools.rs"]
-mod tool_progress_tests;

@@ -267,5 +267,4 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "tests/context/stream_errors.rs"]
 mod context_errors;

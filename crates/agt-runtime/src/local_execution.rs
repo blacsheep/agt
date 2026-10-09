@@ -174,5 +174,4 @@ impl agt_service::ExecutionControl for LocalExecution {
 }
 
 #[cfg(all(test, unix))]
-#[path = "tests/execution/commands.rs"]
 mod tests;

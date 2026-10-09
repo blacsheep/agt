@@ -330,6 +330,14 @@ cargo test --workspace
 cargo run -q -p agt-cli -- --help
 ```
 
+测试布局约定：
+
+- 简短单元测试写在被测文件内的 `#[cfg(test)] mod tests {}`。
+- 需要私有项的较长单元测试放在被测模块目录下：`<module>/tests.rs`，按主题再拆为
+  `<module>/tests/<topic>.rs`；一律用普通 `mod` 声明，不使用 `#[path]` 或 `include!`。
+- 只经公共 API 的集成测试放在 `crates/<crate>/tests/`：单文件为 `<suite>.rs`，多文件为
+  `<suite>/main.rs` 加同目录子模块；集成测试不引用 `src/` 下的文件。
+
 CLI 集成测试覆盖六类资源 CRUD、Provider secret 脱敏、Provider → Model →
 Agent 的递归删除，以及 IM 私聊、幂等消息和群成员生命周期。
 
