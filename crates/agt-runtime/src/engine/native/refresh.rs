@@ -83,7 +83,8 @@ impl NativeRun<'_, '_> {
             Ok((agent, tools, fingerprint)) => {
                 self.record.config_fingerprint = Some(fingerprint.clone());
                 self.runtime.store.save(self.record)?;
-                self.messages[0] = json!({"role":"system","content":agent.system_prompt});
+                self.transcript.messages[0] =
+                    json!({"role":"system","content":agent.system_prompt});
                 self.agent = agent;
                 if let Some(tools) = tools {
                     self.tools = tools; // Close the old session only after the candidate is ready.
@@ -116,7 +117,7 @@ impl NativeRun<'_, '_> {
             &format!("call:{}", audit.id),
             &[("output", &notice)],
         )?;
-        self.messages.push(
+        self.transcript.messages.push(
             json!({"role":"user","content":format!("AGT capability refresh result: {notice}")}),
         );
         Ok(())
@@ -159,7 +160,7 @@ impl NativeRun<'_, '_> {
                 .filter(|schema| {
                     schema["function"]["name"]
                         .as_str()
-                        .is_some_and(|name| self.communication_names.contains(name))
+                        .is_some_and(|name| self.is_framework(name))
                 })
                 .cloned(),
         );

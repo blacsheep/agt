@@ -23,7 +23,8 @@ impl NativeRun<'_, '_> {
             if input.task.decision_required {
                 // This private execution context stays inside this principal/conversation.
                 let decision_input =
-                    json!({"event":input.content,"execution_context":self.messages}).to_string();
+                    json!({"event":input.content,"execution_context":self.transcript.messages})
+                        .to_string();
                 let mut audit =
                     crate::CallRecord::new(self.record, None, json!({"input_task":input.task.id}));
                 audit.kind = "participation".into();
@@ -72,14 +73,14 @@ impl NativeRun<'_, '_> {
         ));
         if input.mode == InputMode::FollowUp {
             // A new task may legitimately send the same text as the previous one.
-            self.sent_messages.clear();
+            self.transcript.sent_messages.clear();
         }
         let message = json!({"role":"user","content":input.content.to_string()});
         // Pin additional requests through compaction just like the initial request.
         self.input_messages.push(message.clone());
-        self.messages.push(message);
+        self.transcript.messages.push(message);
         // A reply to an earlier input must not suppress a later input's final reply.
-        self.published = false;
+        self.transcript.published = false;
     }
 
     pub(super) fn publish_completed_turn(

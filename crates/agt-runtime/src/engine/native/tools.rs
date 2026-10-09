@@ -23,7 +23,7 @@ impl NativeRun<'_, '_> {
         }
         // Validate the entire batch before allowing any side effect.
         for call in &calls {
-            if !self.seen_calls.insert(call.id.clone()) {
+            if !self.transcript.seen_calls.insert(call.id.clone()) {
                 return Err(RuntimeError::Model("duplicate tool call ID".into()));
             }
             if call.function.name == "delegate" && !self.record.request.delegates.is_empty() {
@@ -44,7 +44,7 @@ impl NativeRun<'_, '_> {
                     ));
                 }
             } else if !self.tools.targets.contains_key(&call.function.name)
-                && !self.communication_names.contains(&call.function.name)
+                && !self.is_framework(&call.function.name)
             {
                 return Err(RuntimeError::Tool("unknown or unavailable tool".into()));
             }
@@ -67,7 +67,7 @@ impl NativeRun<'_, '_> {
             if let Err(error) = self.tools.validators[&call.function.name].validate(&arguments) {
                 // Invalid arguments are repairable tool outcomes, never approval requests.
                 let invocation = self.before_tool_call(invocation)?;
-                let error = if self.communication_names.contains(&call.function.name) {
+                let error = if self.is_framework(&call.function.name) {
                     json!(agt_service::ToolError::from_contract(error))
                 } else {
                     json!(error)
@@ -102,7 +102,7 @@ impl NativeRun<'_, '_> {
                 self.runtime.store.save(self.record)?;
             }
             if !allowed {
-                self.messages.push(json!({"role":"tool","tool_call_id":call.id,"content":"Permission denied. This tool was not executed. Do not repeat the same request without new authorization."}));
+                self.transcript.messages.push(json!({"role":"tool","tool_call_id":call.id,"content":"Permission denied. This tool was not executed. Do not repeat the same request without new authorization."}));
                 continue;
             }
             let invocation = self.before_tool_call(invocation)?;
@@ -132,8 +132,8 @@ impl NativeRun<'_, '_> {
 
     fn prepare_tool_call(&self, call: &ToolCall) -> Result<(Value, CallRecord)> {
         let arguments: Value = serde_json::from_str(&call.function.arguments)?;
-        let schema = self.communication.as_ref().and_then(|service| {
-            service.schemas().into_iter().find(|s| {
+        let schema = self.framework.as_ref().and_then(|framework| {
+            framework.service.schemas().into_iter().find(|s| {
                 agt_service::catalog::hosted_name(s["name"].as_str().expect("tool name"))
                     == call.function.name
             })
@@ -171,12 +171,12 @@ impl NativeRun<'_, '_> {
                     args,
                     &call.id,
                     self.agents,
-                    self.step_count,
+                    self.steps.count,
                     self.cancellation,
                 )?,
                 None,
             ))
-        } else if self.communication_names.contains(&call.function.name) {
+        } else if self.is_framework(&call.function.name) {
             self.execute_framework_call(call, arguments)
         } else {
             let output = self
@@ -232,7 +232,8 @@ impl NativeRun<'_, '_> {
             &output,
             (crate::context::input_budget(&self.agent) / 16).max(128),
         );
-        self.messages
+        self.transcript
+            .messages
             .push(json!({"role":"tool", "tool_call_id":call.id, "content":output}));
         Ok(
             if suspends(&call.function.name) && invocation.state == CallState::Succeeded {

@@ -59,22 +59,55 @@ pub(super) struct NativeRun<'run, 'host> {
     record: &'run mut RunRecord,
     agents: &'run BTreeMap<String, ResolvedAgent>,
     agent: ResolvedAgent,
-    step_count: &'run mut u32,
     cancellation: &'run CancellationToken,
+    steps: StepBudget<'run>,
     tools: ToolSession,
-    communication: Option<agt_service::ToolService>,
-    communication_names: BTreeSet<String>,
-    messages: Vec<Value>,
+    framework: Option<Framework>,
+    permissions: crate::permission::PermissionLoop,
+    transcript: Transcript,
+    usage: crate::context::ContextUsage,
     input_messages: Vec<Value>,
     completed_turns: usize,
     reply: Option<(agt_im::MessageId, u32)>,
-    usage: crate::context::ContextUsage,
+}
+
+/// Framework tools exposed to this Run, under their hosted names.
+struct Framework {
+    service: agt_service::ToolService,
+    names: BTreeSet<String>,
+}
+
+/// Exactly the state a native checkpoint saves and restores.
+#[derive(Default)]
+struct Transcript {
+    messages: Vec<Value>,
     seen_calls: BTreeSet<String>,
+    /// A successful send to the triggering conversation suppresses final publication.
     published: bool,
+    /// Identical successful sends within this Run reuse the first request key.
     sent_messages: BTreeMap<String, String>,
-    initial_steps: u32,
-    model_steps: Option<u32>,
-    permissions: crate::permission::PermissionLoop,
+}
+
+/// Model calls are counted on the step counter shared with delegated child Runs.
+struct StepBudget<'run> {
+    count: &'run mut u32,
+    initial: u32,
+    limit: Option<u32>,
+}
+
+impl StepBudget<'_> {
+    fn used(&self) -> u32 {
+        *self.count - self.initial
+    }
+
+    fn exhausted(&self) -> bool {
+        self.limit.is_some_and(|limit| self.used() >= limit)
+    }
+
+    fn record(&mut self) -> u32 {
+        *self.count = self.count.saturating_add(1);
+        self.used()
+    }
 }
 
 impl NativeRun<'_, '_> {
@@ -95,8 +128,9 @@ impl NativeRun<'_, '_> {
                             .as_str()
                             .expect("validated final text")
                             .to_owned();
-                        self.messages.push(message);
-                        self.usage.observe(reported_tokens, self.messages.len());
+                        self.transcript.messages.push(message);
+                        self.usage
+                            .observe(reported_tokens, self.transcript.messages.len());
                         if let Some(input) = self.next_input(InputMode::Steering)? {
                             self.accept_input(input);
                             continue;
@@ -108,8 +142,9 @@ impl NativeRun<'_, '_> {
                         calls,
                         reported_tokens,
                     } => {
-                        self.messages.push(message);
-                        self.usage.observe(reported_tokens, self.messages.len());
+                        self.transcript.messages.push(message);
+                        self.usage
+                            .observe(reported_tokens, self.transcript.messages.len());
                         if let ToolFlow::Suspend = self.execute_tool_batch(calls)? {
                             self.suspend()?;
                             return Ok(LoopOutcome::Suspended);
@@ -129,8 +164,14 @@ impl NativeRun<'_, '_> {
         }
     }
 
+    fn is_framework(&self, name: &str) -> bool {
+        self.framework
+            .as_ref()
+            .is_some_and(|framework| framework.names.contains(name))
+    }
+
     fn finish_turn(&self, output: String) -> FinalReply {
-        if self.published || output == "[[silent]]" {
+        if self.transcript.published || output == "[[silent]]" {
             FinalReply::Silent
         } else {
             FinalReply::Text(output)
@@ -145,10 +186,10 @@ impl NativeRun<'_, '_> {
         self.runtime.store.save_checkpoint(
             self.record,
             &crate::work::wait::Checkpoint::Native {
-                messages: self.messages,
-                seen_calls: self.seen_calls,
-                published: self.published,
-                sent_messages: self.sent_messages,
+                messages: self.transcript.messages,
+                seen_calls: self.transcript.seen_calls,
+                published: self.transcript.published,
+                sent_messages: self.transcript.sent_messages,
                 config_fingerprint: self.record.config_fingerprint.clone(),
             },
         )

@@ -35,7 +35,7 @@ impl NativeRun<'_, '_> {
             None
         };
         if let Some((identity, _)) = &send_identity
-            && let Some(key) = self.sent_messages.get(identity)
+            && let Some(key) = self.transcript.sent_messages.get(identity)
         {
             arguments["request_key"] = json!(key);
         }
@@ -50,9 +50,10 @@ impl NativeRun<'_, '_> {
         }
         let operation = || {
             Ok(self
-                .communication
+                .framework
                 .as_ref()
-                .expect("communication service")
+                .expect("framework service")
+                .service
                 .call(
                     call.function
                         .name
@@ -74,9 +75,9 @@ impl NativeRun<'_, '_> {
         match result {
             Ok(value) => {
                 if let Some((identity, key)) = send_identity {
-                    self.sent_messages.entry(identity).or_insert(key);
+                    self.transcript.sent_messages.entry(identity).or_insert(key);
                 }
-                self.published |= publishes_here;
+                self.transcript.published |= publishes_here;
                 Ok((serde_json::to_string(&value)?, None))
             }
             Err(error) => Ok((
