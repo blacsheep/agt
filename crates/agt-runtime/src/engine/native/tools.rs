@@ -66,6 +66,7 @@ impl NativeRun<'_, '_> {
             self.runtime.scheduled_task.as_ref(),
             "tool_running",
         )?;
+        let mut refresh = false;
         for call in calls {
             check_canceled(self.cancellation)?;
             self.runtime.check_schedule()?;
@@ -105,10 +106,21 @@ impl NativeRun<'_, '_> {
                 &format!("call:{}", invocation.id),
                 &[("arguments", &arguments)],
             )?;
-            let result = self.execute_tool_call(&call, arguments);
+            let affects_capabilities = self.affects_capabilities(&call, &arguments);
+            let mut result = self.execute_tool_call(&call, arguments);
+            if affects_capabilities && let Ok((output, None)) = &mut result {
+                refresh = true;
+                let mut value: Value = serde_json::from_str(output)?;
+                value["runtime_application"] =
+                    json!({"state":"pending","boundary":"after_tool_batch"});
+                *output = value.to_string();
+            }
             if let ToolFlow::Suspend = self.after_tool_call(&call, invocation, result)? {
                 return Ok(ToolFlow::Suspend);
             }
+        }
+        if refresh {
+            self.refresh_capabilities()?;
         }
         Ok(ToolFlow::Continue)
     }
@@ -213,7 +225,7 @@ impl NativeRun<'_, '_> {
         let (output, _) = result?;
         let output = crate::context::truncate_output(
             &output,
-            (crate::context::input_budget(self.agent) / 16).max(128),
+            (crate::context::input_budget(&self.agent) / 16).max(128),
         );
         self.messages
             .push(json!({"role":"tool", "tool_call_id":call.id, "content":output}));

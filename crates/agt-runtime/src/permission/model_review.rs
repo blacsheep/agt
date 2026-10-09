@@ -122,6 +122,8 @@ pub(super) fn load(home: &Path, config: &PermissionConfig) -> anyhow::Result<Res
         model,
         provider,
         system_prompt: RULES.into(),
+        definition: None,
+        base_prompt: RULES.into(),
         mcps: vec![],
         builtin_tools: vec![],
         fingerprint,

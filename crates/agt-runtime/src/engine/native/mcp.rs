@@ -32,8 +32,18 @@ impl ToolSession {
             let tools = session.clients[server_index]
                 .list_tools()
                 .map_err(|_| RuntimeError::Tool("MCP tools/list failed"))?;
-            for (tool_index, tool) in tools.into_iter().enumerate() {
-                let alias = format!("mcp_{server_index}_{tool_index}");
+            for tool in tools {
+                let reference = agent
+                    .definition
+                    .as_ref()
+                    .expect("MCPs require an agent definition")
+                    .mcps[server_index]
+                    .to_string();
+                let key = serde_json::to_vec(&(&reference, &tool.name))?;
+                let alias = format!("mcp_{}", &crate::fingerprint(&key)[..32]);
+                if session.targets.contains_key(&alias) {
+                    return Err(RuntimeError::Tool("duplicate MCP tool identity"));
+                }
                 session.schemas.push(json!({"type":"function","function":{
                     "name":alias,"description":format!("{} / {}: {}", document.name, tool.name, tool.description.unwrap_or_default()),
                     "parameters":tool.input_schema

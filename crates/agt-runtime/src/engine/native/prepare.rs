@@ -1,7 +1,6 @@
 //! Build a run-local environment and restore only explicitly resumable work.
 use super::*;
 use crate::engine::{bind_principal, check_canceled};
-use crate::fingerprint;
 use crate::store::database_path;
 use agt_im::ImStore;
 
@@ -35,24 +34,11 @@ impl<'run, 'host> NativeRun<'run, 'host> {
                 "model tool_call capability is disabled",
             ));
         }
-        let snapshot = if record.parent_run_id.is_none() {
-            agents
-                .iter()
-                .map(|(name, agent)| (name, &agent.fingerprint))
-                .collect::<Vec<_>>()
-        } else {
-            vec![(&agent.name, &agent.fingerprint)]
-        };
         let permission_config = agt_config::RuntimeConfig::load(&runtime.home)
             .map_err(|e| RuntimeError::Invalid(e.to_string()))?
             .permissions;
         let permissions =
             crate::permission::PermissionLoop::new(&runtime.home, permission_config.clone());
-        record.config_fingerprint = Some(fingerprint(&serde_json::to_vec(&(
-            snapshot,
-            permission_config,
-            permissions.reviewer_fingerprint(),
-        ))?));
         runtime.store.save(record)?;
         runtime.check_schedule()?;
         crate::progress::stage(
@@ -173,10 +159,13 @@ impl<'run, 'host> NativeRun<'run, 'host> {
         }
         tools.compile_schemas()?;
         // The discovered schemas are also part of the execution snapshot.
-        record.config_fingerprint = Some(fingerprint(&serde_json::to_vec(&(
-            &record.config_fingerprint,
+        record.config_fingerprint = Some(refresh::execution_fingerprint(
+            agent,
+            agents,
+            record.parent_run_id.is_none(),
+            &permissions,
             &tools.schemas,
-        ))?));
+        )?);
         runtime.store.save(record)?;
         let mut messages = vec![
             json!({"role":"system", "content":agent.system_prompt}),
@@ -240,7 +229,7 @@ impl<'run, 'host> NativeRun<'run, 'host> {
             runtime,
             record,
             agents,
-            agent,
+            agent: agent.clone(),
             step_count,
             cancellation,
             tools,

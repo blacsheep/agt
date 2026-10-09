@@ -29,7 +29,7 @@ impl NativeRun<'_, '_> {
                 audit.kind = "participation".into();
                 let mut audit = self.runtime.store.start_call(audit)?;
                 let result =
-                    crate::participation::decide(self.runtime.model, self.agent, &decision_input);
+                    crate::participation::decide(self.runtime.model, &self.agent, &decision_input);
                 audit.finish(
                     match &result {
                         Ok(_) => crate::CallState::Succeeded,

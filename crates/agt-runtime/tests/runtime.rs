@@ -602,7 +602,11 @@ fn mcp_tool_loop_preserves_call_id_and_excludes_client_only_metadata() {
     let mut model = Script::new(vec![
         (
             "default/a",
-            calls(vec![call("lookup-1", "mcp_0_0", json!({"query":"test"}))]),
+            calls(vec![call(
+                "lookup-1",
+                &mcp_alias("default/helper", "读取/a__b"),
+                json!({"query":"test"}),
+            )]),
         ),
         ("default/a", text("done")),
     ]);
@@ -619,7 +623,10 @@ fn mcp_tool_loop_preserves_call_id_and_excludes_client_only_metadata() {
         .unwrap()
         .calls(&record.id, 0, 50)
         .unwrap();
-    assert_eq!(calls[1].tool_name.as_deref(), Some("mcp_0_0"));
+    assert_eq!(
+        calls[1].tool_name.as_deref(),
+        Some(mcp_alias("default/helper", "读取/a__b").as_str())
+    );
     assert_eq!(calls[1].state, agt_runtime::CallState::Succeeded);
     assert_eq!(calls[1].argument_summary["unknown_field_count"], 1);
     let serialized = serde_json::to_string(&calls).unwrap();
@@ -653,7 +660,11 @@ fn mcp_business_and_transport_failures_are_audited_without_raw_results() {
         AgentStore::new(home.path()).add_mcp("a", "helper").unwrap();
         let mut answers = vec![(
             "default/a",
-            calls(vec![call("lookup", "mcp_0_0", json!({"query":"test"}))]),
+            calls(vec![call(
+                "lookup",
+                &mcp_alias("default/helper", "读取/a__b"),
+                json!({"query":"test"}),
+            )]),
         )];
         if mode == "tool_error" {
             answers.push(("default/a", text("[[silent]]")));
@@ -1767,3 +1778,12 @@ mod loop_stages;
 mod permissions;
 
 mod tool_contract;
+
+fn mcp_alias(reference: &str, tool: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let hash = format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(&(reference, tool)).unwrap())
+    );
+    format!("mcp_{}", &hash[..32])
+}

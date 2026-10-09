@@ -778,3 +778,117 @@ fn codex_wait_handoffs_only_completed_turn_and_resumes_same_thread() {
         );
     }
 }
+
+#[test]
+fn refreshed_skills_survive_checkpoint_resume_without_replaying_configuration_write() {
+    let (home, mut scheduler, chat, parent) = setup();
+    agt_service::Resources::new(home.path())
+        .write(
+            "skill",
+            "live-skill",
+            true,
+            json!({"description":"checkpoint skill marker"}),
+        )
+        .unwrap();
+    AgentStore::new(home.path())
+        .update_in(&agt_core::CategoryName::default(), "a", |config| {
+            config
+                .builtin_tools
+                .push(agt_agent::BuiltinTool::ResourceManagement);
+            Ok(())
+        })
+        .unwrap();
+    struct MountThenSuspend {
+        mounted: bool,
+        inner: Suspend,
+    }
+    impl ModelClient for MountThenSuspend {
+        fn complete(
+            &mut self,
+            agent: &ResolvedAgent,
+            messages: &[Value],
+            schemas: &[Value],
+        ) -> crate::Result<Value> {
+            if !self.mounted {
+                self.mounted = true;
+                return Ok(tool(
+                    "resource_write",
+                    json!({"kind":"agent","reference":"a","create":false,
+                    "data":{},"add":{"skills":["live-skill"]}}),
+                ));
+            }
+            assert!(
+                messages[0]["content"]
+                    .as_str()
+                    .unwrap()
+                    .contains("checkpoint skill marker")
+            );
+            self.inner.complete(agent, messages, schemas)
+        }
+    }
+    let mut model = MountThenSuspend {
+        mounted: false,
+        inner: Suspend {
+            step: 0,
+            chat,
+            child: None,
+        },
+    };
+    let task = claim_work(&mut scheduler, &parent);
+    execute(home.path(), task, &mut model, &CancellationToken::new()).unwrap();
+    let child = model.inner.child.unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    scheduler.scan().unwrap();
+    let task = claim_work(&mut scheduler, &child);
+    execute(
+        home.path(),
+        task,
+        &mut Answer(json!({"role":"assistant","content":"child done"})),
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    scheduler.scan().unwrap();
+    struct ResumeSkill {
+        called: bool,
+    }
+    impl ModelClient for ResumeSkill {
+        fn complete(
+            &mut self,
+            _: &ResolvedAgent,
+            messages: &[Value],
+            _: &[Value],
+        ) -> crate::Result<Value> {
+            assert!(!self.called);
+            self.called = true;
+            assert!(
+                messages[0]["content"]
+                    .as_str()
+                    .unwrap()
+                    .contains("checkpoint skill marker")
+            );
+            assert_eq!(
+                messages
+                    .iter()
+                    .filter(|m| m["role"] == "tool" && m["tool_call_id"] == "resource_write")
+                    .count(),
+                1
+            );
+            Ok(json!({"role":"assistant","content":"resumed with loaded skill"}))
+        }
+    }
+    let mut model = ResumeSkill { called: false };
+    let task = claim_work(&mut scheduler, &parent);
+    execute(home.path(), task, &mut model, &CancellationToken::new()).unwrap();
+    assert!(model.called);
+    crate::work::reconcile(home.path()).unwrap();
+    assert!(matches!(
+        WorkLedger::open(home.path())
+            .unwrap()
+            .get(&parent)
+            .unwrap()
+            .state,
+        WorkState::Succeeded { .. }
+    ));
+}

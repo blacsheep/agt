@@ -54,11 +54,11 @@ impl NativeRun<'_, '_> {
     }
 
     fn prepare_request(&mut self, context_recovery: bool) -> Result<()> {
-        let budget = crate::context::input_budget(self.agent);
+        let budget = crate::context::input_budget(&self.agent);
         if self.messages.len() > 2
             && (context_recovery
                 || self.usage.tokens(&self.messages, &self.tools.schemas)
-                    >= crate::context::auto_compact_limit(self.agent))
+                    >= crate::context::auto_compact_limit(&self.agent))
         {
             // Keep the configured instructions and current user request verbatim.
             if crate::context::size(&self.messages[..2], &self.tools.schemas)
@@ -83,7 +83,7 @@ impl NativeRun<'_, '_> {
             let tokens_before = self.usage.tokens(&self.messages, &self.tools.schemas);
             let mut result = crate::context::summarize(
                 self.runtime.model,
-                self.agent,
+                &self.agent,
                 "",
                 &crate::context::transcript_data(
                     &self.messages[2..]
@@ -110,7 +110,7 @@ impl NativeRun<'_, '_> {
             {
                 result = Err(error);
             }
-            call.argument_summary = json!({"trigger":if context_recovery {"provider_context_rejected"} else {"token_budget"},"request_attempts":attempts,"tokens_before":tokens_before,"tokens_after_estimate":tokens_after,"available_tokens":budget,"auto_compact_tokens":crate::context::auto_compact_limit(self.agent),"count_source":self.usage.source()});
+            call.argument_summary = json!({"trigger":if context_recovery {"provider_context_rejected"} else {"token_budget"},"request_attempts":attempts,"tokens_before":tokens_before,"tokens_after_estimate":tokens_after,"available_tokens":budget,"auto_compact_tokens":crate::context::auto_compact_limit(&self.agent),"count_source":self.usage.source()});
             match &result {
                 Ok(_) => call.finish(CallState::Succeeded, None),
                 Err(error) => call.finish(
@@ -158,7 +158,7 @@ impl NativeRun<'_, '_> {
         let response = (|| {
             let message = crate::model::complete_with_progress(
                 self.runtime.model,
-                self.agent,
+                &self.agent,
                 &self.messages,
                 &self.tools.schemas,
                 self.cancellation,

@@ -12,6 +12,7 @@ mod framework;
 mod inputs;
 mod mcp;
 mod prepare;
+mod refresh;
 mod request;
 mod tools;
 use mcp::ToolSession;
@@ -57,7 +58,7 @@ pub(super) struct NativeRun<'run, 'host> {
     runtime: &'run mut Runtime<'host>,
     record: &'run mut RunRecord,
     agents: &'run BTreeMap<String, ResolvedAgent>,
-    agent: &'run ResolvedAgent,
+    agent: ResolvedAgent,
     step_count: &'run mut u32,
     cancellation: &'run CancellationToken,
     tools: ToolSession,

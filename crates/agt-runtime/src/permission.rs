@@ -21,6 +21,9 @@ impl PermissionLoop {
             config,
         }
     }
+    pub(crate) fn config(&self) -> &PermissionConfig {
+        &self.config
+    }
     pub(crate) fn reviewer_fingerprint(&self) -> Option<&str> {
         self.reviewer.as_ref().map(|r| r.fingerprint.as_str())
     }
