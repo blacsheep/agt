@@ -222,15 +222,6 @@ impl ToolService {
                 let d: AgentMountList = serde_json::from_value(args)?;
                 resources.agent_mcps(&d.agent)?
             }
-            "agent_mcp_attach" | "agent_mcp_detach" => {
-                self.require_resource_management()?;
-                let d: AgentMount = serde_json::from_value(args)?;
-                if name == "agent_mcp_attach" {
-                    resources.agent_mcp_attach(&d.agent, &d.mcp)?
-                } else {
-                    resources.agent_mcp_detach(&d.agent, &d.mcp)?
-                }
-            }
             "resource_category_list" => {
                 let d: Kind = serde_json::from_value(args)?;
                 serde_json::to_value(resources.categories(&d.kind)?.list()?)?
@@ -546,8 +537,6 @@ fn schemas(role: Role, resource_management: bool) -> Vec<Value> {
             schema("resource_test", "Validate Provider or MCP configuration only. Does not contact servers or execute MCP commands.", json!({"kind":{"enum":["provider","mcp"]},"reference":string}), &["kind","reference"]),
             schema("mcp_probe", "Explicitly start/connect a registered MCP in working_directory, initialize, list tools and validate their input schemas. Closes the connection; does not call tools. Unlike resource_test this executes configured server commands or contacts its URL. Does not prove business behavior; run contract tests separately.", json!({"reference":string,"working_directory":string}), &["reference","working_directory"]),
             schema("agent_mcp_list", "List configured MCP mounts on an Agent. Mounts affect new Runs only; binding and discussion authorization are separate.", json!({"agent":string}), &["agent"]),
-            schema("agent_mcp_attach", "Attach an existing MCP resource to a Native Agent (category/name references). Idempotent; preserves other mounts. Effective on new Runs only. Does not connect, enable the Agent, or grant MCP authorization. Harness Agents do not support AGT MCP mounts.", json!({"agent":string,"mcp":string}), &["agent","mcp"]),
-            schema("agent_mcp_detach", "Remove one MCP mount from an Agent, preserving others. Idempotent when already absent. Effective on new Runs only; running tool snapshots remain unchanged.", json!({"agent":string,"mcp":string}), &["agent","mcp"]),
             schema("resource_category_list", "List categories in a resource domain.", json!({"kind":kind}), &["kind"]),
             schema("resource_category_create", "Create a category in a resource domain.", json!({"kind":kind,"category":string}), &["kind","category"]),
             schema("resource_category_delete", "Delete an empty non-default category. Nonempty and default categories are protected.", json!({"kind":kind,"category":string}), &["kind","category"]),
@@ -708,10 +697,4 @@ struct McpProbe {
 #[serde(deny_unknown_fields)]
 struct AgentMountList {
     agent: String,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AgentMount {
-    agent: String,
-    mcp: String,
 }

@@ -13,7 +13,7 @@ fn configured(home: &std::path::Path) -> ToolService {
 }
 
 #[test]
-fn mounts_are_incremental_idempotent_and_require_capability() {
+fn resource_updates_replace_mounts_and_removed_tools_are_unavailable() {
     let home = home();
     let s = configured(home.path());
     for name in ["one", "two"] {
@@ -23,41 +23,51 @@ fn mounts_are_incremental_idempotent_and_require_capability() {
             "data":{"mcpServers":{name:{"command":"must-not-run"}}}}),
         )
         .unwrap();
-        s.call("agent_mcp_attach", json!({"agent":"worker","mcp":name}))
-            .unwrap();
     }
-    s.call("agent_mcp_attach", json!({"agent":"worker","mcp":"one"}))
+    let update = |data| json!({"kind":"agent","reference":"worker","create":false,"data":data});
+    s.call("resource_write", update(json!({"mcps":["one","two"]})))
         .unwrap();
     let before = s.call("agent_mcp_list", json!({"agent":"worker"})).unwrap();
     assert_eq!(before["mcps"].as_array().unwrap().len(), 2);
     assert_eq!(before["effective"], "next_run");
+    s.call("resource_write", update(json!({"description":"updated"})))
+        .unwrap();
+    assert_eq!(
+        s.call("agent_mcp_list", json!({"agent":"worker"})).unwrap(),
+        before
+    );
     assert!(
-        s.call(
-            "agent_mcp_attach",
-            json!({"agent":"worker","mcp":"missing"})
-        )
-        .is_err()
+        s.call("resource_write", update(json!({"mcps":["missing"]})))
+            .is_err()
     );
     assert_eq!(
         s.call("agent_mcp_list", json!({"agent":"worker"})).unwrap(),
         before
     );
-    for _ in 0..2 {
-        s.call("agent_mcp_detach", json!({"agent":"worker","mcp":"one"}))
+    for mcps in [json!(["two"]), json!([])] {
+        s.call("resource_write", update(json!({"mcps":mcps})))
             .unwrap();
+        assert_eq!(
+            s.call("agent_mcp_list", json!({"agent":"worker"})).unwrap()["mcps"]
+                .as_array()
+                .unwrap()
+                .len(),
+            mcps.as_array().unwrap().len()
+        );
     }
-    assert_eq!(
-        s.call("agent_mcp_list", json!({"agent":"worker"})).unwrap()["mcps"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
-    );
+    for name in ["agent_mcp_attach", "agent_mcp_detach"] {
+        assert!(s.schemas().iter().all(|schema| schema["name"] != name));
+        assert_eq!(
+            s.call(name, json!({"agent":"worker","mcp":"one"}))
+                .unwrap_err()
+                .code,
+            "tool_unavailable"
+        );
+    }
     let plain = service(home.path(), "b", false);
     for (name, args) in [
+        ("resource_write", update(json!({"mcps":["one"]}))),
         ("agent_mcp_list", json!({"agent":"worker"})),
-        ("agent_mcp_attach", json!({"agent":"worker","mcp":"one"})),
-        ("agent_mcp_detach", json!({"agent":"worker","mcp":"two"})),
         (
             "mcp_probe",
             json!({"reference":"two","working_directory":home.path()}),
@@ -138,8 +148,11 @@ fn probe_requires_host_authorization_and_harness_mounts_stay_rejected() {
     )
     .unwrap();
     assert!(
-        s.call("agent_mcp_attach", json!({"agent":"external","mcp":"one"}))
-            .is_err()
+        s.call(
+            "resource_write",
+            json!({"kind":"agent","reference":"external","create":false,"data":{"mcps":["one"]}})
+        )
+        .is_err()
     );
     assert_eq!(
         s.call("agent_mcp_list", json!({"agent":"external"}))

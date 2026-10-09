@@ -246,32 +246,6 @@ impl Resources {
         )
     }
 
-    pub fn agent_mcp_attach(&self, agent: &str, mcp: &str) -> Result<Value> {
-        let (category, name) = resource_ref("agent", agent)?;
-        let (mcp_category, mcp_name) = resource_ref("mcp", mcp)?;
-        AgentStore::new(&self.home).add_mcp_in(
-            &category,
-            &name,
-            QualifiedRef::new(mcp_category, McpId::new(mcp_name)),
-        )?;
-        self.agent_mcps(agent)
-    }
-
-    pub fn agent_mcp_detach(&self, agent: &str, mcp: &str) -> Result<Value> {
-        let (category, name) = resource_ref("agent", agent)?;
-        let (mcp_category, mcp_name) = resource_ref("mcp", mcp)?;
-        let result = AgentStore::new(&self.home).remove_mcp_in(
-            &category,
-            &name,
-            &QualifiedRef::new(mcp_category, McpId::new(mcp_name)),
-        );
-        match result {
-            Ok(_) | Err(agt_agent::AgentError::AttachmentNotFound { .. }) => (),
-            Err(error) => return Err(error.into()),
-        }
-        self.agent_mcps(agent)
-    }
-
     pub fn categories(&self, kind: &str) -> Result<agt_config::DefinitionCategories> {
         let h = &self.home;
         Ok(match kind {

@@ -19,10 +19,11 @@
 3. `mcp_probe(reference=..., working_directory=...)` 显式启动/连接服务，执行
    initialize、tools/list 并编译每个 inputSchema，随后关闭连接；不调用任何业务工具。
    CLI 对应 `agt mcp probe <reference> --working-directory <directory>`。
-4. `agent_mcp_attach(agent=..., mcp=...)` 追加既有 MCP 引用，重复调用不会重复挂载。
-   `agent_mcp_detach` 移除一项，已经不存在时成功；`agent_mcp_list` 查看配置。
-   三者支持 category/name，不新增挂载表。现有 `agt agent update --add-mcp/--remove-mcp`
-   与配置更新共用 Store 的文件锁；更新保持其他挂载，写入前验证资源引用。
+4. 使用既有 `resource_write(kind="agent", reference=..., create=false, data={mcps:[...]})`
+   设置 MCP 引用列表；提供 `mcps` 时替换整个列表，省略时保持原值，空列表清空挂载。
+   `agent_mcp_list` 查看配置。引用支持 category/name，不新增挂载表。
+   CLI 的 `agt agent update <agent> --add-mcp/--remove-mcp <mcp>` 则增删单项。
+   两条路径共用 Store 的文件锁与引用校验，但全量列表替换不能避免旧快照覆盖新配置。
 5. 检查 Agent 的身份、绑定启用状态与 binding/discussion 的 MCP 授权，然后派发新任务。
 
 这些 Framework 工具只向 manager 或安装 `resource_management` 的 Agent 暴露，
@@ -62,6 +63,6 @@ typed/domain 校验。Harness 的 AGT 动态工具在提交回合前编译定义
 ## 本地验证
 
 `cargo test -p agt-core tool_schema` 检查标准约束与离线引用；
-`cargo test -p agt-service --test service assembly` 检查装配权限、幂等及并发更新；
+`cargo test -p agt-service --test service assembly` 检查配置替换、入口权限、已删除工具不可用及并发更新；
 `cargo test -p agt-runtime --test runtime tool_contract` 使用本地 Python MCP 服务验证
 注册→探测→挂载→错误调用→修正→卸载及新 Run 生效。测试不调用真实模型。

@@ -20,10 +20,16 @@ fn registration_probe_assembly_validation_repair_and_next_run_unmount() {
         .unwrap();
     assert_eq!(check["connected"], false);
     manager
-        .call("agent_mcp_attach", json!({"agent":"a","mcp":"counter"}))
+        .call(
+            "resource_write",
+            json!({"kind":"agent","reference":"a","create":false,"data":{"mcps":["counter"]}}),
+        )
         .unwrap();
     manager
-        .call("agent_mcp_attach", json!({"agent":"a","mcp":"counter"}))
+        .call(
+            "resource_write",
+            json!({"kind":"agent","reference":"a","create":false,"data":{"mcps":["counter"]}}),
+        )
         .unwrap();
     assert!(!home.path().join("calls.starts").exists());
     let probe = manager
@@ -43,9 +49,9 @@ fn registration_probe_assembly_validation_repair_and_next_run_unmount() {
         (
             "default/a",
             calls(vec![call(
-                "detach",
-                "framework_agent_mcp_detach",
-                json!({"agent":"a","mcp":"counter"}),
+                "unmount",
+                "framework_resource_write",
+                json!({"kind":"agent","reference":"a","create":false,"data":{"mcps":[]}}),
             )]),
         ),
         (
@@ -78,13 +84,19 @@ fn registration_probe_assembly_validation_repair_and_next_run_unmount() {
     assert_eq!(
         approvals.len(),
         2,
-        "only detach and the corrected call request approval"
+        "only the config update and the corrected call request approval"
     );
     manager
-        .call("agent_mcp_detach", json!({"agent":"a","mcp":"counter"}))
+        .call(
+            "resource_write",
+            json!({"kind":"agent","reference":"a","create":false,"data":{"mcps":[]}}),
+        )
         .unwrap();
     manager
-        .call("agent_mcp_detach", json!({"agent":"a","mcp":"counter"}))
+        .call(
+            "resource_write",
+            json!({"kind":"agent","reference":"a","create":false,"data":{"mcps":[]}}),
+        )
         .unwrap();
     let mut script = Script::new(vec![("default/a", text("next"))]);
     let mut req = request();
@@ -120,7 +132,10 @@ fn invalid_schema_fails_probe_and_run_before_model_request() {
             .is_some_and(|p| p.contains("count"))
     );
     manager
-        .call("agent_mcp_attach", json!({"agent":"a","mcp":"counter"}))
+        .call(
+            "resource_write",
+            json!({"kind":"agent","reference":"a","create":false,"data":{"mcps":["counter"]}}),
+        )
         .unwrap();
     let mut script = Script::default();
     let run = Runtime::open(home.path(), &mut script, &DefaultMcpClientFactory)
