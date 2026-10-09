@@ -494,6 +494,35 @@ impl SkillStore {
         SkillDocument::parse_metadata(file, &text)
     }
 
+    /// Replace the document while retaining the package's ancillary files and identity.
+    pub fn update_in(
+        &self,
+        category: &CategoryName,
+        package: &PackageRef,
+        text: &str,
+    ) -> Result<StoredSkill> {
+        let stored = self.read_in(category, package)?;
+        let document = SkillDocument::parse(&stored.path, text)?;
+        if document.metadata.package_ref()? != *package {
+            return Err(SkillError::InvalidConfig {
+                message: "skill package identity mismatch".into(),
+            });
+        }
+        let rendered = document.render()?;
+        if rendered.len() as u64 > crate::SKILL_DOCUMENT_MAX_BYTES {
+            return Err(SkillError::LimitExceeded {
+                path: stored.path.clone(),
+                message: format!(
+                    "Skill document exceeds {} bytes",
+                    crate::SKILL_DOCUMENT_MAX_BYTES
+                ),
+            });
+        }
+        agt_storage::write_atomic_under(self.paths.home(), &stored.path, rendered.as_bytes())
+            .map_err(|source| SkillError::io(&stored.path, source))?;
+        self.read_in(category, package)
+    }
+
     fn write_document(&self, file: &Path, document: &SkillDocument) -> Result<()> {
         let text = document.render()?;
         write_atomic(file, text.as_bytes()).map_err(|source| SkillError::io(file, source))

@@ -81,7 +81,7 @@ pub struct ProviderModelsResult {
 }
 
 impl ProviderModelsResult {
-    fn new(category: &CategoryName, provider: &str, models: Vec<ProviderModel>) -> Self {
+    pub fn new(category: &CategoryName, provider: &str, models: Vec<ProviderModel>) -> Self {
         Self {
             category: category.to_string(),
             provider: provider.to_string(),

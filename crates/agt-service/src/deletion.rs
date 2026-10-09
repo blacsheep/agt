@@ -49,6 +49,14 @@ impl ResourceKey {
 }
 
 pub fn plan_delete(home: &Path, target: &ResourceKey, recursive: bool) -> Result<Vec<ResourceKey>> {
+    let _guard = crate::resources::lock(home)?;
+    plan_delete_locked(home, target, recursive)
+}
+fn plan_delete_locked(
+    home: &Path,
+    target: &ResourceKey,
+    recursive: bool,
+) -> Result<Vec<ResourceKey>> {
     let graph = load_graph(home)?;
     if !graph.nodes.contains(target) {
         bail!("{} 不存在", target.display());
@@ -112,7 +120,8 @@ pub fn execute_delete(
     recursive: bool,
     expected: &[ResourceKey],
 ) -> Result<Vec<ResourceKey>> {
-    let selected = plan_delete(home, target, recursive)?;
+    let _guard = crate::resources::lock(home)?;
+    let selected = plan_delete_locked(home, target, recursive)?;
     if selected != expected {
         bail!("delete plan changed; inspect it again");
     }
@@ -442,7 +451,7 @@ fn rollback_moves(moved: &[(PathBuf, PathBuf)]) -> Result<()> {
     Ok(())
 }
 
-fn resource_dir(home: &Path, key: &ResourceKey) -> Result<PathBuf> {
+pub(crate) fn resource_dir(home: &Path, key: &ResourceKey) -> Result<PathBuf> {
     let category = CategoryName::new(&key.category)?;
     match key.kind {
         ResourceKind::Harness => Ok(agt_harness::HarnessStore::new(home)

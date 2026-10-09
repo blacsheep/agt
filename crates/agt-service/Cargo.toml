@@ -20,6 +20,7 @@ agt-storage.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 rusqlite.workspace = true
 uuid.workspace = true
 

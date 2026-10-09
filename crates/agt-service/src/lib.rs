@@ -11,7 +11,7 @@ mod tools;
 pub use bindings::{Binding, BindingStore, ResponsePolicy};
 pub use error::ToolError;
 pub use messaging::{Actor, InputMode, MessageInput, Messaging, Role};
-pub use resources::Resources;
+pub use resources::{Resources, WriteOptions, resource_ref};
 pub use tools::ToolService;
 
 use agt_core::CategoryName;

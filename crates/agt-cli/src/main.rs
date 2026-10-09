@@ -5,23 +5,16 @@ use std::io::{self, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use agt_agent::{AgentConfig, AgentError, AgentStore, AgentSummary, BuiltinTool};
+use agt_agent::BuiltinTool;
 use agt_config::{initialize_default_home, initialize_home};
 use agt_core::CategoryName;
-use agt_core::{McpId, ModelId, PackageRef, PromptId, QualifiedRef, ResourceRef};
+use agt_core::PackageRef;
 use agt_im::{
     ConversationId, ImStore, MessageId, MessageListOptions, PrincipalId, PrincipalInput,
     PrincipalKind, SendMessageRequest,
 };
-use agt_mcp::{McpDocument, McpInfoResult, McpStore, McpSummary, McpWritePlan};
-use agt_model::{
-    ModelApiFormat, ModelConfig, ModelConfigUpdate, ModelReference, ModelStore, ModelSummary,
-    ReasoningEffort,
-};
-use agt_prompt::{PromptContentResult, PromptStore, PromptSummary};
-use agt_provider::{ProviderConfig, ProviderConfigUpdate, ProviderStore, ProviderSummary};
-use agt_skill::{SkillCreateOptions, SkillDocument, SkillStore, SkillSummary};
-use agt_storage::write_atomic;
+use agt_model::{ModelApiFormat, ModelConfigUpdate, ReasoningEffort};
+use agt_prompt::PromptStore;
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
@@ -1003,7 +996,6 @@ fn dispatch_provider(
     output: OutputMode,
     yes: bool,
 ) -> Result<()> {
-    let store = ProviderStore::new(home);
     match command {
         ProviderCommand::Create(args) => {
             let category = parse_category(args.category.as_deref())?;
@@ -1011,21 +1003,31 @@ fn dispatch_provider(
             if args.r#type != "openai-compatible" {
                 bail!("当前只支持 provider type=openai-compatible");
             }
-            let config = ProviderConfig::openai_compatible(args.name, args.base_url, api_key)?;
-            let stored = store.create_in(&category, &config)?;
-            emit(&ProviderSummary::from(&stored), output)
+            write_resource(
+                home,
+                "provider",
+                &format!("{category}/{}", args.name),
+                true,
+                serde_json::json!({"base_url":args.base_url,"api_key":api_key}),
+                output,
+            )
         }
         ProviderCommand::List(args) => {
-            let result = match args.category.as_deref() {
-                Some(category) => store.scan_summary_in(&parse_category(Some(category))?)?,
-                None => store.scan_summary()?,
-            };
-            emit(&result, output)
+            let category = args
+                .category
+                .as_deref()
+                .map(CategoryName::new)
+                .transpose()?;
+            emit_value(
+                agt_service::Resources::new(home).list_in("provider", category.as_ref())?,
+                output,
+            )
         }
         ProviderCommand::Info(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let stored = store.read_in(&category, &name)?;
-            emit(&ProviderSummary::from(&stored), output)
+            let value = agt_service::Resources::new(home)
+                .read("provider", &format!("{category}/{name}"))?;
+            emit_value(resource_output("provider", value, false), output)
         }
         ProviderCommand::Update(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
@@ -1035,26 +1037,28 @@ fn dispatch_provider(
                 } else {
                     String::new()
                 };
-            let update = ProviderConfigUpdate {
-                base_url: args.base_url,
-                api_key: if api_key.is_empty() {
-                    None
-                } else {
-                    Some(api_key)
-                },
-            };
-            let stored = store.update_in(&category, &name, update)?;
-            emit(&ProviderSummary::from(&stored), output)
+            write_resource(
+                home,
+                "provider",
+                &format!("{category}/{name}"),
+                false,
+                serde_json::json!({"base_url":args.base_url,"api_key":if api_key.is_empty() {None} else {Some(api_key)}}),
+                output,
+            )
         }
         ProviderCommand::Test(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let provider = store.read_in(&category, &name)?;
-            provider.config.validate()?;
-            emit(&ProviderSummary::from(&provider), output)
+            emit_value(
+                agt_service::Resources::new(home)
+                    .test("provider", &format!("{category}/{name}"))?["provider"]
+                    .take(),
+                output,
+            )
         }
         ProviderCommand::ListModels(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let result = store.list_models_summary_in(&category, &name)?;
+            let result =
+                agt_service::Resources::new(home).provider_models(&format!("{category}/{name}"))?;
             emit(&result, output)
         }
         ProviderCommand::Delete(args) => delete_resource(
@@ -1074,13 +1078,9 @@ fn dispatch_provider(
 }
 
 fn dispatch_model(command: ModelCommand, home: &Path, output: OutputMode, yes: bool) -> Result<()> {
-    let store = ModelStore::new(home);
     match command {
         ModelCommand::Create(args) => {
             let category = parse_category(args.category.as_deref())?;
-            let (provider_category, provider_name) = parse_named_ref(&args.provider, None)?;
-            let reference = ModelReference::new_in(provider_category, provider_name, args.model)?;
-            let mut config = ModelConfig::new(args.name, reference)?;
             let update = model_update_from(
                 args.api_format,
                 args.temperature,
@@ -1092,23 +1092,31 @@ fn dispatch_model(command: ModelCommand, home: &Path, output: OutputMode, yes: b
                 args.tool_call,
                 args.context_window,
             )?;
-            if !update.is_empty() {
-                config.apply_update(update)?;
-            }
-            let stored = store.create_in(&category, &config)?;
-            emit(&ModelSummary::from(&stored), output)
+            write_resource(
+                home,
+                "model",
+                &format!("{category}/{}", args.name),
+                true,
+                serde_json::json!({"provider":args.provider,"model":args.model,"params":update}),
+                output,
+            )
         }
         ModelCommand::List(args) => {
-            let result = match args.category.as_deref() {
-                Some(category) => store.scan_summary_in(&parse_category(Some(category))?)?,
-                None => store.scan_summary()?,
-            };
-            emit(&result, output)
+            let category = args
+                .category
+                .as_deref()
+                .map(CategoryName::new)
+                .transpose()?;
+            emit_value(
+                agt_service::Resources::new(home).list_in("model", category.as_ref())?,
+                output,
+            )
         }
         ModelCommand::Info(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let stored = store.read_in(&category, &name)?;
-            emit(&ModelSummary::from(&stored), output)
+            let value =
+                agt_service::Resources::new(home).read("model", &format!("{category}/{name}"))?;
+            emit_value(resource_output("model", value, false), output)
         }
         ModelCommand::Update(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
@@ -1123,8 +1131,14 @@ fn dispatch_model(command: ModelCommand, home: &Path, output: OutputMode, yes: b
                 args.tool_call,
                 args.context_window,
             )?;
-            let stored = store.update_in(&category, &name, update)?;
-            emit(&ModelSummary::from(&stored), output)
+            write_resource(
+                home,
+                "model",
+                &format!("{category}/{name}"),
+                false,
+                serde_json::to_value(update)?,
+                output,
+            )
         }
         ModelCommand::Delete(args) => delete_resource(
             ResourceKind::Model,
@@ -1148,36 +1162,54 @@ fn dispatch_prompt(
     output: OutputMode,
     yes: bool,
 ) -> Result<()> {
-    let store = PromptStore::new(home);
     match command {
         PromptCommand::Create(args) => {
             let category = parse_category(args.category.as_deref())?;
             let content = read_content(args.text, args.file, args.stdin)?;
-            let stored = store.create_in(&category, &args.name, &content)?;
-            emit(&PromptSummary::try_from(&stored)?, output)
+            write_resource(
+                home,
+                "prompt",
+                &format!("{category}/{}", args.name),
+                true,
+                serde_json::json!({"text":content}),
+                output,
+            )
         }
         PromptCommand::List(args) => {
-            let result = match args.category.as_deref() {
-                Some(category) => store.scan_summary_in(&parse_category(Some(category))?)?,
-                None => store.scan_summary()?,
-            };
-            emit(&result, output)
+            let category = args
+                .category
+                .as_deref()
+                .map(CategoryName::new)
+                .transpose()?;
+            emit_value(
+                agt_service::Resources::new(home).list_in("prompt", category.as_ref())?,
+                output,
+            )
         }
         PromptCommand::Info(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let stored = store.read_in(&category, &name)?;
-            emit(&PromptSummary::try_from(&stored)?, output)
+            let value =
+                agt_service::Resources::new(home).read("prompt", &format!("{category}/{name}"))?;
+            emit_value(resource_output("prompt", value, false), output)
         }
         PromptCommand::Read(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let stored = store.read_in(&category, &name)?;
-            emit(&PromptContentResult::try_from(&stored)?, output)
+            emit_value(
+                agt_service::Resources::new(home).read("prompt", &format!("{category}/{name}"))?,
+                output,
+            )
         }
         PromptCommand::Update(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
             let content = read_content(args.text, args.file, args.stdin)?;
-            let stored = store.update_in(&category, &name, &content)?;
-            emit(&PromptSummary::try_from(&stored)?, output)
+            write_resource(
+                home,
+                "prompt",
+                &format!("{category}/{name}"),
+                false,
+                serde_json::json!({"text":content}),
+                output,
+            )
         }
         PromptCommand::Delete(args) => delete_resource(
             ResourceKind::Prompt,
@@ -1196,34 +1228,45 @@ fn dispatch_prompt(
 }
 
 fn dispatch_skill(command: SkillCommand, home: &Path, output: OutputMode, yes: bool) -> Result<()> {
-    let store = SkillStore::new(home);
     match command {
         SkillCommand::Create(args) => {
             let category = parse_category(args.category.as_deref())?;
-            let options = SkillCreateOptions::new(&args.package, args.description)?;
-            let stored = store.create_in(&category, options)?;
-            emit(&SkillSummary::from(&stored), output)
+            write_resource(
+                home,
+                "skill",
+                &format!("{category}/{}", args.package),
+                true,
+                serde_json::json!({"description":args.description}),
+                output,
+            )
         }
         SkillCommand::List(args) => {
-            let result = match args.category.as_deref() {
-                Some(category) => store.scan_summary_in(&parse_category(Some(category))?)?,
-                None => store.scan_summary()?,
-            };
-            emit(&result, output)
+            let category = args
+                .category
+                .as_deref()
+                .map(CategoryName::new)
+                .transpose()?;
+            emit_value(
+                agt_service::Resources::new(home).list_in("skill", category.as_ref())?,
+                output,
+            )
         }
         SkillCommand::Info(args) => {
-            let (category, package) = parse_skill_ref(&args.package, args.category.as_deref())?;
-            let result = store.read_summary_in(&category, &package)?;
-            emit(&result, output)
+            let (category, name) = parse_skill_ref(&args.package, args.category.as_deref())?;
+            let value =
+                agt_service::Resources::new(home).read("skill", &format!("{category}/{name}"))?;
+            emit_value(resource_output("skill", value, false), output)
         }
         SkillCommand::Read(args) => {
             let (category, package) = parse_skill_ref(&args.package, args.category.as_deref())?;
-            let result = store.read_document_summary_in(&category, &package)?;
-            emit(&result, output)
+            emit_value(
+                agt_service::Resources::new(home)
+                    .read("skill", &format!("{category}/{package}"))?,
+                output,
+            )
         }
         SkillCommand::Update(args) => {
             let (category, package) = parse_skill_ref(&args.package, args.category.as_deref())?;
-            let stored = store.read_in(&category, &package)?;
             let file = if args.file.is_dir() {
                 args.file.join(agt_skill::config::SKILL_FILE)
             } else {
@@ -1231,18 +1274,13 @@ fn dispatch_skill(command: SkillCommand, home: &Path, output: OutputMode, yes: b
             };
             let text = fs::read_to_string(&file)
                 .with_context(|| format!("读取 skill 文件失败：{}", file.display()))?;
-            let document = SkillDocument::parse(&file, &text)?;
-            if document.metadata.package_ref()? != package {
-                bail!(
-                    "skill 文件中的 package {} 与目标 {} 不一致",
-                    document.metadata.package_ref()?,
-                    package
-                );
-            }
-            let rendered = document.render()?;
-            atomic_replace_text(&stored.path, &rendered)?;
-            let result = store.read_document_summary_in(&category, &package)?;
-            emit(&result, output)
+            let result = agt_service::Resources::new(home).write(
+                "skill",
+                &format!("{category}/{package}"),
+                false,
+                serde_json::json!({"text":text}),
+            )?;
+            emit_value(result, output)
         }
         SkillCommand::Delete(args) => delete_resource(
             ResourceKind::Skill,
@@ -1261,57 +1299,54 @@ fn dispatch_skill(command: SkillCommand, home: &Path, output: OutputMode, yes: b
 }
 
 fn dispatch_mcp(command: McpCommand, home: &Path, output: OutputMode, yes: bool) -> Result<()> {
-    let store = McpStore::new(home);
     match command {
         McpCommand::Create(args) => {
             let category = parse_category(args.category.as_deref())?;
             let text = fs::read_to_string(&args.file)
                 .with_context(|| format!("读取 MCP 文件失败：{}", args.file.display()))?;
-            let document = McpDocument::parse(&args.file, &text)?;
-            if document.name.as_str() != args.name {
-                bail!(
-                    "MCP JSON 中的 server 名称 {} 与目标 {} 不一致",
-                    document.name,
-                    args.name
-                );
-            }
-            let stored = store.add_in(&category, document)?;
-            emit(&McpSummary::from(&stored), output)
+            write_resource(
+                home,
+                "mcp",
+                &format!("{category}/{}", args.name),
+                true,
+                serde_json::from_str(&text)?,
+                output,
+            )
         }
         McpCommand::List(args) => {
-            let result = match args.category.as_deref() {
-                Some(category) => store.scan_summary_in(&parse_category(Some(category))?)?,
-                None => store.scan_summary()?,
-            };
-            emit(&result, output)
+            let category = args
+                .category
+                .as_deref()
+                .map(CategoryName::new)
+                .transpose()?;
+            emit_value(
+                agt_service::Resources::new(home).list_in("mcp", category.as_ref())?,
+                output,
+            )
         }
         McpCommand::Info(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let result: McpInfoResult = store.info_summary_in(&category, &name)?;
-            emit(&result, output)
+            let value =
+                agt_service::Resources::new(home).read("mcp", &format!("{category}/{name}"))?;
+            emit_value(resource_output("mcp", value, false), output)
         }
         McpCommand::Update(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
             let text = fs::read_to_string(&args.file)
                 .with_context(|| format!("读取 MCP 文件失败：{}", args.file.display()))?;
-            let document = McpDocument::parse(&args.file, &text)?;
-            if document.name.as_str() != name {
-                bail!(
-                    "MCP JSON 中的 server 名称 {} 与目标 {} 不一致",
-                    document.name,
-                    name
-                );
-            }
-            let stored = store
-                .apply_batch_in(&category, vec![McpWritePlan::replace(document)])?
-                .into_iter()
-                .next()
-                .ok_or_else(|| anyhow!("MCP 更新没有返回结果"))?;
-            emit(&McpSummary::from(&stored), output)
+            write_resource(
+                home,
+                "mcp",
+                &format!("{category}/{name}"),
+                false,
+                serde_json::from_str(&text)?,
+                output,
+            )
         }
         McpCommand::Test(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let result = store.read_in(&category, &name)?.document.test_config()?;
+            let result =
+                agt_service::Resources::new(home).mcp_test(&format!("{category}/{name}"))?;
             emit_value(
                 serde_json::json!({
                     "name": result.name,
@@ -1345,59 +1380,36 @@ fn dispatch_mcp(command: McpCommand, home: &Path, output: OutputMode, yes: bool)
 }
 
 fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: bool) -> Result<()> {
-    let store = AgentStore::new(home);
     match command {
         AgentCommand::Run(args) => runtime::execute(args, home, output),
         AgentCommand::Create(args) => {
             let category = parse_category(args.category.as_deref())?;
-            PromptStore::new(home).ensure_default_prompt()?;
-            let mut config = if let Some(harness) = &args.harness {
-                let (c, n) = parse_named_ref(harness, None)?;
-                AgentConfig::external(
-                    &args.name,
-                    QualifiedRef::new(c, agt_core::HarnessId::new(n)),
-                )?
-            } else {
-                let (c, n) =
-                    parse_named_ref(args.model.as_deref().context("model required")?, None)?;
-                let mut config = AgentConfig::new(&args.name, &n)?;
-                config.model = Some(QualifiedRef::new(c, ModelId::new(n)));
-                config
-            };
-            config.builtin_tools = args.builtin_tools;
-            if let Some(prompt) = args.prompt {
-                let (prompt_category, prompt_name) = parse_named_ref(&prompt, None)?;
-                config.prompt = QualifiedRef::new(prompt_category, PromptId::new(prompt_name));
-            }
-            if let Some(description) = args.description {
-                config.set_description(description);
-            }
-            for skill in args.skills {
-                let (skill_category, package) = parse_skill_ref(&skill, None)?;
-                config
-                    .skills
-                    .push(ResourceRef::persisted_in(skill_category, package));
-            }
-            for mcp in args.mcps {
-                let (mcp_category, mcp_name) = parse_named_ref(&mcp, None)?;
-                config
-                    .mcps
-                    .push(QualifiedRef::new(mcp_category, McpId::new(mcp_name)));
-            }
-            let stored = store.create_in(&category, &config)?;
-            emit(&AgentSummary::from(&stored), output)
+            write_resource(
+                home,
+                "agent",
+                &format!("{category}/{}", args.name),
+                true,
+                serde_json::json!({"model":args.model,"harness":args.harness,"prompt":args.prompt,
+                "description":args.description,"skills":args.skills,"mcps":args.mcps,"builtin_tools":args.builtin_tools}),
+                output,
+            )
         }
         AgentCommand::List(args) => {
-            let result = match args.category.as_deref() {
-                Some(category) => store.scan_summary_in(&parse_category(Some(category))?)?,
-                None => store.scan_summary()?,
-            };
-            emit(&result, output)
+            let category = args
+                .category
+                .as_deref()
+                .map(CategoryName::new)
+                .transpose()?;
+            emit_value(
+                agt_service::Resources::new(home).list_in("agent", category.as_ref())?,
+                output,
+            )
         }
         AgentCommand::Info(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let result = store.read_summary_in(&category, &name)?;
-            emit(&result, output)
+            let value =
+                agt_service::Resources::new(home).read("agent", &format!("{category}/{name}"))?;
+            emit_value(resource_output("agent", value, false), output)
         }
         AgentCommand::Update(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
@@ -1414,110 +1426,34 @@ fn dispatch_agent(command: AgentCommand, home: &Path, output: OutputMode, yes: b
             {
                 bail!("至少提供一个 Agent 更新字段");
             }
-            let harness = args
-                .harness
-                .map(|v| parse_named_ref(&v, None))
-                .transpose()?;
-            let model = args
-                .model
-                .map(|value| parse_named_ref(&value, None))
-                .transpose()?;
-            let prompt = args
-                .prompt
-                .map(|value| parse_named_ref(&value, None))
-                .transpose()?;
-            let add_skills = args
-                .add_skills
-                .iter()
-                .map(|value| parse_skill_ref(value, None))
-                .collect::<Result<Vec<_>>>()?;
-            let remove_skills = args
-                .remove_skills
-                .iter()
-                .map(|value| parse_skill_ref(value, None))
-                .collect::<Result<Vec<_>>>()?;
-            let add_mcps = args
-                .add_mcps
-                .iter()
-                .map(|value| parse_named_ref(value, None))
-                .collect::<Result<Vec<_>>>()?;
-            let remove_mcps = args
-                .remove_mcps
-                .iter()
-                .map(|value| parse_named_ref(value, None))
-                .collect::<Result<Vec<_>>>()?;
-            let result = store.update_in(&category, &name, |config| {
-                for tool in args.add_builtin_tools {
-                    if !config.builtin_tools.contains(&tool) {
-                        config.builtin_tools.push(tool);
-                    }
-                }
-                for tool in args.remove_builtin_tools {
-                    if let Some(index) = config.builtin_tools.iter().position(|item| item == &tool)
-                    {
-                        config.builtin_tools.remove(index);
-                    } else {
-                        return Err(AgentError::AttachmentNotFound {
-                            agent: name.clone(),
-                            kind: "builtin_tool",
-                            name: tool.to_string(),
-                        });
-                    }
-                }
-                if let Some(description) = args.description {
-                    config.set_description(description);
-                }
-                if let Some((model_category, model_name)) = model {
-                    config.model =
-                        Some(QualifiedRef::new(model_category, ModelId::new(model_name)));
-                    config.harness = None;
-                }
-                if let Some((c, n)) = harness {
-                    config.harness = Some(QualifiedRef::new(c, agt_core::HarnessId::new(n)));
-                    config.model = None;
-                }
-                if let Some((prompt_category, prompt_name)) = prompt {
-                    config.prompt = QualifiedRef::new(prompt_category, PromptId::new(prompt_name));
-                }
-                for (skill_category, package) in add_skills {
-                    let reference = ResourceRef::persisted_in(skill_category, package);
-                    if !config.skills.contains(&reference) {
-                        config.skills.push(reference);
-                    }
-                }
-                for (skill_category, package) in remove_skills {
-                    let reference = ResourceRef::persisted_in(skill_category, package);
-                    if let Some(index) = config.skills.iter().position(|item| item == &reference) {
-                        config.skills.remove(index);
-                    } else {
-                        return Err(AgentError::AttachmentNotFound {
-                            agent: name.clone(),
-                            kind: "skill",
-                            name: reference.to_string(),
-                        });
-                    }
-                }
-                for (mcp_category, mcp_name) in add_mcps {
-                    let reference = QualifiedRef::new(mcp_category, McpId::new(mcp_name));
-                    if !config.mcps.contains(&reference) {
-                        config.mcps.push(reference);
-                    }
-                }
-                for (mcp_category, mcp_name) in remove_mcps {
-                    let reference = QualifiedRef::new(mcp_category, McpId::new(mcp_name));
-                    if let Some(index) = config.mcps.iter().position(|item| item == &reference) {
-                        config.mcps.remove(index);
-                    } else {
-                        return Err(AgentError::AttachmentNotFound {
-                            agent: name.clone(),
-                            kind: "mcp",
-                            name: reference.to_string(),
-                        });
-                    }
-                }
-                Ok(())
-            })?;
-            emit(&AgentSummary::from(&result), output)
+            let options = agt_service::WriteOptions {
+                add: std::collections::BTreeMap::from([
+                    ("skills".into(), args.add_skills),
+                    ("mcps".into(), args.add_mcps),
+                    (
+                        "builtin_tools".into(),
+                        args.add_builtin_tools
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    ),
+                ]),
+                remove: std::collections::BTreeMap::from([
+                    ("skills".into(), args.remove_skills),
+                    ("mcps".into(), args.remove_mcps),
+                    (
+                        "builtin_tools".into(),
+                        args.remove_builtin_tools
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect(),
+                    ),
+                ]),
+                ..Default::default()
+            };
+            let result = agt_service::Resources::new(home).write_with("agent", &format!("{category}/{name}"), false,
+                serde_json::json!({"description":args.description,"model":args.model,"harness":args.harness,"prompt":args.prompt}), &options)?;
+            emit_value(result, output)
         }
         AgentCommand::Delete(args) => delete_resource(
             ResourceKind::Agent,
@@ -1541,62 +1477,43 @@ fn category_command(
     home: &Path,
     output: OutputMode,
 ) -> Result<()> {
-    let category = match command {
+    let resources = agt_service::Resources::new(home);
+    match command {
         CategoryCommand::Create(args) => {
             let category = CategoryName::new(args.name)?;
-            let path = match kind {
-                ResourceKind::Provider => {
-                    ProviderStore::new(home).categories().create(&category)?
-                }
-                ResourceKind::Model => ModelStore::new(home).categories().create(&category)?,
-                ResourceKind::Prompt => PromptStore::new(home).categories().create(&category)?,
-                ResourceKind::Skill => SkillStore::new(home).categories().create(&category)?,
-                ResourceKind::Harness => agt_harness::HarnessStore::new(home)
-                    .categories()
-                    .create(&category)?,
-                ResourceKind::Mcp => McpStore::new(home).categories().create(&category)?,
-                ResourceKind::Agent => AgentStore::new(home).categories().create(&category)?,
-            };
-            return emit(
-                &serde_json::json!({"category": category, "path": path}),
-                output,
-            );
+            let path = resources.category_create(kind.as_str(), &category)?;
+            emit_value(serde_json::json!({"category":category,"path":path}), output)
         }
-        CategoryCommand::List => {
-            let categories = match kind {
-                ResourceKind::Provider => ProviderStore::new(home).categories().list()?,
-                ResourceKind::Model => ModelStore::new(home).categories().list()?,
-                ResourceKind::Prompt => PromptStore::new(home).categories().list()?,
-                ResourceKind::Skill => SkillStore::new(home).categories().list()?,
-                ResourceKind::Harness => {
-                    agt_harness::HarnessStore::new(home).categories().list()?
-                }
-                ResourceKind::Mcp => McpStore::new(home).categories().list()?,
-                ResourceKind::Agent => AgentStore::new(home).categories().list()?,
-            };
-            return emit(&categories, output);
+        CategoryCommand::Delete(args) => {
+            let category = CategoryName::new(args.name)?;
+            let path = resources.category_delete(kind.as_str(), &category)?;
+            emit_value(serde_json::json!({"category":category,"path":path}), output)
         }
-        CategoryCommand::Delete(args) => CategoryName::new(args.name)?,
-    };
-    let path = match kind {
-        ResourceKind::Provider => ProviderStore::new(home)
-            .categories()
-            .delete_empty(&category)?,
-        ResourceKind::Model => ModelStore::new(home).categories().delete_empty(&category)?,
-        ResourceKind::Prompt => PromptStore::new(home)
-            .categories()
-            .delete_empty(&category)?,
-        ResourceKind::Skill => SkillStore::new(home).categories().delete_empty(&category)?,
-        ResourceKind::Harness => agt_harness::HarnessStore::new(home)
-            .categories()
-            .delete_empty(&category)?,
-        ResourceKind::Mcp => McpStore::new(home).categories().delete_empty(&category)?,
-        ResourceKind::Agent => AgentStore::new(home).categories().delete_empty(&category)?,
-    };
-    emit(
-        &serde_json::json!({"category": category, "path": path}),
-        output,
-    )
+        CategoryCommand::List => emit(&resources.category_list(kind.as_str())?, output),
+    }
+}
+
+fn resource_output(kind: &str, mut value: Value, writing: bool) -> Value {
+    // CLI projections preserve existing info/write shapes; service returns safe full views.
+    if kind == "prompt" || kind == "skill" {
+        return value[kind].take();
+    }
+    if kind == "mcp" && writing {
+        value.as_object_mut().unwrap().remove("config");
+    }
+    value
+}
+
+fn write_resource(
+    home: &Path,
+    kind: &str,
+    reference: &str,
+    create: bool,
+    data: Value,
+    output: OutputMode,
+) -> Result<()> {
+    let value = agt_service::Resources::new(home).write(kind, reference, create, data)?;
+    emit_value(resource_output(kind, value, true), output)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1698,11 +1615,6 @@ fn read_content(text: Option<String>, file: Option<PathBuf>, stdin: bool) -> Res
     }
 }
 
-fn atomic_replace_text(path: &Path, content: &str) -> Result<()> {
-    write_atomic(path, content.as_bytes())
-        .with_context(|| format!("原子替换文件失败：{}", path.display()))
-}
-
 fn emit<T: Serialize>(value: &T, mode: OutputMode) -> Result<()> {
     let value = serde_json::to_value(value)?;
     emit_value(value, mode)
@@ -1797,14 +1709,12 @@ fn dispatch_harness_resource(
         HarnessResourceCommand::Create(args) => harness_write(args, true, &resources, output),
         HarnessResourceCommand::Update(args) => harness_write(args, false, &resources, output),
         HarnessResourceCommand::List(args) => {
-            let mut value = resources.list("harness")?;
-            if let Some(category) = args.category {
-                value["items"]
-                    .as_array_mut()
-                    .unwrap()
-                    .retain(|v| v["category"] == category);
-            }
-            emit(&value, output)
+            let category = args
+                .category
+                .as_deref()
+                .map(CategoryName::new)
+                .transpose()?;
+            emit_value(resources.list_in("harness", category.as_ref())?, output)
         }
         HarnessResourceCommand::Info(args) => {
             let (c, n) = parse_named_ref(&args.name, args.category.as_deref())?;
@@ -1812,8 +1722,7 @@ fn dispatch_harness_resource(
         }
         HarnessResourceCommand::Test(args) => {
             let (c, n) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let harness = agt_harness::HarnessStore::new(home).read_in(&c, &n)?;
-            emit(&agt_harness::Codex::test(&harness.config)?, output)
+            emit_value(resources.harness_test(&format!("{c}/{n}"))?, output)
         }
         HarnessResourceCommand::Category(command) => {
             category_command(ResourceKind::Harness, command, home, output)

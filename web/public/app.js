@@ -855,7 +855,7 @@ async function showAgentEdit(reference) {
     bindExecutionFields();
     $('#cancel-agent-edit').onclick = closeModal;
     formHandler(async data => {
-      await tool('resource_write', { kind: 'agent', reference, create: false, data: { description: data.get('description'), ...executionData(data), prompt: data.get('prompt'), skills: data.getAll('skills'), mcps: data.getAll('mcps'), builtin_tools: data.getAll('builtin_tools') } });
+      await tool('resource_write', { kind: 'agent', reference, create: false, expected_revision: agent.revision, data: { description: data.get('description'), ...executionData(data), prompt: data.get('prompt'), skills: data.getAll('skills'), mcps: data.getAll('mcps'), builtin_tools: data.getAll('builtin_tools') } });
       $('#modal').close(); await bootstrap(); notify(`${reference} 已更新，将在下一次运行生效。`);
     });
   } catch (error) { if (generation === modalGeneration && $('#modal').open) { $('#modal-body').innerHTML = ''; modalError(error); } }
@@ -1300,7 +1300,7 @@ async function showHarnessEdit(reference) {
         notify('已读取已保存 Harness 连接的模型列表。');
       }catch(e){if(generation===modalGeneration)notify(errorText(e),true);}finally{if(generation===modalGeneration)button.disabled=false;}
     };
-    formHandler(async data=>{await tool('resource_write',{kind:'harness',reference,create:false,data:harnessData(data)});$('#modal').close();await bootstrap();notify('Harness已更新。');});
+    formHandler(async data=>{await tool('resource_write',{kind:'harness',reference,create:false,expected_revision:value.revision,data:harnessData(data)});$('#modal').close();await bootstrap();notify('Harness已更新。');});
   } catch(e) {if(generation===modalGeneration)modalError(e);}
 }
 
