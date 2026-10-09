@@ -4,10 +4,13 @@
 
 ## 使用与开发
 
+- [架构图与执行流程](architecture/README.md)：当前模块边界、资源管理与能力刷新、消息调度、Run 执行、异步协作及图表更新约定。
 - [项目 README](../README.md)：模块、资源目录、CLI 和显式执行。
 - [Web 使用指南](../web/README.md)：前后端一起启动、角色托管、会话与调试界面。
 - [框架验收指南](framework-acceptance.md)：模型接入、CLI/MCP、调度控制和排错。
 - [持久化调度设计](scheduler-plan.md)：并发、参与决策、提醒、预算与恢复边界。
+- [共享资源管理](resource-management.md)：七类资源的统一入口、更新契约、版本检查与并发边界。
+- [MCP 工具契约](mcp-tool-contracts.md)：注册探测、参数校验及 Native 能力刷新。
 - [Native Agent 执行循环](native-agent-loop.md)：运行宿主、回合循环和工具阶段契约。
 - [上下文管理](context-management.md)：模块边界、自动压缩、持久化摘要与重置语义。
 - [Web 架构](web-console-plan.md)：Node 与 Rust 分工、身份和 UI 状态。

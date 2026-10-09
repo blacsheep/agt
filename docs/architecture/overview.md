@@ -1,0 +1,101 @@
+# 整体架构
+
+最近代码核对：2026-10-09。箭头表示调用或数据流，不是严格的 crate 依赖关系。
+
+```mermaid
+flowchart TB
+    UI["浏览器 AGT Studio"]
+    Node["Node Web 服务<br/>静态页面 / HTTP / SSE"]
+    CLI["agt-cli<br/>命令入口与组件装配"]
+    Client["外部 MCP 客户端"]
+    UI <-->|HTTP / SSE| Node
+    Node -->|CLI 子进程| CLI
+    Client <-->|stdio| Serve["agt serve"]
+
+    subgraph Rust["Rust 框架"]
+        Service["ToolService / agt-service<br/>工具契约、身份权限与通信"]
+        IM["agt-im<br/>参与者、会话、消息、投递、可见性"]
+        Resources["共享资源服务 / Resources<br/>CRUD、集合更新、版本检查、删除计划"]
+        Domains["资源领域模块与 Store<br/>Agent / Model / Provider<br/>Prompt / Skill / MCP / Harness"]
+        Scheduler["Scheduler<br/>授权、排队、参与判断、租约、并发"]
+        Work["WorkItem<br/>依赖、等待、恢复、结果与汇报"]
+        Runtime["Runtime<br/>Run 认领、幂等、执行与终态"]
+        Native["Native<br/>AGT 模型与工具循环"]
+        Harness["Harness<br/>外部执行与会话桥接"]
+        Events["事件投影与 events watch"]
+        Service --> IM
+        Service --> Resources
+        Resources --> Domains
+        IM -->|消息投递| Scheduler
+        Scheduler <--> Work
+        Scheduler --> Runtime
+        Runtime --> Native
+        Runtime --> Harness
+        Native --> Service
+        Harness -->|动态工具| Service
+        Runtime -.->|加载执行配置与能力| Domains
+    end
+
+    CLI -->|tool call| Service
+    CLI -->|资源命令适配| Resources
+    CLI --> Scheduler
+    CLI -->|显式 agent run| Runtime
+    Serve --> Service
+    Native <-->|模型 API| LLM["Chat Completions / Responses"]
+    Native <-->|stdio / HTTP| MCP["外部 MCP 工具"]
+    Harness <-->|stdio| Codex["Codex app-server 子进程"]
+    Rust --> Store["资源文件与 SQLite 数据库"]
+    Store -->|变化 outbox| Events
+    Events -->|JSONL 转 SSE| Node
+```
+
+## 模块与进程边界
+
+- `agt-core`、`agt-storage`、`agt-config` 提供通用引用、文件操作、唤醒通知和 home 配置。
+- 七类配置资源由 `agt-service::Resources` 统一管理；CLI 资源命令和 ToolService 都调用它，
+  Web 经 `agt tool call` 进入 ToolService。各资源模块保留自己的配置类型与校验规则。
+- 资源管理使用 `.resources.lock` 串行化读写与删除执行；`revision/expected_revision`
+  检测过期编辑。详情见[资源管理与能力生效](resource-flow.md)。
+- 资源服务保存配置；Native Runtime 在成功自修改 MCP/Skill 后，于工具批次结束刷新能力。
+  保存成功不等于当前 Run 已加载，刷新失败保留旧能力并单独报告。
+- Agent 引用 Model 或 Harness，二者互斥；Model 再引用 Provider。Prompt、Skill 与工具能力附着于 Agent。
+- Node 负责本地界面和 HTTP 适配，业务操作经 Rust CLI；scheduler 是长期运行的 Rust 子进程。
+- 当前每个 Web 事件订阅启动一个长期运行的 `agt events watch`，将 JSONL 桥接成 SSE。
+- IM 自身不调用模型；Runtime 负责执行，Scheduler 负责执行准入，WorkItem 记录工作责任。
+- `agt-service` 不依赖 Runtime。它声明 `WorkControl`、`HarnessControl`、`ExecutionControl`，由 Runtime 实现并注入。
+- Harness 当前接入本机 Codex app-server，由它拥有内部模型和工具循环；AGT 不把它当作 Native 的 ModelClient。
+
+## 持久化职责
+
+以下路径均相对于资源 home。各数据库是独立事务域，不能视为一个全局事务。
+
+| 路径 | 主要内容 |
+| --- | --- |
+| `config.yaml` 与资源目录 | 运行策略、Agent、Model、Provider、Prompt、Skill、MCP、Harness 配置 |
+| `.resources.lock` | 配置资源管理读写、分类修改与删除执行的共享锁；不是数据库事务 |
+| `im/im.db` | 参与者、会话、消息、投递和可见性 |
+| `runtime/bindings.db` | 身份绑定、启停与响应策略 |
+| `runtime/scheduler.db` | Discussion、调度任务、WorkItem、依赖、通知和汇报 |
+| `runtime/runs.db` | Run、调用诊断、进度和恢复检查点 |
+| `runtime/contexts.db` | 按会话和身份保存的上下文压缩摘要 |
+| `runtime/harnesses.db` | 外部会话、线程映射、配置快照与执行围栏 |
+| `runtime/approvals.db` | 审批请求与决定 |
+| `runtime/events.db` | 可重建事件投影及消费游标 |
+| `memory/memory.db` | Agent 私有、关联原消息来源的长期摘要 |
+
+原始聊天、上下文压缩摘要和长期 Memory 各有职责；重置上下文不会删除聊天或长期记忆。
+事件通知用于触发刷新，SQLite 业务记录仍是状态依据。跨库传播依靠 outbox、幂等键和对账。
+
+## 代码入口
+
+- [Workspace](../../Cargo.toml)：crate 列表与依赖。
+- [Web 服务](../../web/server.mjs)：`cliRunner`、`createConsole`、`watchEvents`。
+- [共享资源服务](../../crates/agt-service/src/resources/mod.rs)与[更新/版本检查](../../crates/agt-service/src/resources/mutation.rs)。
+- [能力刷新](../../crates/agt-runtime/src/engine/native/refresh.rs)：批次边界装配与应用。
+- [Agent 配置](../../crates/agt-agent/src/config.rs)：`AgentConfig::validate`。
+- [服务接口](../../crates/agt-service/src/lib.rs)：Runtime 能力端口。
+- [身份绑定](../../crates/agt-service/src/bindings.rs)：`Binding`、`BindingStore`。
+- [事件投影](../../crates/agt-runtime/src/events.rs)：`Events`。
+- [长期记忆](../../crates/agt-service/src/memory/mod.rs)：身份隔离与来源可见性校验。
+
+返回[架构图导航](README.md)。
