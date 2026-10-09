@@ -2,6 +2,7 @@
 use super::backend;
 use crate::engine::EngineKind;
 use crate::schedule_state::ClaimDeferral;
+use crate::{DiscussionState, TaskState};
 use crate::{ScheduleStore, ScheduledTask, schedule_store::now_ms};
 use agt_core::CancellationToken;
 use agt_im::{MessageId, MessageListOptions, PrincipalId, PrincipalKind};
@@ -75,13 +76,13 @@ pub(super) fn prepare(
     let round = store
         .discussion(&task.discussion)?
         .ok_or_else(|| anyhow::anyhow!("round missing"))?;
-    if round.state != "active" || token.is_canceled() {
+    if round.state != DiscussionState::Active || token.is_canceled() {
         task.defer_claim(ClaimDeferral::InactiveDiscussion);
         store.update(task, now_ms())?;
         return Ok(None);
     }
     let conversation = messaging.im.get_conversation(&trigger.conversation_id)?;
-    if task.state == "responding"
+    if task.state == TaskState::Responding
         && task.decision_required
         && task.through_seq != conversation.last_message_seq
     {

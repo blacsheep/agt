@@ -1,4 +1,5 @@
 use super::*;
+use crate::DiscussionState;
 use agt_im::{ConversationId, ConversationState, ImStore, MessageId, PrincipalId, PrincipalKind};
 use agt_service::{Actor, BindingStore, ResponsePolicy, WorkControl};
 use serde_json::{Value, json};
@@ -477,7 +478,7 @@ pub(super) fn check_scope(home: &Path, store: &ScheduleStore, item: &WorkItem) -
     let discussion = store
         .discussion(&r.discussion)?
         .ok_or_else(|| anyhow::anyhow!("discussion missing"))?;
-    if discussion.state == "ended"
+    if discussion.state == DiscussionState::Ended
         || im
             .get_conversation(&ConversationId::new(&discussion.conversation))?
             .state
@@ -518,7 +519,7 @@ pub(super) fn blocked(
     if round.expires_at <= crate::schedule_store::now_ms() {
         return Ok(Some("discussion_expired"));
     }
-    if round.state != "active" {
+    if round.state != DiscussionState::Active {
         return Ok(Some("discussion_paused"));
     }
     Ok(None)

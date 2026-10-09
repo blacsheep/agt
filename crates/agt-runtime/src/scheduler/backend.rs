@@ -1,5 +1,6 @@
 //! Engine-specific scheduling preparation. The coordinator and settlement stay shared.
 use super::decision;
+use crate::TaskState;
 use crate::engine::EngineKind;
 use crate::{
     ModelClient, ResolvedAgent, RuntimeError, ScheduleStore, ScheduledTask, schedule_store::now_ms,
@@ -31,7 +32,7 @@ pub(super) fn admit_participation(
     store: &mut ScheduleStore,
     task: &mut ScheduledTask,
 ) -> Result<bool> {
-    if engine == EngineKind::Harness && task.state == "evaluating" {
+    if engine == EngineKind::Harness && task.state == TaskState::Evaluating {
         task.ready_external_reply();
         store.update(task, now_ms())?;
         return Ok(true);
@@ -87,11 +88,10 @@ impl ScheduledEngine {
                     Err(error) => {
                         task.state =
                             if matches!(error, RuntimeError::Canceled | RuntimeError::Stopped(_)) {
-                                "canceled"
+                                TaskState::Canceled
                             } else {
-                                "failed"
-                            }
-                            .into();
+                                TaskState::Failed
+                            };
                         task.reason = Some(format!("conversation context: {error}"));
                         store.update(task, now_ms())?;
                         Ok(None)

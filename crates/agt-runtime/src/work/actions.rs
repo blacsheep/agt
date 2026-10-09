@@ -1,6 +1,7 @@
 //! Explicit lifecycle controls; no automatic retries of uncertain external effects.
 use super::control::{check_scope, member, open_im, view};
 use super::*;
+use crate::{DiscussionState, TaskState};
 use serde_json::Value;
 
 impl TaskControl {
@@ -73,7 +74,7 @@ impl TaskControl {
                     }
                     check_scope(&self.home, store, &item)?;
                     let round = store.discussion(&item.request.discussion)?.unwrap();
-                    if round.state != "active"
+                    if round.state != DiscussionState::Active
                         || round.expires_at <= crate::schedule_store::now_ms()
                     {
                         bail!("renew discussion authorization before retrying");
@@ -173,8 +174,8 @@ fn cancel_tree(c: &Connection, id: &str, reason: &str, actor: &str) -> Result<()
         let in_flight = matches!(item.state, WorkState::Running { .. })
             || adapter.as_ref().is_some_and(|t| {
                 matches!(
-                    t.state.as_str(),
-                    "responding" | "evaluating" | "ready_to_reply"
+                    t.state,
+                    TaskState::Responding | TaskState::Evaluating | TaskState::ReadyToReply
                 )
             });
         if item.cancellation_requested.is_some() {
@@ -200,7 +201,7 @@ fn cancel_tree(c: &Connection, id: &str, reason: &str, actor: &str) -> Result<()
             save_event(c, &mut item, "canceled", true)?;
             c.execute("DELETE FROM work_dependencies WHERE work_id=?1", [&id])?;
             if let Some(t) = &mut adapter {
-                t.state = "canceled".into();
+                t.state = TaskState::Canceled;
                 t.reason = Some(reason.into());
                 t.owner = None;
                 t.version += 1;

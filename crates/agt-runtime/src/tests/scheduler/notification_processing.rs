@@ -42,7 +42,7 @@ fn prose_and_silence_do_not_discharge_report_obligation() {
         )
         .unwrap();
         let saved = scheduler.store.get(&notice.id).unwrap();
-        assert_eq!(saved.state, "failed");
+        assert_eq!(saved.state, TaskState::Failed);
         assert!(saved.reason.unwrap().starts_with("task_report_required:"));
         let run = crate::RunStore::open(home.path())
             .unwrap()
@@ -123,7 +123,10 @@ fn committed_report_allows_silent_completion_and_survives_reconcile() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&notice.id).unwrap().state, "completed");
+    assert_eq!(
+        scheduler.store.get(&notice.id).unwrap().state,
+        TaskState::Completed
+    );
     scheduler.tick(false).unwrap();
     crate::work::reconcile(home.path()).unwrap();
     crate::work::reconcile(home.path()).unwrap();
@@ -197,5 +200,8 @@ fn report_after_failed_notification_clears_pending_duty_without_model_retry() {
     let detail = control.call("task_get", json!({"task_id":id})).unwrap();
     assert_eq!(detail["requester_notification"], "handled");
     assert_eq!(detail["report"]["state"], "published");
-    assert_eq!(scheduler.store.get(&notice.id).unwrap().state, "failed"); // Preserve execution history.
+    assert_eq!(
+        scheduler.store.get(&notice.id).unwrap().state,
+        TaskState::Failed
+    ); // Preserve execution history.
 }

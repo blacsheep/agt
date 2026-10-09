@@ -12,8 +12,17 @@ pub struct ApprovalRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_context: Option<Value>,
 }
+/// Engine-observed progress of a decision response.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DeliveryProgress {
+    /// About to write the response; a crash after this leaves the outcome unknown.
+    Sending,
+    Sent,
+    /// The engine confirmed the request is no longer pending.
+    Resolved,
+}
 pub trait ApprovalHandler {
     fn request(&mut self, request: &ApprovalRequest) -> Result<String>;
     fn poll(&mut self, id: &str) -> Result<Option<Value>>;
-    fn delivery(&mut self, id: &str, state: &str) -> Result<()>;
+    fn delivery(&mut self, id: &str, progress: DeliveryProgress) -> Result<()>;
 }

@@ -8,13 +8,13 @@ impl ApprovalStore {
         fingerprint: Option<&str>,
     ) -> Result<()> {
         let old = self.poll(id)?;
-        if old.decision.is_some() || old.delivery != "not_sent" {
+        if old.decision.is_some() || old.delivery != Delivery::NotSent {
             return Ok(());
         }
         let state = if config.mode == agt_config::runtime::PermissionMode::ModelReview {
-            "reviewing"
+            ApprovalState::Reviewing
         } else {
-            "awaiting_human"
+            ApprovalState::AwaitingHuman
         };
         let policy = serde_json::to_value(config)?;
         if old.state == state
@@ -25,7 +25,7 @@ impl ApprovalStore {
         }
         let mut next = old.clone();
         next.revision += 1;
-        next.state = state.into();
+        next.state = state;
         next.reason.clear();
         next.request["policy"] = policy;
         next.request["reviewer_fingerprint"] = json!(fingerprint);
@@ -36,10 +36,10 @@ impl ApprovalStore {
     }
 
     pub(crate) fn apply_harness_mode(&self, item: Approval) -> Result<Approval> {
-        if item.source != "harness"
+        if item.source != ApprovalSource::Harness
             || item.decision.is_some()
-            || item.delivery != "not_sent"
-            || !matches!(item.state.as_str(), "reviewing" | "awaiting_human")
+            || item.delivery != Delivery::NotSent
+            || !item.state.is_pending()
         {
             return Ok(item);
         }
@@ -70,7 +70,7 @@ impl ApprovalStore {
             decision,
             "工作空间模式：自动放行",
             None,
-            Some("auto_allow"),
+            Some(DecisionOrigin::AutoAllow),
         ) {
             Ok(updated) => Ok(updated),
             Err(error) => {

@@ -1,5 +1,6 @@
 //! Coordinator and stable scheduler entry points; stages live in focused modules.
 use crate::{ChatCompletions, ScheduleStore, schedule_store::now_ms};
+use crate::{DiscussionState, TaskState};
 use agt_core::CancellationToken;
 use agt_im::{
     ConversationId, ConversationState, DeliveryState, ImStore, MessageListOptions, PrincipalId,
@@ -158,7 +159,7 @@ impl Scheduler {
                 let (id, _, handle) = self.jobs.remove(i);
                 if handle.join().is_err() {
                     let mut task = self.store.get(&id)?;
-                    task.state = "interrupted".into();
+                    task.state = TaskState::Interrupted;
                     task.reason = Some("execution thread interrupted".into());
                     self.store.update(&task, now_ms())?;
                 }
@@ -207,7 +208,7 @@ impl Scheduler {
                 .get(&PrincipalId::new(&task.principal))?
                 .is_some();
             let ended = round.as_ref().is_none_or(|r| {
-                r.state == "ended"
+                r.state == DiscussionState::Ended
                     || !im
                         .get_conversation(&ConversationId::new(&r.conversation))
                         .is_ok_and(|c| c.state == ConversationState::Active)
@@ -238,7 +239,7 @@ impl Scheduler {
                 for id in &task.deliveries {
                     im.update_delivery(*id, state, task.run_id.as_deref(), task.reason.as_deref())?;
                 }
-                if task.work_notification && task.state == "completed" {
+                if task.work_notification && task.state == TaskState::Completed {
                     self.store.connection.execute("UPDATE work_inbox SET state='handled' WHERE recipient=?1 AND event_seq IN (SELECT p.event_seq FROM work_publications p JOIN work_outbox e ON e.seq=p.event_seq WHERE e.work_id=?2 AND p.message_id=?3)",rusqlite::params![task.principal,task.work_id,task.message])?;
                 }
                 self.store.mark_reconciled(&task.id)?;
@@ -277,7 +278,7 @@ impl Scheduler {
             if !quiet_ready(&candidate, latest.created_at, now) {
                 continue;
             }
-            if candidate.state == "ready_to_reply" && candidate.through_seq != latest.seq {
+            if candidate.state == TaskState::ReadyToReply && candidate.through_seq != latest.seq {
                 self.store
                     .invalidate_ready(&candidate.id, latest.seq, now)?;
                 continue;
@@ -293,9 +294,9 @@ impl Scheduler {
                         && let Ok(mut store) = ScheduleStore::open(&home)
                         && let Ok(mut current) = store.get(&task.id)
                         && current.version == task.version
-                        && matches!(current.state.as_str(), "evaluating" | "responding")
+                        && matches!(current.state, TaskState::Evaluating | TaskState::Responding)
                     {
-                        current.state = "failed".into();
+                        current.state = TaskState::Failed;
                         current.reason = Some(
                             "Agent execution failed; inspect model, binding or run details".into(),
                         );

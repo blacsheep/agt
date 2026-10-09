@@ -90,7 +90,7 @@ fn steering_follows_complete_tool_batch_and_follow_up_follows_final_reply() {
         tasks
             .iter()
             .filter(|t| t.principal == "a")
-            .all(|t| t.state == "completed")
+            .all(|t| t.state == TaskState::Completed)
     );
     let run = scheduler.store.get(&task.id).unwrap().run_id.unwrap();
     assert!(
@@ -176,7 +176,7 @@ fn unmentioned_peer_follow_up_retains_participation_silent_and_wait_gates() {
             .find(|t| t.principal == "a" && t.last_decision.is_some())
             .unwrap();
         assert_eq!(
-            received.state,
+            received.state.as_str(),
             match action {
                 "participate" => "completed",
                 "silent" => "silent",
@@ -213,7 +213,7 @@ fn takeover_interrupts_accepted_input_but_preserves_unconsumed_follow_up() {
     );
     assert_eq!(
         scheduler.store.get(&input.task.id).unwrap().state,
-        "interrupted"
+        TaskState::Interrupted
     );
     let remaining = scheduler
         .store
@@ -222,7 +222,7 @@ fn takeover_interrupts_accepted_input_but_preserves_unconsumed_follow_up() {
         .into_iter()
         .find(|t| t.principal == "a" && t.message == follow_up)
         .unwrap();
-    assert_eq!(remaining.state, "queued");
+    assert_eq!(remaining.state, TaskState::Queued);
     assert!(crate::run_inputs::take(home.path(), &task, "run-test", InputMode::FollowUp).is_err());
 }
 
@@ -378,14 +378,17 @@ fn failed_follow_up_decision_does_not_discard_the_completed_reply() {
     )
     .unwrap();
     assert_eq!(step, 2);
-    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+    assert_eq!(
+        scheduler.store.get(&task.id).unwrap().state,
+        TaskState::Completed
+    );
     assert!(
         scheduler
             .store
             .tasks()
             .unwrap()
             .iter()
-            .any(|t| t.principal == "a" && t.state == "failed")
+            .any(|t| t.principal == "a" && t.state == TaskState::Failed)
     );
     let history = user
         .call("message_history", json!({"conversation":chat}))
@@ -424,7 +427,7 @@ fn pause_and_reply_allowance_leave_inputs_pending() {
             .tasks()
             .unwrap()
             .iter()
-            .any(|t| t.principal == "a" && t.state == "limited")
+            .any(|t| t.principal == "a" && t.state == TaskState::Limited)
     );
     assert_eq!(
         scheduler
@@ -515,7 +518,7 @@ fn later_failure_preserves_completed_input_and_published_reply() {
             .find(|t| t.principal == "a" && t.message == correction)
             .unwrap()
             .state,
-        "completed"
+        crate::TaskState::Completed
     );
     assert_eq!(
         tasks
@@ -523,7 +526,7 @@ fn later_failure_preserves_completed_input_and_published_reply() {
             .find(|t| t.principal == "a" && t.message == next)
             .unwrap()
             .state,
-        "failed"
+        crate::TaskState::Failed
     );
     let history = user
         .call("message_history", json!({"conversation":chat}))

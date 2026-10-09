@@ -1,4 +1,5 @@
 //! Participation inference and its persisted silent/wait/ready transitions.
+use crate::TaskState;
 use crate::participation::decide;
 use crate::{
     ModelClient, ResolvedAgent, RuntimeError, ScheduleStore, ScheduledTask, schedule_store::now_ms,
@@ -17,10 +18,9 @@ pub(super) fn evaluate(
         Ok(value) => value,
         Err(error) => {
             task.state = match error {
-                RuntimeError::Canceled => "canceled",
-                _ => "failed",
-            }
-            .into();
+                RuntimeError::Canceled => TaskState::Canceled,
+                _ => TaskState::Failed,
+            };
             task.reason = Some(error.to_string());
             store.update(task, now_ms())?;
             return Ok(());

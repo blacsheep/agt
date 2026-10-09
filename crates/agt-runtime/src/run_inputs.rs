@@ -3,6 +3,7 @@
 //! the active task's original snapshot. Ambiguous executions are never requeued.
 use crate::participation::ParticipationDecision;
 use crate::schedule_store::{now_ms, save_task};
+use crate::{DiscussionState, TaskState};
 use crate::{Result, RuntimeError, ScheduleStore, ScheduledTask};
 use agt_im::{MessageId, PrincipalId, PrincipalKind};
 use agt_service::{Actor, BindingStore, InputMode, MessageInput, Messaging, ResponsePolicy, Role};
@@ -26,7 +27,7 @@ fn charge(store: &ScheduleStore, task: &mut ScheduledTask) -> Result<bool> {
         .discussion(&task.discussion)
         .map_err(unavailable)?
         .ok_or(RuntimeError::Canceled)?;
-    if round.state != "active"
+    if round.state != DiscussionState::Active
         || round.expires_at <= now_ms()
         || (task.decision_required && other_responder(store, task)?)
     {
@@ -39,7 +40,7 @@ fn charge(store: &ScheduleStore, task: &mut ScheduledTask) -> Result<bool> {
         |r| r.get(0),
     )?;
     if round.max_replies.is_some_and(|limit| replies >= limit) {
-        task.state = "limited".into();
+        task.state = TaskState::Limited;
         task.reason = Some("reply allowance reached; input remains pending".into());
         save_task(&store.connection, task).map_err(unavailable)?;
         return Ok(false);
@@ -69,7 +70,7 @@ pub(crate) fn take(
             return Ok(None);
         };
         // Pause/expiry may let the current run finish, but cannot admit more work.
-        if round.state != "active" || round.expires_at <= now_ms() {
+        if round.state != DiscussionState::Active || round.expires_at <= now_ms() {
             return Ok(None);
         }
         let messaging = Messaging::open(
@@ -190,7 +191,7 @@ pub(crate) fn take(
                 "input_mode":mode,"conversation":input.conversation,"your_principal":input.principal,
                 "discussion":input.discussion,"messages":messages});
             if content.to_string().len() > 128 * 1024 {
-                input.state = "failed".into();
+                input.state = TaskState::Failed;
                 input.reason = Some("queued input exceeds 128 KiB".into());
                 save_task(&store.connection, &input).map_err(unavailable)?;
                 continue;
@@ -221,14 +222,14 @@ pub(crate) fn decide(
 ) -> Result<bool> {
     crate::scheduler::guarded_store(home, parent, |store| {
         let mut task = store.get(&input.task.id).map_err(unavailable)?;
-        if task.state != "input" || task.version != input.task.version {
+        if task.state != TaskState::Input || task.version != input.task.version {
             return Err(RuntimeError::Canceled);
         }
         task.record_decision(decision)?;
         let accepted = match decision {
             ParticipationDecision::Participate { .. } => charge(store, &mut task)?,
             ParticipationDecision::Silent { .. } => {
-                task.state = "silent".into();
+                task.state = TaskState::Silent;
                 false
             }
             ParticipationDecision::Wait { wake, .. } => {
@@ -352,10 +353,10 @@ pub(crate) fn fail_decision(
 ) -> Result<()> {
     crate::scheduler::guarded_store(home, parent, |store| {
         let mut task = store.get(&input.task.id).map_err(unavailable)?;
-        if task.state != "input" || task.version != input.task.version {
+        if task.state != TaskState::Input || task.version != input.task.version {
             return Err(RuntimeError::Canceled);
         }
-        task.state = "failed".into();
+        task.state = TaskState::Failed;
         task.reason = Some(format!("participation: {error}"));
         store
             .connection

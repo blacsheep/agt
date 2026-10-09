@@ -1,5 +1,5 @@
 use super::*;
-use crate::{ApprovalHandler, ApprovalRequest};
+use crate::{ApprovalHandler, ApprovalRequest, DeliveryProgress};
 pub(super) struct PendingApproval {
     pub request: ApprovalRequest,
     pub host_id: String,
@@ -101,11 +101,11 @@ impl Codex {
             } else {
                 json!({"decision":decision})
             };
-            handler.delivery(&entry.host_id, "sending")?;
+            handler.delivery(&entry.host_id, DeliveryProgress::Sending)?;
             self.transport
                 .send(json!({"id":entry.request.rpc_id,"result":result}))?;
             entry.sent = true;
-            handler.delivery(&entry.host_id, "sent")?;
+            handler.delivery(&entry.host_id, DeliveryProgress::Sent)?;
         }
         Ok(())
     }

@@ -1,5 +1,6 @@
 use super::control::{blocked, check_scope, open_im};
 use super::*;
+use crate::TaskState;
 use crate::{RunRecord, RunState, RunStore, ScheduledTask};
 use agt_im::{ConversationId, Message, PrincipalId, SendMessageRequest};
 use serde_json::json;
@@ -194,8 +195,12 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                 continue;
             } else if adapter.as_ref().is_some_and(|t| {
                 matches!(
-                    t.state.as_str(),
-                    "failed" | "interrupted" | "canceled" | "skipped" | "silent"
+                    t.state,
+                    TaskState::Failed
+                        | TaskState::Interrupted
+                        | TaskState::Canceled
+                        | TaskState::Skipped
+                        | TaskState::Silent
                 )
             }) {
                 ledger

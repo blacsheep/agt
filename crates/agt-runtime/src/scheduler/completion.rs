@@ -1,5 +1,6 @@
 //! Persist Run outcomes and publish replies under the existing execution fence.
 use super::guarded;
+use crate::TaskState;
 use crate::{RunState, RuntimeError, ScheduleStore, ScheduledTask, schedule_store::now_ms};
 use agt_core::CancellationToken;
 use agt_im::{ConversationId, MessageId, PrincipalId};
@@ -26,7 +27,7 @@ pub(super) fn settle(
     if record.state == RunState::Completed {
         let output = record.output.as_deref().unwrap_or("");
         if token.is_canceled() {
-            task.state = "canceled".into();
+            task.state = TaskState::Canceled;
             store.update(task, now_ms())?;
             return Ok(());
         }

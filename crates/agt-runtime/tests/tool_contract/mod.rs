@@ -645,6 +645,6 @@ fn mounted_mcp_still_requires_per_call_approval() {
         .list(None, None)
         .unwrap()
         .remove(0);
-    assert_eq!(item.state, "denied");
-    assert_eq!(item.delivery, "resolved");
+    assert_eq!(item.state, agt_runtime::approval::ApprovalState::Denied);
+    assert_eq!(item.delivery, agt_runtime::approval::Delivery::Resolved);
 }

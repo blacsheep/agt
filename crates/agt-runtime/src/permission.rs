@@ -1,5 +1,5 @@
 //! Native-only permission stages. Policies cannot execute tools or bypass service authorization.
-use crate::approval::{ApprovalStore, Scope};
+use crate::approval::{ApprovalState, ApprovalStore, DecisionOrigin, Delivery, Scope};
 use crate::{Result, RuntimeError};
 use agt_config::runtime::{PermissionConfig, PermissionMode};
 use serde_json::{Value, json};
@@ -78,7 +78,7 @@ impl PermissionLoop {
         let request = json!({"tool":tool,"arguments":args,"policy":self.config,"reviewer_fingerprint":self.reviewer_fingerprint(),"options":[{"label":"批准本次调用","value":"allow"},{"label":"拒绝本次调用","value":"deny"},{"label":"取消执行","value":"cancel"}]});
         let item = store.create(
             scope,
-            "native",
+            crate::approval::ApprovalSource::Native,
             call,
             request,
             u64::from(self.config.request_timeout_seconds),
@@ -96,9 +96,11 @@ impl PermissionLoop {
         loop {
             check()?;
             let current = store.poll(&item.id)?;
-            if current.delivery == "invalidated"
-                || matches!(current.state.as_str(), "expired" | "canceled")
-                    && current.decision.is_none()
+            if current.delivery == Delivery::Invalidated
+                || matches!(
+                    current.state,
+                    ApprovalState::Expired | ApprovalState::Canceled
+                ) && current.decision.is_none()
             {
                 return Err(RuntimeError::Stopped(crate::StopCode::CancellationRequested).into());
             }
@@ -110,7 +112,7 @@ impl PermissionLoop {
                         RuntimeError::Stopped(crate::StopCode::CancellationRequested).into(),
                     );
                 }
-                store.change(&item.id, None, Some("resolved"))?;
+                store.change(&item.id, None, Some(Delivery::Resolved))?;
                 return Ok(decision == "allow");
             }
             let config = agt_config::runtime::RuntimeConfig::load(&self.home)?.permissions;
@@ -123,7 +125,9 @@ impl PermissionLoop {
                 plugin = active.start_policy(&store, &item.id, context.clone())?;
                 continue;
             }
-            if current.state == "reviewing" || active.config.mode == PermissionMode::AutoAllow {
+            if current.state == ApprovalState::Reviewing
+                || active.config.mode == PermissionMode::AutoAllow
+            {
                 match plugin.poll() {
                     decision @ (Decision::Allow(_) | Decision::Deny(_)) => {
                         let allow = matches!(&decision, Decision::Allow(_));
@@ -138,9 +142,9 @@ impl PermissionLoop {
                                 &reason,
                                 None,
                                 Some(if active.config.mode == PermissionMode::AutoAllow {
-                                    "auto_allow"
+                                    DecisionOrigin::AutoAllow
                                 } else {
-                                    "model_review"
+                                    DecisionOrigin::ModelReview
                                 }),
                             )
                             .is_err()

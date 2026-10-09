@@ -17,7 +17,7 @@ fn explicit_parallel_work_respects_atomic_resource_and_identity_rules() {
     assert!(store.claim(&b,"scheduler:one",0).unwrap().is_some());
     assert!(store.claim(&c,"scheduler:one",0).unwrap().is_none());
     assert!(store.claim(&serial,"scheduler:one",0).unwrap().is_none());
-    first.state="completed".into();store.update(&first,0).unwrap();
+    first.state=crate::TaskState::Completed;store.update(&first,0).unwrap();
     assert!(store.claim(&c,"scheduler:one",0).unwrap().is_some());
 }
 #[test]
@@ -56,7 +56,7 @@ fn unknown_results_keep_resources_until_reconciled() {
     let b=queued_work(&mut store,2,"b",true,"game:1");
     let mut task=store.claim(&a,"scheduler:one",0).unwrap().unwrap();
     let work=task.work_id.clone().unwrap();
-    task.state="interrupted".into();store.update(&task,0).unwrap();
+    task.state=crate::TaskState::Interrupted;store.update(&task,0).unwrap();
     store.connection.execute("UPDATE work_items SET record=json_set(record,'$.state','outcome_unknown','$.run_id','lost-run','$.reason','lost owner') WHERE id=?1",[&work]).unwrap();
     assert!(store.claim(&b,"scheduler:one",0).unwrap().is_none());
     store.connection.execute("UPDATE work_items SET record=json_set(record,'$.state','failed','$.error','confirmed stopped') WHERE id=?1",[&work]).unwrap();

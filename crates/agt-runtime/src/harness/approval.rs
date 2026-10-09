@@ -13,7 +13,7 @@ impl agt_harness::ApprovalHandler for Bridge<'_> {
             .store
             .create(
                 &self.scope,
-                "harness",
+                crate::approval::ApprovalSource::Harness,
                 &key,
                 serde_json::to_value(request)?,
                 600,
@@ -23,18 +23,21 @@ impl agt_harness::ApprovalHandler for Bridge<'_> {
     fn poll(&mut self, id: &str) -> anyhow::Result<Option<Value>> {
         (self.check)()?;
         let item = self.store.poll(id)?;
-        if matches!(
-            item.delivery.as_str(),
-            "invalidated" | "unknown" | "sent" | "resolved"
-        ) || item.state == "expired"
+        if item.delivery.is_final()
+            || item.delivery == crate::approval::Delivery::Sent
+            || item.state == crate::approval::ApprovalState::Expired
         {
             anyhow::bail!("approval expired or invalidated")
         }
         Ok(self.store.apply_harness_mode(item)?.decision)
     }
-    fn delivery(&mut self, id: &str, state: &str) -> anyhow::Result<()> {
+    fn delivery(
+        &mut self,
+        id: &str,
+        progress: agt_harness::DeliveryProgress,
+    ) -> anyhow::Result<()> {
         (self.check)()?;
-        self.store.change(id, None, Some(state))
+        self.store.change(id, None, Some(progress.into()))
     }
 }
 impl Drop for Bridge<'_> {

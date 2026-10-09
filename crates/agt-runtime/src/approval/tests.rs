@@ -17,11 +17,11 @@ fn request() -> Value {
 fn decisions_are_conditional_and_bound_to_execution_and_options() {
     let (_home, store, scope) = fixture();
     let item = store
-        .create(&scope, "native", "call", request(), 600)
+        .create(&scope, ApprovalSource::Native, "call", request(), 600)
         .unwrap();
     assert_eq!(
         store
-            .create(&scope, "native", "call", request(), 600)
+            .create(&scope, ApprovalSource::Native, "call", request(), 600)
             .unwrap()
             .id,
         item.id
@@ -30,12 +30,12 @@ fn decisions_are_conditional_and_bound_to_execution_and_options() {
     restarted.execution_id = "different host".into();
     assert!(
         store
-            .create(&restarted, "native", "call", request(), 600)
+            .create(&restarted, ApprovalSource::Native, "call", request(), 600)
             .is_err()
     );
     assert!(
         store
-            .create(&scope, "native", "call", json!({}), 600)
+            .create(&scope, ApprovalSource::Native, "call", json!({}), 600)
             .is_err()
     );
     assert!(
@@ -46,33 +46,45 @@ fn decisions_are_conditional_and_bound_to_execution_and_options() {
     let approved = store
         .decide(&item.id, 1, json!("allow"), "checked", None)
         .unwrap();
-    assert_eq!(approved.state, "approved");
+    assert_eq!(approved.state, ApprovalState::Approved);
     assert!(store.decide(&item.id, 1, json!("deny"), "", None).is_err());
     store.fallback(&item.id, 1, "late model").unwrap();
     assert_eq!(store.get(&item.id, None).unwrap().reason, "checked");
     store.invalidate_run(&scope.run_id).unwrap();
-    assert_eq!(store.poll(&item.id).unwrap().delivery, "invalidated");
-    assert!(store.change(&item.id, None, Some("sending")).is_err());
+    assert_eq!(
+        store.poll(&item.id).unwrap().delivery,
+        Delivery::Invalidated
+    );
+    assert!(
+        store
+            .change(&item.id, None, Some(Delivery::Sending))
+            .is_err()
+    );
 }
 #[test]
 fn expiration_and_lost_lease_never_authorize_or_replay() {
     let (_home, store, scope) = fixture();
     let expired = store
-        .create(&scope, "native", "expired", request(), 0)
+        .create(&scope, ApprovalSource::Native, "expired", request(), 0)
         .unwrap();
     assert!(
         store
             .decide(&expired.id, 1, json!("allow"), "", None)
             .is_err()
     );
-    assert_eq!(store.get(&expired.id, None).unwrap().state, "expired");
+    assert_eq!(
+        store.get(&expired.id, None).unwrap().state,
+        ApprovalState::Expired
+    );
     let sending = store
-        .create(&scope, "harness", "sending", request(), 600)
+        .create(&scope, ApprovalSource::Harness, "sending", request(), 600)
         .unwrap();
     store
         .decide(&sending.id, 1, json!("allow"), "", None)
         .unwrap();
-    store.change(&sending.id, None, Some("sending")).unwrap();
+    store
+        .change(&sending.id, None, Some(Delivery::Sending))
+        .unwrap();
     store
         .db
         .execute(
@@ -80,7 +92,7 @@ fn expiration_and_lost_lease_never_authorize_or_replay() {
             [&sending.id],
         )
         .unwrap();
-    assert_eq!(store.poll(&sending.id).unwrap().delivery, "unknown");
+    assert_eq!(store.poll(&sending.id).unwrap().delivery, Delivery::Unknown);
 }
 #[test]
 fn human_approval_requires_owner_membership_and_agents_are_read_only() {
@@ -123,7 +135,7 @@ fn human_approval_requires_owner_membership_and_agents_are_read_only() {
     scope.conversation = Some(chat["id"].as_str().unwrap().into());
     scope.principal = Some("a".into());
     let item = store
-        .create(&scope, "native", "call", request(), 600)
+        .create(&scope, ApprovalSource::Native, "call", request(), 600)
         .unwrap();
     assert!(store.get(&item.id, Some("a")).is_ok());
     assert!(store.get(&item.id, Some("outsider")).is_err());
@@ -149,7 +161,7 @@ fn concurrent_creates_share_one_record() {
                 threads.spawn(|| {
                     ApprovalStore::open(home.path())
                         .unwrap()
-                        .create(&scope, "native", "same", request(), 600)
+                        .create(&scope, ApprovalSource::Native, "same", request(), 600)
                         .unwrap()
                         .id
                 })
@@ -165,7 +177,13 @@ fn harness_mode_applies_to_waiting_and_future_requests_and_can_be_disabled() {
     let (home, store, scope) = fixture();
     let request = json!({"method":"item/commandExecution/requestApproval","options":[{"value":"accept"},{"value":"acceptForSession"},{"value":"decline"}]});
     let waiting = store
-        .create(&scope, "harness", "waiting", request.clone(), 600)
+        .create(
+            &scope,
+            ApprovalSource::Harness,
+            "waiting",
+            request.clone(),
+            600,
+        )
         .unwrap();
     assert!(
         store
@@ -179,9 +197,15 @@ fn harness_mode_applies_to_waiting_and_future_requests_and_can_be_disabled() {
     config.save(home.path()).unwrap();
     let approved = store.apply_harness_mode(waiting).unwrap();
     assert_eq!(approved.decision, Some(json!("accept")));
-    assert_eq!(approved.decision_origin.as_deref(), Some("auto_allow"));
+    assert_eq!(approved.decision_origin, Some(DecisionOrigin::AutoAllow));
     let future = store
-        .create(&scope, "harness", "future", request.clone(), 600)
+        .create(
+            &scope,
+            ApprovalSource::Harness,
+            "future",
+            request.clone(),
+            600,
+        )
         .unwrap();
     assert_eq!(
         store.apply_harness_mode(future).unwrap().decision,
@@ -189,7 +213,13 @@ fn harness_mode_applies_to_waiting_and_future_requests_and_can_be_disabled() {
     );
     let permissions = json!({"method":"item/permissions/requestApproval","params":{"permissions":{"network":{"enabled":true}}},"options":[{"value":{"permissions":{},"scope":"turn"}},{"value":{"permissions":{"network":{"enabled":true}},"scope":"turn"}}]});
     let item = store
-        .create(&scope, "harness", "permissions", permissions, 600)
+        .create(
+            &scope,
+            ApprovalSource::Harness,
+            "permissions",
+            permissions,
+            600,
+        )
         .unwrap();
     assert_eq!(
         store.apply_harness_mode(item).unwrap().decision.unwrap()["permissions"]["network"]["enabled"],
@@ -198,7 +228,7 @@ fn harness_mode_applies_to_waiting_and_future_requests_and_can_be_disabled() {
     let item = store
         .create(
             &scope,
-            "harness",
+            ApprovalSource::Harness,
             "session-only",
             json!({"options":[{"value":"acceptForSession"}]}),
             600,
@@ -208,7 +238,13 @@ fn harness_mode_applies_to_waiting_and_future_requests_and_can_be_disabled() {
     config.permissions.harness_mode = agt_config::runtime::HarnessPermissionMode::Manual;
     config.save(home.path()).unwrap();
     let item = store
-        .create(&scope, "harness", "manual-again", request, 600)
+        .create(
+            &scope,
+            ApprovalSource::Harness,
+            "manual-again",
+            request,
+            600,
+        )
         .unwrap();
     assert!(store.apply_harness_mode(item).unwrap().decision.is_none());
 }

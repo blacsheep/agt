@@ -1,5 +1,6 @@
 //! Orchestrate one claimed task: admission, context, decision or Run, settlement.
 use super::{admission, backend::ScheduledEngine, completion, guard::ScheduledModel};
+use crate::TaskState;
 use crate::schedule_state::ClaimDeferral;
 use crate::{
     MessageTrigger, ModelClient, RunRequest, Runtime, ScheduleStore, ScheduledTask,
@@ -51,7 +52,7 @@ pub(crate) fn execute(
         trigger,
         ..
     } = admitted;
-    if task.state == "evaluating" {
+    if task.state == TaskState::Evaluating {
         return engine.evaluate(&mut store, &mut task, &mut scheduled_model, &input);
     }
     let depth = trigger.metadata["automated_depth"]
@@ -118,7 +119,7 @@ fn prepare_input(
         .filter(|t| {
             t.conversation == task.conversation
                 && t.id != task.id
-                && matches!(t.state.as_str(), "evaluating" | "ready_to_reply" | "responding" | "waiting")
+                && matches!(t.state, TaskState::Evaluating | TaskState::ReadyToReply | TaskState::Responding | TaskState::Waiting)
         })
         .map(|t| json!({"principal":t.principal,"state":t.state,"wake_at":t.due_at,"waiting_for_quiet":t.quiet}))
         .collect();

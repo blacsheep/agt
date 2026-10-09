@@ -58,7 +58,7 @@ fn codex_startup_failure_does_not_poison_the_chat_session() {
         )
         .unwrap();
         let saved = scheduler.store.get(&task.id).unwrap();
-        assert_eq!(saved.state, expected, "{key}: {:?}", saved.reason);
+        assert_eq!(saved.state.as_str(), expected, "{key}: {:?}", saved.reason);
         assert_eq!(sessions.get(&session.id).unwrap().busy, key == "disconnect");
         if key == "first" {
             std::fs::remove_file(home.path().join("startup-fails")).unwrap();

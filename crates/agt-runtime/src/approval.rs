@@ -11,22 +11,95 @@ mod control;
 #[cfg(test)]
 mod tests;
 
+crate::string_enum::string_enum! {
+    pub enum ApprovalSource {
+        Native = "native",
+        Harness = "harness",
+    }
+}
+
+crate::string_enum::string_enum! {
+    /// Decision state. Only Native model review uses `Reviewing`.
+    pub enum ApprovalState {
+        Reviewing = "reviewing",
+        AwaitingHuman = "awaiting_human",
+        Approved = "approved",
+        Denied = "denied",
+        Canceled = "canceled",
+        Expired = "expired",
+    }
+}
+
+impl ApprovalState {
+    pub fn is_pending(self) -> bool {
+        matches!(self, Self::Reviewing | Self::AwaitingHuman)
+    }
+}
+
+crate::string_enum::string_enum! {
+    /// Whether a decision reached the requesting engine. Native requests stay `NotSent`
+    /// until applied to the call, then become `Resolved`.
+    pub enum Delivery {
+        NotSent = "not_sent",
+        Sending = "sending",
+        Sent = "sent",
+        Resolved = "resolved",
+        Invalidated = "invalidated",
+        Unknown = "unknown",
+    }
+}
+
+impl Delivery {
+    /// No further delivery transition is possible.
+    pub fn is_final(self) -> bool {
+        matches!(self, Self::Resolved | Self::Invalidated | Self::Unknown)
+    }
+
+    /// Terminal delivery for a request abandoned in this state.
+    fn abandoned(self) -> Self {
+        if self == Self::Sending {
+            Self::Unknown
+        } else {
+            Self::Invalidated
+        }
+    }
+}
+
+impl From<agt_harness::DeliveryProgress> for Delivery {
+    fn from(progress: agt_harness::DeliveryProgress) -> Self {
+        match progress {
+            agt_harness::DeliveryProgress::Sending => Self::Sending,
+            agt_harness::DeliveryProgress::Sent => Self::Sent,
+            agt_harness::DeliveryProgress::Resolved => Self::Resolved,
+        }
+    }
+}
+
+crate::string_enum::string_enum! {
+    pub enum DecisionOrigin {
+        Human = "human",
+        LocalAdmin = "local_admin",
+        AutoAllow = "auto_allow",
+        ModelReview = "model_review",
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Approval {
     pub id: String,
     pub revision: i64,
-    pub source: String,
+    pub source: ApprovalSource,
     pub run_id: String,
     pub work_id: Option<String>,
     pub conversation: Option<String>,
     pub principal: Option<String>,
     pub request: Value,
-    pub state: String,
+    pub state: ApprovalState,
     pub decision: Option<Value>,
     pub reason: String,
     pub actor: Option<String>,
-    pub decision_origin: Option<String>,
-    pub delivery: String,
+    pub decision_origin: Option<DecisionOrigin>,
+    pub delivery: Delivery,
     pub created_at: i64,
     pub expires_at: i64,
 }
@@ -84,7 +157,7 @@ impl ApprovalStore {
     pub(crate) fn create(
         &self,
         scope: &Scope,
-        source: &str,
+        source: ApprovalSource,
         key: &str,
         request: Value,
         timeout: u64,
@@ -114,18 +187,18 @@ impl ApprovalStore {
         let item = Approval {
             id: uuid::Uuid::new_v4().to_string(),
             revision: 1,
-            source: source.into(),
+            source,
             run_id: scope.run_id.clone(),
             work_id: scope.task.as_ref().and_then(|t| t.work_id.clone()),
             conversation: scope.conversation.clone(),
             principal: scope.principal.clone(),
             request,
-            state: "awaiting_human".into(),
+            state: ApprovalState::AwaitingHuman,
             decision: None,
             reason: String::new(),
             actor: None,
             decision_origin: None,
-            delivery: "not_sent".into(),
+            delivery: Delivery::NotSent,
             created_at: now(),
             expires_at: now().saturating_add((timeout.min(86400) * 1000) as i64),
         };
@@ -182,11 +255,11 @@ impl ApprovalStore {
         self.reconcile()?;
         let item = self.raw(id)?;
         if let Some(actor) = item.actor.as_deref()
-            && item.decision_origin.as_deref() == Some("human")
-            && item.delivery == "not_sent"
+            && item.decision_origin == Some(DecisionOrigin::Human)
+            && item.delivery == Delivery::NotSent
             && !self.visible(&item, Some(actor), true)?
         {
-            self.change(id, None, Some("invalidated"))?;
+            self.change(id, None, Some(Delivery::Invalidated))?;
             return self.raw(id);
         }
         self.db.execute(
@@ -198,26 +271,23 @@ impl ApprovalStore {
     pub(crate) fn change(
         &self,
         id: &str,
-        state: Option<&str>,
-        delivery: Option<&str>,
+        state: Option<ApprovalState>,
+        delivery: Option<Delivery>,
     ) -> Result<()> {
         self.reconcile()?;
         let old = self.raw(id)?;
         let mut next = old.clone();
         if let Some(state) = state {
-            if old.decision.is_some() || old.delivery != "not_sent" {
+            if old.decision.is_some() || old.delivery != Delivery::NotSent {
                 return Ok(());
             }
-            next.state = state.into();
+            next.state = state;
         }
         if let Some(delivery) = delivery {
-            if matches!(
-                old.delivery.as_str(),
-                "invalidated" | "unknown" | "resolved"
-            ) {
+            if old.delivery.is_final() {
                 bail!("approval is no longer live");
             }
-            next.delivery = delivery.into();
+            next.delivery = delivery;
         }
         next.revision += 1;
         match self.update(&old, &next) {
@@ -230,24 +300,11 @@ impl ApprovalStore {
     }
     pub(crate) fn invalidate_run(&self, run: &str) -> Result<()> {
         for item in self.all()? {
-            if item.run_id == run
-                && !matches!(
-                    item.delivery.as_str(),
-                    "resolved" | "invalidated" | "unknown"
-                )
-            {
+            if item.run_id == run && !item.delivery.is_final() {
                 self.change(
                     &item.id,
-                    if item.decision.is_none() {
-                        Some("canceled")
-                    } else {
-                        None
-                    },
-                    Some(if item.delivery == "sending" {
-                        "unknown"
-                    } else {
-                        "invalidated"
-                    }),
+                    item.decision.is_none().then_some(ApprovalState::Canceled),
+                    Some(item.delivery.abandoned()),
                 )?;
             }
         }
@@ -260,7 +317,7 @@ impl ApprovalStore {
         }
         let mut next = old.clone();
         next.revision += 1;
-        next.state = "awaiting_human".into();
+        next.state = ApprovalState::AwaitingHuman;
         next.reason = reason.into();
         match self.update(&old, &next) {
             Ok(()) => Ok(()),
@@ -283,28 +340,19 @@ impl ApprovalStore {
             .collect::<rusqlite::Result<Vec<_>>>()?;
         for text in rows {
             let old: Approval = serde_json::from_str(&text)?;
-            if matches!(
-                old.delivery.as_str(),
-                "resolved" | "invalidated" | "unknown"
-            ) {
+            if old.delivery.is_final() {
                 continue;
             }
             let mut next = old.clone();
             next.revision += 1;
             if next.decision.is_none() {
                 next.state = if now() >= next.expires_at {
-                    "expired"
+                    ApprovalState::Expired
                 } else {
-                    "canceled"
-                }
-                .into();
+                    ApprovalState::Canceled
+                };
             }
-            next.delivery = if old.delivery == "sending" {
-                "unknown"
-            } else {
-                "invalidated"
-            }
-            .into();
+            next.delivery = old.delivery.abandoned();
             // A live decision may win this race; the next read will reconcile it.
             let _ = self.update(&old, &next);
         }

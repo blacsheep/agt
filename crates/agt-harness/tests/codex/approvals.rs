@@ -4,7 +4,7 @@ use serde_json::Value;
 #[derive(Default)]
 struct Human {
     requests: Vec<ApprovalRequest>,
-    deliveries: Vec<String>,
+    deliveries: Vec<agt_harness::DeliveryProgress>,
     choice: Option<Value>,
     polls: usize,
 }
@@ -21,8 +21,8 @@ impl ApprovalHandler for Human {
             None
         })
     }
-    fn delivery(&mut self, _: &str, state: &str) -> anyhow::Result<()> {
-        self.deliveries.push(state.into());
+    fn delivery(&mut self, _: &str, progress: agt_harness::DeliveryProgress) -> anyhow::Result<()> {
+        self.deliveries.push(progress);
         Ok(())
     }
 }
@@ -72,7 +72,10 @@ fn native_approval_responses_preserve_identity_and_original_turn() {
             .unwrap();
         assert_eq!(output, "approval returned");
         assert_eq!(human.requests.len(), 1);
-        assert_eq!(human.deliveries, vec!["sending", "sent", "resolved"]);
+        assert_eq!(human.deliveries, {
+            use agt_harness::DeliveryProgress::*;
+            vec![Sending, Sent, Resolved]
+        });
         drop(client);
         let log: Vec<Value> = std::fs::read_to_string(dir.path().join("protocol.jsonl"))
             .unwrap()

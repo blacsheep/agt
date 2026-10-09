@@ -1,6 +1,7 @@
 use super::*;
 use agt_config::runtime::PermissionMode;
 use agt_runtime::approval::ApprovalStore;
+use agt_runtime::approval::{ApprovalState, DecisionOrigin, Delivery};
 #[test]
 fn manual_denial_pairs_tool_result_without_executing_delegate() {
     let home = home();
@@ -44,8 +45,8 @@ fn manual_denial_pairs_tool_result_without_executing_delegate() {
         .list(None, None)
         .unwrap()
         .remove(0);
-    assert_eq!(a.state, "denied");
-    assert_eq!(a.delivery, "resolved");
+    assert_eq!(a.state, ApprovalState::Denied);
+    assert_eq!(a.delivery, Delivery::Resolved);
 }
 #[test]
 fn missing_reviewer_falls_back_to_human_and_cancellation_stops_tool() {
@@ -64,7 +65,7 @@ fn missing_reviewer_falls_back_to_human_and_cancellation_stops_tool() {
                 .list(None, None)
                 .unwrap()
                 .iter()
-                .any(|a| a.state == "awaiting_human" && !a.reason.is_empty())
+                .any(|a| a.state == ApprovalState::AwaitingHuman && !a.reason.is_empty())
             {
                 cancel.cancel();
                 break;
@@ -88,7 +89,7 @@ fn missing_reviewer_falls_back_to_human_and_cancellation_stops_tool() {
         .list(None, None)
         .unwrap()
         .remove(0);
-    assert_eq!(a.delivery, "invalidated");
+    assert_eq!(a.delivery, Delivery::Invalidated);
     assert!(a.decision.is_none());
 }
 
@@ -148,5 +149,10 @@ fn switching_mode_releases_waiting_native_call_and_applies_to_next_call() {
         .list(None, None)
         .unwrap();
     assert_eq!(approvals.len(), 2);
-    assert!(approvals.iter().all(|a|a.decision_origin.as_deref()==Some("auto_allow")&&a.delivery=="resolved"));
+    assert!(
+        approvals
+            .iter()
+            .all(|a| a.decision_origin == Some(DecisionOrigin::AutoAllow)
+                && a.delivery == Delivery::Resolved)
+    );
 }

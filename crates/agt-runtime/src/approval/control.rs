@@ -79,7 +79,7 @@ impl ApprovalStore {
         decision: Value,
         reason: &str,
         viewer: Option<&str>,
-        source: Option<&str>,
+        origin: Option<DecisionOrigin>,
     ) -> Result<Approval> {
         self.reconcile()?;
         let old = self.raw(id)?;
@@ -88,8 +88,8 @@ impl ApprovalStore {
         }
         if old.revision != revision
             || old.decision.is_some()
-            || !matches!(old.state.as_str(), "reviewing" | "awaiting_human")
-            || old.delivery != "not_sent"
+            || !old.state.is_pending()
+            || old.delivery != Delivery::NotSent
         {
             bail!("approval is no longer pending; refresh")
         }
@@ -119,27 +119,28 @@ impl ApprovalStore {
         next.revision += 1;
         next.decision = Some(decision.clone());
         next.reason = reason.into();
-        next.actor = Some(source.or(viewer).unwrap_or("local-admin").into());
-        next.decision_origin = Some(
-            source
-                .unwrap_or(if viewer.is_some() {
-                    "human"
-                } else {
-                    "local_admin"
-                })
+        next.actor = Some(
+            origin
+                .map(DecisionOrigin::as_str)
+                .or(viewer)
+                .unwrap_or("local-admin")
                 .into(),
         );
+        next.decision_origin = Some(origin.unwrap_or(if viewer.is_some() {
+            DecisionOrigin::Human
+        } else {
+            DecisionOrigin::LocalAdmin
+        }));
         next.state = if decision == "cancel" {
-            "canceled"
+            ApprovalState::Canceled
         } else if decision == "deny"
             || decision == "decline"
             || decision.get("permissions") == Some(&json!({}))
         {
-            "denied"
+            ApprovalState::Denied
         } else {
-            "approved"
-        }
-        .into();
+            ApprovalState::Approved
+        };
         self.update(&old, &next)?;
         Ok(next)
     }

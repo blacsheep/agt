@@ -1,5 +1,6 @@
 //! Scheduled-task transitions. These operations only mutate the in-memory record.
 //! Callers retain admission checks, transactions, accounting and persistence.
+use crate::TaskState;
 use crate::participation::{ParticipationDecision, WakeCondition};
 use crate::schedule_store::{RecordedDecision, now_ms};
 use crate::{RunRecord, RunState, ScheduledTask};
@@ -19,7 +20,7 @@ pub(crate) enum ClaimDeferral {
 
 impl ScheduledTask {
     pub(crate) fn defer_claim(&mut self, cause: ClaimDeferral) {
-        self.state = "queued".into();
+        self.state = TaskState::Queued;
         match cause {
             ClaimDeferral::DisabledBinding => {
                 self.reason = Some("task blocked by disabled binding".into())
@@ -44,12 +45,12 @@ impl ScheduledTask {
     }
 
     pub(crate) fn skip_ineligible_message(&mut self) {
-        self.state = "skipped".into();
+        self.state = TaskState::Skipped;
         self.reason = Some("response policy or message state".into());
     }
 
     pub(crate) fn ready_external_reply(&mut self) {
-        self.state = "ready_to_reply".into();
+        self.state = TaskState::ReadyToReply;
         self.reason = Some(
             "framework: external engine runs only for direct messages or explicit mentions".into(),
         );
@@ -58,14 +59,14 @@ impl ScheduledTask {
     }
 
     pub(crate) fn interrupt_publication(&mut self) {
-        self.state = "interrupted".into();
+        self.state = TaskState::Interrupted;
         self.reason =
             Some("reply publication stopped or unavailable; inspect run before retrying".into());
     }
 
     /// Resume a blocked task without changing its claim, wait settings or epoch.
     pub(crate) fn resume_pending(&mut self, now: i64) {
-        self.state = "queued".into();
+        self.state = TaskState::Queued;
         self.due_at = now;
         self.reason = None;
     }
@@ -84,19 +85,22 @@ impl ScheduledTask {
     }
 
     pub(crate) fn recover_expired_lease(&mut self) {
-        self.state = if self.state == "evaluating" {
-            "queued"
+        self.state = if self.state == TaskState::Evaluating {
+            TaskState::Queued
         } else {
-            "interrupted"
-        }
-        .into();
+            TaskState::Interrupted
+        };
         self.reason = Some("coordinator lease expired".into());
         self.owner = None;
         self.version += 1;
     }
 
     pub(crate) fn claim_execution(&mut self, replying: bool, epoch: i64, owner: &str) {
-        self.state = if replying { "responding" } else { "evaluating" }.into();
+        self.state = if replying {
+            TaskState::Responding
+        } else {
+            TaskState::Evaluating
+        };
         self.usage_epoch = epoch;
         self.owner = Some(owner.into());
         self.version += 1;
@@ -105,12 +109,16 @@ impl ScheduledTask {
     /// Cancellation of pending work is distinct from asking a running engine to stop.
     pub(crate) fn cancel_pending(&mut self) -> bool {
         if !matches!(
-            self.state.as_str(),
-            "queued" | "waiting" | "ready_to_reply" | "limited" | "blocked"
+            self.state,
+            TaskState::Queued
+                | TaskState::Waiting
+                | TaskState::ReadyToReply
+                | TaskState::Limited
+                | TaskState::Blocked
         ) {
             return false;
         }
-        self.state = "canceled".into();
+        self.state = TaskState::Canceled;
         self.reason = Some("discussion ended, member removed or conversation unavailable".into());
         true
     }
@@ -136,9 +144,9 @@ impl ScheduledTask {
     ) -> serde_json::Result<()> {
         self.record_decision(decision)?;
         match decision {
-            ParticipationDecision::Silent { .. } => self.state = "silent".into(),
+            ParticipationDecision::Silent { .. } => self.state = TaskState::Silent,
             ParticipationDecision::Participate { .. } => {
-                self.state = "ready_to_reply".into();
+                self.state = TaskState::ReadyToReply;
                 self.due_at = now_ms();
                 self.quiet = false;
             }
@@ -151,7 +159,7 @@ impl ScheduledTask {
     }
 
     fn wait_for(&mut self, wake: &WakeCondition) {
-        self.state = "waiting".into();
+        self.state = TaskState::Waiting;
         match wake {
             WakeCondition::After { seconds } => {
                 self.quiet = false;
@@ -176,7 +184,7 @@ impl ScheduledTask {
     }
 
     pub(crate) fn defer_input(&mut self) {
-        self.state = "queued".into();
+        self.state = TaskState::Queued;
         self.owner = None;
         self.due_at = now_ms();
     }
@@ -187,7 +195,7 @@ impl ScheduledTask {
         run: &str,
         mode: InputMode,
     ) -> serde_json::Result<()> {
-        self.state = "input".into();
+        self.state = TaskState::Input;
         self.owner = parent.owner.clone();
         self.version += 1;
         self.run_id = Some(run.into());
@@ -200,63 +208,71 @@ impl ScheduledTask {
 
     pub(crate) fn is_terminal(&self) -> bool {
         matches!(
-            self.state.as_str(),
-            "completed"
-                | "silent"
-                | "skipped"
-                | "failed"
-                | "canceled"
-                | "interrupted"
-                | "outcome_unknown"
+            self.state,
+            TaskState::Completed
+                | TaskState::Silent
+                | TaskState::Skipped
+                | TaskState::Failed
+                | TaskState::Canceled
+                | TaskState::Interrupted
+                | TaskState::OutcomeUnknown
         )
     }
 
     /// Caller selects only uncompleted accepted inputs; completed turns stay final.
     pub(crate) fn settle_with_parent(&mut self, parent: &Self) {
-        self.state = parent.state.clone();
+        self.state = parent.state;
         self.reason = parent.reason.clone();
         // Retain the accepted Run even when a takeover has no Run attached to parent.
         self.owner = None;
     }
 
     pub(crate) fn complete_input_turn(&mut self, has_reply: bool) {
-        self.state = if has_reply { "completed" } else { "silent" }.into();
+        self.state = if has_reply {
+            TaskState::Completed
+        } else {
+            TaskState::Silent
+        };
         self.owner = None;
     }
 
     pub(crate) fn finish_work_run(&mut self, record: &RunRecord) {
         self.state = match record.state {
-            RunState::Completed => "completed",
-            RunState::Suspended => "suspended",
-            RunState::Running | RunState::Interrupted => "interrupted",
-            RunState::Canceled => "canceled",
-            RunState::Failed => "failed",
-            RunState::OutcomeUnknown => "outcome_unknown",
-        }
-        .into();
+            RunState::Completed => TaskState::Completed,
+            RunState::Suspended => TaskState::Suspended,
+            RunState::Running | RunState::Interrupted => TaskState::Interrupted,
+            RunState::Canceled => TaskState::Canceled,
+            RunState::Failed => TaskState::Failed,
+            RunState::OutcomeUnknown => TaskState::OutcomeUnknown,
+        };
         self.reason = record.error.clone();
     }
 
     pub(crate) fn finish_unsuccessful_reply(&mut self, record: &RunRecord) {
         self.state = match record.state {
-            RunState::Running | RunState::Interrupted => "interrupted",
-            RunState::Canceled => "canceled",
-            RunState::OutcomeUnknown => "outcome_unknown",
-            _ => "failed",
-        }
-        .into();
+            RunState::Running | RunState::Interrupted => TaskState::Interrupted,
+            RunState::Canceled => TaskState::Canceled,
+            RunState::OutcomeUnknown => TaskState::OutcomeUnknown,
+            _ => TaskState::Failed,
+        };
         self.reason = record.error.clone();
     }
 
     pub(crate) fn finish_published_reply(&mut self, output: &str, obligation: Option<&Value>) {
         self.state = if obligation.is_some_and(|o| o["report_required"] == true) {
             self.reason = Some("task_report_required: execution completed but the result report was not committed; inspect task_get and submit task_report".into());
-            "failed"
+            TaskState::Failed
         } else if output.trim() == "[[silent]]" {
             if self.work_notification && obligation.is_none() {
                 self.reason = Some("task notification was not handled; review task inbox".into());
-                "failed"
-            } else if self.work_notification { "completed" } else { "silent" }
-        } else { "completed" }.into();
+                TaskState::Failed
+            } else if self.work_notification {
+                TaskState::Completed
+            } else {
+                TaskState::Silent
+            }
+        } else {
+            TaskState::Completed
+        };
     }
 }

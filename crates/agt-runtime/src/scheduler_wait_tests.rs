@@ -84,7 +84,7 @@ pub(super) fn suspend(home: &Path, s: &mut Scheduler, chat: &str, parent: &str) 
     assert_eq!(model.step, 2);
     assert_eq!(
         s.store.get(&format!("work:{parent}")).unwrap().state,
-        "suspended"
+        TaskState::Suspended
     );
     model.child.unwrap()
 }
@@ -134,7 +134,7 @@ fn native_wait_restarts_and_continues_once_without_replaying_tools() {
     // A different task for the same principal can claim the released slot.
     let other = claim(&mut s, "a");
     let mut done = other.clone();
-    done.state = "completed".into();
+    done.state = TaskState::Completed;
     s.store.update(&done, now_ms()).unwrap();
     drop(s);
     let mut s = Scheduler::open(home.path(), 3).unwrap();
@@ -196,7 +196,7 @@ fn checkpoint_cannot_resume_until_old_execution_releases_slot() {
     let child = suspend(home.path(), &mut s, &chat, &parent);
     // Simulate the gap between checkpoint commit and scheduler's terminal update.
     let mut adapter = s.store.get(&format!("work:{parent}")).unwrap();
-    adapter.state = "responding".into();
+    adapter.state = TaskState::Responding;
     crate::schedule_store::save_task(&s.store.connection, &adapter).unwrap();
     let mut ledger = WorkLedger::open(home.path()).unwrap();
     let c = ledger.get(&child).unwrap();
@@ -216,7 +216,7 @@ fn checkpoint_cannot_resume_until_old_execution_releases_slot() {
         ledger.get(&parent).unwrap().state,
         WorkState::Running { .. }
     ));
-    adapter.state = "suspended".into();
+    adapter.state = TaskState::Suspended;
     crate::schedule_store::save_task(&s.store.connection, &adapter).unwrap();
     crate::work::reconcile(home.path()).unwrap();
     assert_eq!(ledger.get(&parent).unwrap().state, WorkState::Queued);
@@ -526,7 +526,7 @@ fn checkpoint_crash_gap_recovers_but_uncheckpointed_intent_is_unknown() {
         let (home, mut s, chat, parent) = setup();
         let child = suspend(home.path(), &mut s, &chat, &parent);
         let mut adapter = s.store.get(&format!("work:{parent}")).unwrap();
-        adapter.state = "responding".into();
+        adapter.state = TaskState::Responding;
         crate::schedule_store::save_task(&s.store.connection, &adapter).unwrap();
         if !checkpoint_committed {
             let runs = crate::RunStore::open(home.path()).unwrap();

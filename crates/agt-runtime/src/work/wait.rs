@@ -1,6 +1,7 @@
 //! Cooperative suspension with engine-specific committed checkpoints. An intent is not a released execution slot.
 use super::control::check_scope;
 use super::*;
+use crate::TaskState;
 use crate::{RunRecord, RunState, ScheduledTask};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -106,8 +107,8 @@ pub(super) fn reconcile(
     // fences interrupted workers before they can be considered here.
     if adapter.is_some_and(|t| {
         matches!(
-            t.state.as_str(),
-            "evaluating" | "responding" | "ready_to_reply"
+            t.state,
+            TaskState::Evaluating | TaskState::Responding | TaskState::ReadyToReply
         )
     }) {
         return Ok(());
@@ -182,7 +183,8 @@ pub(super) fn reconcile(
     // owns the scheduler write lock, so reset/end cannot interleave with this decision.
     let invalid = current.cancellation_requested.is_some()
         || check_scope(home, &scope_store, &current).is_err()
-        || adapter.is_none_or(|t| !matches!(t.state.as_str(), "suspended" | "interrupted"));
+        || adapter
+            .is_none_or(|t| !matches!(t.state, TaskState::Suspended | TaskState::Interrupted));
     if invalid {
         current.state = WorkState::Canceled {
             reason: "Task authorization changed while suspended.".into(),
@@ -210,7 +212,7 @@ pub(super) fn reconcile(
         )?;
         if let Some(adapter) = adapter {
             let mut task = adapter.clone();
-            task.state = "canceled".into();
+            task.state = TaskState::Canceled;
             task.reason = Some("task authorization changed while suspended".into());
             task.owner = None;
             task.version += 1;
@@ -287,7 +289,7 @@ pub(super) fn reconcile(
         [&current.id],
     )?;
     let mut task = adapter.unwrap().clone();
-    task.state = "queued".into();
+    task.state = TaskState::Queued;
     task.owner = None;
     task.version += 1;
     task.run_id = None;
@@ -305,7 +307,7 @@ pub(super) fn reconcile(
         };
         for value in notices {
             let mut notice: ScheduledTask = serde_json::from_str(&value)?;
-            notice.state = "canceled".into();
+            notice.state = TaskState::Canceled;
             notice.reason = Some("dependency result consumed by work continuation".into());
             notice.owner = None;
             notice.version += 1;

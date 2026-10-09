@@ -20,7 +20,7 @@ fn delegate(scheduler: &mut Scheduler, chat: &str) -> String {
         control.call("task_request", args).unwrap()["id"],
         item["id"]
     );
-    lead.state = "completed".into();
+    lead.state = TaskState::Completed;
     scheduler.store.update(&lead, now_ms()).unwrap();
     crate::work::reconcile(&scheduler.home).unwrap();
     scheduler.scan().unwrap();
@@ -169,7 +169,7 @@ fn lost_run_claim_is_unknown_and_never_requeued() {
     request.request_key = crate::work::run_key(&id);
     let mut runs = crate::RunStore::open(home.path()).unwrap();
     runs.claim(&request, None).unwrap(); // Crash before the work association.
-    task.state = "interrupted".into();
+    task.state = TaskState::Interrupted;
     scheduler.store.update(&task, now_ms()).unwrap();
     crate::work::reconcile(home.path()).unwrap();
     assert!(matches!(
@@ -716,7 +716,7 @@ fn title_metadata_failure_does_not_reclassify_successful_codex_execution() {
     )
     .unwrap();
     let completed = scheduler.store.get(&task.id).unwrap();
-    assert_eq!(completed.state, "completed");
+    assert_eq!(completed.state, TaskState::Completed);
     let run = crate::RunStore::open(home.path())
         .unwrap()
         .get(completed.run_id.as_deref().unwrap())

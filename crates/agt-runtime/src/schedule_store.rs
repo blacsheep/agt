@@ -22,13 +22,44 @@ pub struct RecordedDecision {
     pub through_seq: i64,
 }
 
+crate::string_enum::string_enum! {
+    /// Lifecycle of one scheduled delivery task.
+    pub enum TaskState {
+        Queued = "queued",
+        Evaluating = "evaluating",
+        ReadyToReply = "ready_to_reply",
+        Responding = "responding",
+        Waiting = "waiting",
+        Limited = "limited",
+        Blocked = "blocked",
+        Input = "input",
+        Suspended = "suspended",
+        Completed = "completed",
+        Silent = "silent",
+        Skipped = "skipped",
+        Failed = "failed",
+        Canceled = "canceled",
+        Interrupted = "interrupted",
+        OutcomeUnknown = "outcome_unknown",
+    }
+}
+
+crate::string_enum::string_enum! {
+    pub enum DiscussionState {
+        Active = "active",
+        Paused = "paused",
+        Limited = "limited",
+        Ended = "ended",
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScheduledTask {
     pub id: String,
     pub discussion: String,
     pub principal: String,
     pub conversation: String,
-    pub state: String,
+    pub state: TaskState,
     pub deliveries: Vec<i64>,
     pub message: String,
     pub through_seq: i64,
@@ -59,7 +90,7 @@ pub struct ScheduledTask {
 pub struct Discussion {
     pub id: String,
     pub conversation: String,
-    pub state: String,
+    pub state: DiscussionState,
     pub calls: u32,
     pub max_replies: Option<u32>,
     pub expires_at: i64,
@@ -431,8 +462,10 @@ impl ScheduleStore {
         let record: String =
             tx.query_row("SELECT record FROM tasks WHERE id=?1", [id], |r| r.get(0))?;
         let mut task: ScheduledTask = serde_json::from_str(&record)?;
-        if !matches!(task.state.as_str(), "queued" | "waiting" | "ready_to_reply")
-            || task.due_at > now
+        if !matches!(
+            task.state,
+            TaskState::Queued | TaskState::Waiting | TaskState::ReadyToReply
+        ) || task.due_at > now
         {
             return Ok(None);
         }
@@ -470,7 +503,7 @@ impl ScheduleStore {
         if !live || round.0 != "active" || round.1 <= now {
             return Ok(None);
         }
-        let replying = !task.decision_required || task.state == "ready_to_reply";
+        let replying = !task.decision_required || task.state == TaskState::ReadyToReply;
         if crate::work::execution_policy::blocker(&tx, &task, self.config.scheduler.parallel_work)?
             .is_some()
         {
@@ -495,7 +528,7 @@ impl ScheduleStore {
             .replies_per_agent
             .is_some_and(|limit| replies >= limit)
         {
-            task.state = "limited".into();
+            task.state = TaskState::Limited;
             task.reason = Some(format!(
                 "{} replies reached; send a new human message to reset",
                 self.config.scheduler.replies_per_agent.unwrap()
@@ -530,7 +563,7 @@ impl ScheduleStore {
         if !valid {
             return Ok(false);
         }
-        if matches!(task.state.as_str(), "blocked" | "queued") {
+        if matches!(task.state, TaskState::Blocked | TaskState::Queued) {
             let charged: bool = tx.query_row("SELECT t.state='responding' AND COALESCE(json_extract(t.record,'$.usage_epoch'),0)=d.last_human_seq FROM tasks t JOIN discussions d ON d.id=t.discussion WHERE t.id=?1", [&task.id], |r| r.get(0))?;
             if charged {
                 tx.execute(
@@ -552,7 +585,7 @@ impl ScheduleStore {
         let record: String =
             tx.query_row("SELECT record FROM tasks WHERE id=?1", [id], |r| r.get(0))?;
         let mut task: ScheduledTask = serde_json::from_str(&record)?;
-        if task.state == "ready_to_reply" && task.through_seq != seq {
+        if task.state == TaskState::ReadyToReply && task.through_seq != seq {
             task.invalidate_ready_snapshot(now);
             save_task(&tx, &task)?;
         }
@@ -699,7 +732,7 @@ mod tests {
             discussion: "round".into(),
             principal: principal.into(),
             conversation: conversation.into(),
-            state: "queued".into(),
+            state: TaskState::Queued,
             deliveries: vec![id],
             message: format!("message-{id}"),
             through_seq: id,
@@ -746,7 +779,7 @@ mod tests {
             ),
         ] {
             let mut task = task(id, &format!("agent-{id}"), "chat", false);
-            task.state = state.into();
+            task.state = state.parse().unwrap();
             task.reason = Some(reason.into());
             store.ingest(task).unwrap();
         }
@@ -754,15 +787,18 @@ mod tests {
         store.connection.execute_batch("ALTER TABLE discussions ADD COLUMN allow_mcp INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=17;").unwrap();
         drop(store);
         let store = ScheduleStore::open(home.path()).unwrap();
-        assert_eq!(store.discussion("round").unwrap().unwrap().state, "paused");
+        assert_eq!(
+            store.discussion("round").unwrap().unwrap().state,
+            DiscussionState::Paused
+        );
         assert!(store.candidates().unwrap().is_empty());
         let resumed = store.get("1").unwrap();
-        assert_eq!(resumed.state, "queued");
+        assert_eq!(resumed.state, TaskState::Queued);
         assert_eq!(resumed.version, 1);
         assert!(resumed.reason.is_none());
         assert!(resumed.owner.is_none());
-        assert_eq!(store.get("2").unwrap().state, "blocked");
-        assert_eq!(store.get("3").unwrap().state, "failed");
+        assert_eq!(store.get("2").unwrap().state, TaskState::Blocked);
+        assert_eq!(store.get("3").unwrap().state, TaskState::Failed);
         assert!(
             store
                 .connection
@@ -786,7 +822,10 @@ mod tests {
         let (_home, mut store) = fixture();
         store.ingest(task(1, "agent", "target", false)).unwrap();
         store.control("target", "end", 1).unwrap();
-        assert_eq!(store.discussion("round").unwrap().unwrap().state, "ended");
+        assert_eq!(
+            store.discussion("round").unwrap().unwrap().state,
+            DiscussionState::Ended
+        );
     }
 
     #[test]
@@ -808,7 +847,7 @@ mod tests {
         drop(store);
         let mut store = ScheduleStore::open(home.path()).unwrap();
         let queued = store.get("1").unwrap();
-        assert_eq!(queued.state, "queued");
+        assert_eq!(queued.state, TaskState::Queued);
         assert_eq!(queued.due_at, 2);
         assert!(!queued.quiet);
         assert!(queued.owner.is_none());
@@ -817,7 +856,7 @@ mod tests {
         assert_eq!(serde_json::to_value(&queued.last_decision).unwrap(), audit);
         assert!(!store.update(&waiting, 3).unwrap());
         let next = store.claim("1", "scheduler:one", 3).unwrap().unwrap();
-        assert_eq!(next.state, "evaluating");
+        assert_eq!(next.state, TaskState::Evaluating);
         assert_eq!(next.usage_epoch, 2);
         assert_eq!(store.status(3).unwrap().usage[0].replies, 0);
     }
@@ -868,20 +907,20 @@ mod tests {
         // Decisions can overlap each other and already-running direct replies.
         let mut c = store.claim("4", "scheduler:one", 0).unwrap().unwrap();
         let mut d = store.claim("5", "scheduler:one", 0).unwrap().unwrap();
-        c.state = "ready_to_reply".into();
-        d.state = "ready_to_reply".into();
+        c.state = TaskState::ReadyToReply;
+        d.state = TaskState::ReadyToReply;
         store.update(&c, 0).unwrap();
         store.update(&d, 0).unwrap();
         assert!(store.claim("4", "scheduler:one", 0).unwrap().is_none());
-        a.state = "completed".into();
-        b.state = "completed".into();
+        a.state = TaskState::Completed;
+        b.state = TaskState::Completed;
         store.update(&a, 0).unwrap();
         store.update(&b, 0).unwrap();
         assert!(store.claim("3", "scheduler:one", 0).unwrap().is_some());
         let mut reply = store.claim("4", "scheduler:one", 0).unwrap().unwrap();
-        assert_eq!(reply.state, "responding");
+        assert_eq!(reply.state, TaskState::Responding);
         assert!(store.claim("5", "scheduler:one", 0).unwrap().is_none());
-        reply.state = "completed".into();
+        reply.state = TaskState::Completed;
         store.update(&reply, 0).unwrap();
         assert!(store.claim("5", "scheduler:one", 0).unwrap().is_some());
     }
@@ -891,7 +930,7 @@ mod tests {
         let (home, mut store) = fixture();
         store.ingest(task(1, "a", "chat", true)).unwrap();
         let mut waiting = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
-        waiting.state = "waiting".into();
+        waiting.state = TaskState::Waiting;
         waiting.due_at = 30_000;
         store.update(&waiting, 0).unwrap();
         drop(store);
@@ -903,7 +942,7 @@ mod tests {
         assert_eq!(store.get("2").unwrap().deliveries, vec![2]);
         store.ingest(task(3, "a", "chat", false)).unwrap();
         let urgent = store.claim("3", "scheduler:one", 100).unwrap().unwrap();
-        assert_eq!(urgent.state, "responding");
+        assert_eq!(urgent.state, TaskState::Responding);
         assert_eq!(urgent.deliveries, vec![3]);
         assert!(!urgent.quiet);
     }
@@ -917,8 +956,8 @@ mod tests {
         let decision = store.claim("2", "scheduler:one", 0).unwrap().unwrap();
         assert!(!store.acquire("scheduler:two", 100).unwrap());
         assert!(store.acquire("scheduler:two", LEASE_MS + 1).unwrap());
-        assert_eq!(store.get("1").unwrap().state, "interrupted");
-        assert_eq!(store.get("2").unwrap().state, "queued");
+        assert_eq!(store.get("1").unwrap().state, TaskState::Interrupted);
+        assert_eq!(store.get("2").unwrap().state, TaskState::Queued);
         assert!(!store.update(&old, LEASE_MS + 1).unwrap());
         assert!(!store.debit(&decision, LEASE_MS + 1).unwrap());
         assert!(!store.authorized(&old, LEASE_MS + 1).unwrap());
@@ -944,11 +983,17 @@ mod tests {
         store.control("chat", "resume", 0).unwrap();
         let b = store.claim("2", "scheduler:one", 0).unwrap().unwrap();
         store.expire(0).unwrap();
-        assert_eq!(store.discussion("round").unwrap().unwrap().state, "active");
+        assert_eq!(
+            store.discussion("round").unwrap().unwrap().state,
+            DiscussionState::Active
+        );
         store.control("chat", "end", 0).unwrap();
         assert!(!store.authorized(&b, 0).unwrap());
         store.control("chat", "resume", 0).unwrap();
-        assert_eq!(store.discussion("round").unwrap().unwrap().state, "ended");
+        assert_eq!(
+            store.discussion("round").unwrap().unwrap().state,
+            DiscussionState::Ended
+        );
     }
 
     #[test]
@@ -958,7 +1003,7 @@ mod tests {
         for _ in 0..105 {
             let mut task = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
             assert!(store.debit(&task, 0).unwrap());
-            task.state = "waiting".into();
+            task.state = TaskState::Waiting;
             store.update(&task, 0).unwrap();
         }
         assert_eq!(store.status(0).unwrap().usage[0].replies, 0);
@@ -975,12 +1020,12 @@ mod tests {
                 .claim(&id.to_string(), "scheduler:one", 0)
                 .unwrap()
                 .unwrap();
-            reply.state = "completed".into();
+            reply.state = TaskState::Completed;
             store.update(&reply, 0).unwrap();
         }
         store.ingest(task(101, "a", "chat", false)).unwrap();
         assert!(store.claim("101", "scheduler:one", 0).unwrap().is_none());
-        assert_eq!(store.get("101").unwrap().state, "limited");
+        assert_eq!(store.get("101").unwrap().state, TaskState::Limited);
         store.control("chat", "resume", 0).unwrap();
         store.authorize_human("human-1", "chat", 1, 0).unwrap();
         assert_eq!(store.status(0).unwrap().usage[0].replies, 100);
@@ -1005,19 +1050,19 @@ mod tests {
         let (home, mut store) = fixture();
         store.ingest(task(1, "a", "chat", true)).unwrap();
         let mut ready = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
-        ready.state = "ready_to_reply".into();
+        ready.state = TaskState::ReadyToReply;
         store.update(&ready, 0).unwrap();
         drop(store);
         let mut store = ScheduleStore::open(home.path()).unwrap();
         assert!(store.acquire("scheduler:two", LEASE_MS + 1).unwrap());
-        assert_eq!(store.get("1").unwrap().state, "ready_to_reply");
+        assert_eq!(store.get("1").unwrap().state, TaskState::ReadyToReply);
         assert_eq!(store.status(LEASE_MS + 1).unwrap().usage[0].replies, 0);
         store.invalidate_ready("1", 2, LEASE_MS + 1).unwrap();
         let again = store
             .claim("1", "scheduler:two", LEASE_MS + 1)
             .unwrap()
             .unwrap();
-        assert_eq!(again.state, "evaluating");
+        assert_eq!(again.state, TaskState::Evaluating);
     }
 
     #[test]
@@ -1026,13 +1071,13 @@ mod tests {
         store.ingest(task(1, "a", "chat", true)).unwrap();
         let mut deciding = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
         store.ingest(task(2, "a", "chat", false)).unwrap();
-        deciding.state = "ready_to_reply".into();
+        deciding.state = TaskState::ReadyToReply;
         store.update(&deciding, 0).unwrap();
         let ready = store.get("1").unwrap();
-        assert_eq!(ready.state, "ready_to_reply");
+        assert_eq!(ready.state, TaskState::ReadyToReply);
         assert_eq!(ready.deliveries, vec![1]);
         assert_eq!(ready.triggers, vec!["message-1"]);
-        assert_eq!(store.get("2").unwrap().state, "queued");
+        assert_eq!(store.get("2").unwrap().state, TaskState::Queued);
         assert_eq!(store.get("2").unwrap().deliveries, vec![2]);
     }
 
@@ -1042,7 +1087,7 @@ mod tests {
         store.ingest(task(1, "a", "chat", true)).unwrap();
         for id in 2..=510 {
             let mut old = task(id, "b", "history", false);
-            old.state = "completed".into();
+            old.state = TaskState::Completed;
             store.ingest(old).unwrap();
             store.mark_reconciled(&id.to_string()).unwrap();
         }
@@ -1070,7 +1115,7 @@ mod tests {
                 [],
             )
             .unwrap();
-        old.state = "queued".into();
+        old.state = TaskState::Queued;
         store.update(&old, 0).unwrap();
         assert_eq!(store.status(0).unwrap().usage[0].replies, 10);
         store
@@ -1079,7 +1124,10 @@ mod tests {
         assert_eq!(store.status(0).unwrap().usage[0].replies, 10);
         store.control("chat", "end", 0).unwrap();
         store.authorize_human("human-2", "chat", 2, 0).unwrap();
-        assert_eq!(store.discussion("round").unwrap().unwrap().state, "ended");
+        assert_eq!(
+            store.discussion("round").unwrap().unwrap().state,
+            DiscussionState::Ended
+        );
         store.authorize_human("human-3", "chat", 3, 0).unwrap();
         assert_eq!(
             store.human_discussion("human-3").unwrap().as_deref(),

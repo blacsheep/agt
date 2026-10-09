@@ -1,5 +1,6 @@
 //! Translate durable IM deliveries into independent scheduler tasks.
 use super::im;
+use crate::TaskState;
 use crate::{ScheduleStore, ScheduledTask, schedule_store::now_ms};
 use agt_im::{DeliveryState, PrincipalKind};
 use agt_service::BindingStore;
@@ -94,7 +95,7 @@ pub(crate) fn scan_inputs(home: &Path, store: &mut ScheduleStore) -> Result<()> 
                     discussion,
                     principal: binding.principal.to_string(),
                     conversation: message.conversation_id.to_string(),
-                    state: "queued".into(),
+                    state: TaskState::Queued,
                     deliveries: vec![delivery.id],
                     message: message.id.to_string(),
                     through_seq: message.seq,

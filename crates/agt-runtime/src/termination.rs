@@ -1,4 +1,5 @@
 //! Execution facts, separate from task admission and from external side-effect review.
+use crate::DiscussionState;
 use crate::{RunRecord, RunState, RuntimeError};
 use serde::{Deserialize, Serialize};
 
@@ -191,7 +192,7 @@ pub(crate) fn guard_cause(
     if store
         .discussion(&task.discussion)
         .map_err(|_| RuntimeError::Configuration("discussion unavailable"))?
-        .is_some_and(|d| d.state == "ended")
+        .is_some_and(|d| d.state == DiscussionState::Ended)
     {
         return Ok(StopCode::DiscussionStopped);
     }

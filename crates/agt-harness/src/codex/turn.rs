@@ -144,7 +144,7 @@ impl Codex {
                     {
                         entry.sent = true;
                         if let Some(handler) = approvals.as_deref_mut() {
-                            handler.delivery(&entry.host_id, "resolved")?;
+                            handler.delivery(&entry.host_id, crate::DeliveryProgress::Resolved)?;
                         }
                     }
                 } else if method == "item/tool/call" {

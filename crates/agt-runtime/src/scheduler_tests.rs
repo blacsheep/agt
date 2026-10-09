@@ -216,8 +216,8 @@ fn peer_task(home: &Path, user: &ToolService, chat: &str) -> (Scheduler, Schedul
     let mut scheduler = begin(home, user, chat);
     let mut a = claim(&mut scheduler, "a");
     let mut b = claim(&mut scheduler, "b");
-    a.state = "silent".into();
-    b.state = "silent".into();
+    a.state = TaskState::Silent;
+    b.state = TaskState::Silent;
     scheduler.store.update(&a, now_ms()).unwrap();
     scheduler.store.update(&b, now_ms()).unwrap();
     let sender = Messaging::open(
@@ -260,11 +260,14 @@ fn model_wait_is_durable_and_cannot_be_replayed_before_due() {
     )
     .unwrap();
     let waiting = scheduler.store.get(&task.id).unwrap();
-    assert_eq!(waiting.state, "waiting");
+    assert_eq!(waiting.state, TaskState::Waiting);
     assert!(waiting.due_at > now_ms() + 29_000);
     drop(scheduler);
     let mut restarted = Scheduler::open(home.path(), 3).unwrap();
-    assert_eq!(restarted.store.get(&task.id).unwrap().state, "waiting");
+    assert_eq!(
+        restarted.store.get(&task.id).unwrap().state,
+        TaskState::Waiting
+    );
     let saved = serde_json::to_value(restarted.store.get(&task.id).unwrap()).unwrap();
     assert_eq!(saved["last_decision"]["action"], "wait");
     assert_eq!(
@@ -303,7 +306,10 @@ fn malformed_participation_never_starts_business_execution() {
             &CancellationToken::new(),
         )
         .unwrap();
-        assert_eq!(scheduler.store.get(&task.id).unwrap().state, "failed");
+        assert_eq!(
+            scheduler.store.get(&task.id).unwrap().state,
+            TaskState::Failed
+        );
         assert!(
             crate::RunStore::open(home.path())
                 .unwrap()
@@ -355,7 +361,10 @@ fn end_during_model_call_fences_framework_send_and_final_output() {
             &CancellationToken::new(),
         )
         .unwrap();
-        assert_eq!(scheduler.store.get(&task.id).unwrap().state, "canceled");
+        assert_eq!(
+            scheduler.store.get(&task.id).unwrap().state,
+            TaskState::Canceled
+        );
         assert_eq!(
             user.call("message_history", json!({"conversation":chat}))
                 .unwrap()["messages"]
@@ -418,7 +427,7 @@ fn participation_continues_into_tools_without_duplicate_publication() {
     assert_eq!(model.step, 1);
     assert_eq!(
         scheduler.store.get(&task.id).unwrap().state,
-        "ready_to_reply"
+        TaskState::ReadyToReply
     );
     let reply = claim(&mut scheduler, "b");
     execute(home.path(), reply, &mut model, &CancellationToken::new()).unwrap();
@@ -463,7 +472,10 @@ fn model_call_count_is_diagnostic_not_an_admission_limit() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+    assert_eq!(
+        scheduler.store.get(&task.id).unwrap().state,
+        TaskState::Completed
+    );
     assert_eq!(
         scheduler
             .store
@@ -524,7 +536,10 @@ fn human_burst_queues_independent_inputs_without_fixed_delay() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+    assert_eq!(
+        scheduler.store.get(&task.id).unwrap().state,
+        TaskState::Completed
+    );
     assert!(
         scheduler
             .store
@@ -532,7 +547,7 @@ fn human_burst_queues_independent_inputs_without_fixed_delay() {
             .unwrap()
             .iter()
             .filter(|t| t.principal == "a")
-            .all(|t| t.state == "completed")
+            .all(|t| t.state == TaskState::Completed)
     );
 }
 
@@ -561,12 +576,12 @@ fn unauthorized_delete_cannot_end_a_discussion() {
     assert!(delete_scheduled_conversation(home.path(), &chat, "b").is_err());
     assert_eq!(
         scheduler.store.snapshot().unwrap().discussions[0].state,
-        "active"
+        crate::DiscussionState::Active
     );
     delete_scheduled_conversation(home.path(), &chat, "user").unwrap();
     assert_eq!(
         scheduler.store.snapshot().unwrap().discussions[0].state,
-        "ended"
+        crate::DiscussionState::Ended
     );
 }
 
@@ -637,7 +652,7 @@ fn participation_model_calls_overlap_in_one_conversation() {
     }
     let tasks = scheduler.store.candidates().unwrap();
     assert_eq!(tasks.len(), 2);
-    assert!(tasks.iter().all(|t| t.state == "ready_to_reply"));
+    assert!(tasks.iter().all(|t| t.state == TaskState::ReadyToReply));
     assert!(
         scheduler
             .store
@@ -675,7 +690,10 @@ fn participation_model_calls_overlap_in_one_conversation() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&waiting.id).unwrap().state, "silent");
+    assert_eq!(
+        scheduler.store.get(&waiting.id).unwrap().state,
+        TaskState::Silent
+    );
 }
 
 #[test]
@@ -695,7 +713,10 @@ fn unauthorized_new_message_does_not_delay_or_steer_active_execution() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+    assert_eq!(
+        scheduler.store.get(&task.id).unwrap().state,
+        TaskState::Completed
+    );
     assert_eq!(scheduler.store.snapshot().unwrap().usage[0].replies, 1);
     assert_eq!(
         scheduler
@@ -756,7 +777,7 @@ fn three_agents_count_zero_through_ten_without_a_depth_cutoff() {
             scheduler.store.cancel_pending(&old.id).unwrap();
         }
         let mut task = claim(&mut scheduler, principal);
-        if task.state == "evaluating" {
+        if task.state == TaskState::Evaluating {
             execute(
                 home.path(),
                 task.clone(),
@@ -768,7 +789,7 @@ fn three_agents_count_zero_through_ten_without_a_depth_cutoff() {
             .unwrap();
             assert_eq!(
                 scheduler.store.get(&task.id).unwrap().state,
-                "ready_to_reply"
+                TaskState::ReadyToReply
             );
             task = claim(&mut scheduler, principal);
         }
@@ -781,7 +802,7 @@ fn three_agents_count_zero_through_ten_without_a_depth_cutoff() {
         .unwrap();
         assert_eq!(
             scheduler.store.get(&task.id).unwrap().state,
-            "completed",
+            TaskState::Completed,
             "stopped before reporting {number}"
         );
     }
@@ -874,7 +895,10 @@ fn reset_stops_inflight_reply_preserves_history_and_excludes_old_input() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "canceled");
+    assert_eq!(
+        scheduler.store.get(&task.id).unwrap().state,
+        TaskState::Canceled
+    );
     let history = user
         .call("message_history", json!({"conversation":chat}))
         .unwrap();
@@ -887,7 +911,7 @@ fn reset_stops_inflight_reply_preserves_history_and_excludes_old_input() {
             .unwrap()
             .discussions
             .iter()
-            .all(|d| d.state == "ended")
+            .all(|d| d.state == DiscussionState::Ended)
     );
     let message = user
         .call(
@@ -1080,7 +1104,10 @@ fn reset_during_summary_generation_cannot_recreate_the_summary() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "canceled");
+    assert_eq!(
+        scheduler.store.get(&task.id).unwrap().state,
+        TaskState::Canceled
+    );
     assert!(
         crate::context_store::ContextStore::open(home.path())
             .unwrap()
@@ -1156,7 +1183,7 @@ fn external_engine_uses_private_sessions_incremental_history_and_reset() {
     let task = claim(&mut scheduler, "a");
     execute(path, task.clone(), &mut NoModel, &CancellationToken::new()).unwrap();
     let done = scheduler.store.get(&task.id).unwrap();
-    assert_eq!(done.state, "completed", "{:?}", done.reason);
+    assert_eq!(done.state, TaskState::Completed, "{:?}", done.reason);
     let snapshot = crate::HarnessSessions::open(path)
         .unwrap()
         .current(path, "a", &chat)
@@ -1180,7 +1207,10 @@ fn external_engine_uses_private_sessions_incremental_history_and_reset() {
         scheduler.scan().unwrap();
         let task = claim(&mut scheduler, "a");
         execute(path, task.clone(), &mut NoModel, &CancellationToken::new()).unwrap();
-        assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+        assert_eq!(
+            scheduler.store.get(&task.id).unwrap().state,
+            TaskState::Completed
+        );
     }
     let log = std::fs::read_to_string(path.join("protocol.jsonl")).unwrap();
     let events: Vec<Value> = log
@@ -1223,7 +1253,10 @@ fn external_group_requires_mention_and_reset_cancels_without_publication() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "skipped");
+    assert_eq!(
+        scheduler.store.get(&task.id).unwrap().state,
+        TaskState::Skipped
+    );
     assert!(!path.join("protocol.jsonl").exists());
     let sent = user
         .call(
@@ -1257,7 +1290,10 @@ fn external_group_requires_mention_and_reset_cancels_without_publication() {
         runs[0].termination.as_ref().unwrap().code,
         crate::StopCode::ContextReset
     );
-    assert_ne!(scheduler.store.get(&task_id).unwrap().state, "completed");
+    assert_ne!(
+        scheduler.store.get(&task_id).unwrap().state,
+        TaskState::Completed
+    );
     let messages = user
         .call("message_history", json!({"conversation":chat}))
         .unwrap();
@@ -1410,7 +1446,10 @@ fn harness_session_snapshots_models_names_and_compaction_are_isolated() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+    assert_eq!(
+        scheduler.store.get(&task.id).unwrap().state,
+        TaskState::Completed
+    );
     let completed = store.get(&session.id).unwrap();
     assert!(
         completed
@@ -1458,7 +1497,10 @@ fn harness_session_snapshots_models_names_and_compaction_are_isolated() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&task.id).unwrap().state, "completed");
+    assert_eq!(
+        scheduler.store.get(&task.id).unwrap().state,
+        TaskState::Completed
+    );
     assert_eq!(
         store.get(&session.id).unwrap().session_id,
         completed.session_id
@@ -1567,6 +1609,9 @@ fn scheduled_native_uses_mounted_mcp_without_an_opt_in() {
         &CancellationToken::new(),
     )
     .unwrap();
-    assert_eq!(scheduler.store.get(&id).unwrap().state, "completed");
+    assert_eq!(
+        scheduler.store.get(&id).unwrap().state,
+        TaskState::Completed
+    );
     assert!(home.path().join("calls").exists());
 }

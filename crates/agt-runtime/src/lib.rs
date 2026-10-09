@@ -7,6 +7,7 @@ mod conversation_context;
 mod conversation_instructions;
 pub mod events;
 mod permission;
+mod string_enum;
 pub use context::ContextCheckpoint;
 mod engine;
 mod harness;
@@ -31,7 +32,9 @@ mod termination;
 pub use termination::{StopCode, Termination};
 pub mod work;
 pub use audit::{CallRecord, CallState};
-pub use schedule_store::{Discussion, ScheduleStatus, ScheduleStore, ScheduledTask};
+pub use schedule_store::{
+    Discussion, DiscussionState, ScheduleStatus, ScheduleStore, ScheduledTask, TaskState,
+};
 pub use scheduler::{
     Scheduler, delete_scheduled_conversation, dissolve_scheduled_group, reset_conversation_context,
     start_discussion,
