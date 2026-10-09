@@ -92,6 +92,7 @@ pub(crate) fn execute(
         store: crate::approval::ApprovalStore::open(home).map_err(error)?,
         scope: crate::approval::Scope::new(&audit_record, task),
         check: &check,
+        wake: approval::Wake::open(home),
     };
     let mut event = |event: Event<'_>| run.event(record, store, event);
     let mut client = match Codex::connect(&run.session.config, &mut event) {

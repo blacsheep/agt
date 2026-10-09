@@ -44,6 +44,8 @@ Web「权限审批」面板与「运行设置」可编辑这些字段。每个 N
 Codex 宿主使用 `on-request` + `user`，不经过 AGT 模型审核。
 独立的 `permissions.harness_mode` 默认为 `manual`；显式选择 `auto_allow` 后，宿主对当前等待与后续请求
 自动回传引擎提供的 `accept` 或所请求的本回合权限。模式不改变 sandbox、不授予持久 session 权限。
+Codex 回合在协议帧间隙轮询待审批请求；宿主只在收到唤醒通知或每秒兜底时读取审批存储和调度围栏，
+其余轮询直接返回“尚无决定”。
 `agt-harness` 解析原生请求，`harness/approval.rs` 绑定宿主执行；人工或自动决定回传同一连接、
 同一回合的原 JSON-RPC ID。协议循环等待时仍处理进度、终态、取消，并维持续租。
 
