@@ -18,15 +18,17 @@ pub(crate) fn read(
     let mut usage = Value::Null;
     loop {
         line.clear();
-        let n = reader
-            .read_line(&mut line)
-            .map_err(|_| RuntimeError::Model("cannot read HTTP response"))?;
+        let n = reader.read_line(&mut line).map_err(|e| {
+            RuntimeError::ModelTransient(crate::Reason::because("cannot read HTTP response", e))
+        })?;
         total += n as u64;
         if total > LIMIT {
-            return Err(RuntimeError::Model("response exceeds 4 MiB"));
+            return Err(RuntimeError::Model("response exceeds 4 MiB".into()));
         }
         if n == 0 {
-            return Err(RuntimeError::Model("incomplete event stream"));
+            return Err(RuntimeError::ModelTransient(
+                "incomplete event stream".into(),
+            ));
         }
         let field = line.trim_end_matches(['\r', '\n']);
         if !field.is_empty() {
@@ -46,15 +48,20 @@ pub(crate) fn read(
             if !responses && matches!(finish.as_deref(), Some("stop" | "tool_calls")) {
                 return Ok(super::model::attach_usage(message, &usage, false));
             }
-            return Err(RuntimeError::Model("incomplete event stream"));
+            return Err(RuntimeError::ModelTransient(
+                "incomplete event stream".into(),
+            ));
         }
-        let value: Value = serde_json::from_str(&event)
-            .map_err(|_| RuntimeError::Model("invalid JSON response"))?;
+        let value: Value = serde_json::from_str(&event).map_err(|e| {
+            RuntimeError::ModelTransient(crate::Reason::because("invalid JSON response", e))
+        })?;
         if super::model::context_rejected(&value) {
             return Err(RuntimeError::ContextWindowRejected);
         }
         if !value["error"].is_null() || value["type"] == "error" {
-            return Err(RuntimeError::Model("model returned an error"));
+            return Err(RuntimeError::ModelTransient(
+                "model returned an error".into(),
+            ));
         }
         if responses {
             match value["type"].as_str() {
@@ -63,11 +70,13 @@ pub(crate) fn read(
                         .map(|m| super::model::attach_usage(m, &value["response"]["usage"], true));
                 }
                 Some("response.failed") => {
-                    return Err(RuntimeError::Model("model returned an error"));
+                    return Err(RuntimeError::ModelTransient(
+                        "model returned an error".into(),
+                    ));
                 }
                 Some("response.incomplete") => {
                     return Err(RuntimeError::Model(
-                        "response was incomplete, refused or unsupported",
+                        "response was incomplete, refused or unsupported".into(),
                     ));
                 }
                 Some("response.output_text.delta") => {
@@ -97,11 +106,13 @@ pub(crate) fn read(
                     || (!delta["content"].is_null() && !delta["content"].is_string())
                     || (!delta["tool_calls"].is_null() && !delta["tool_calls"].is_array())
                 {
-                    return Err(RuntimeError::Model("invalid streamed assistant message"));
+                    return Err(RuntimeError::Model(
+                        "invalid streamed assistant message".into(),
+                    ));
                 }
                 if !delta["refusal"].is_null() {
                     return Err(RuntimeError::Model(
-                        "response was incomplete, refused or unsupported",
+                        "response was incomplete, refused or unsupported".into(),
                     ));
                 }
                 if let Some(text) = delta["content"].as_str() {
@@ -114,12 +125,12 @@ pub(crate) fn read(
                 }
                 for call in delta["tool_calls"].as_array().into_iter().flatten() {
                     if !call["type"].is_null() && call["type"] != "function" {
-                        return Err(RuntimeError::Model("unsupported streamed tool type"));
+                        return Err(RuntimeError::Model("unsupported streamed tool type".into()));
                     }
                     let index = call["index"]
                         .as_u64()
                         .filter(|i| *i < 32)
-                        .ok_or(RuntimeError::Model("invalid streamed tool index"))?
+                        .ok_or(RuntimeError::Model("invalid streamed tool index".into()))?
                         as usize;
                     let calls = message["tool_calls"].as_array_mut().expect("array");
                     while calls.len() <= index {
@@ -138,7 +149,7 @@ pub(crate) fn read(
                 if let Some(reason) = choice["finish_reason"].as_str() {
                     if !matches!(reason, "stop" | "tool_calls") {
                         return Err(RuntimeError::Model(
-                            "response was incomplete, refused or unsupported",
+                            "response was incomplete, refused or unsupported".into(),
                         ));
                     }
                     finish = Some(reason.to_owned());
@@ -226,7 +237,8 @@ mod tests {
         let partial = frame(json!({"choices":[{"delta":{"content":"partial"}}]}));
         assert!(matches!(
             read(partial.as_bytes(), false, &mut |_| Ok(())),
-            Err(RuntimeError::Model("incomplete event stream"))
+            Err(RuntimeError::ModelTransient(reason))
+                if reason.message() == "incomplete event stream"
         ));
         assert!(matches!(
             read(partial.as_bytes(), false, &mut |_| Err(

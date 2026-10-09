@@ -1736,7 +1736,9 @@ fn live_progress_is_bounded_retry_replaces_draft_and_completion_clears_it() {
             assert!(record.output.is_none());
             assert_eq!(record.state, RunState::Running);
             if self.attempts == 1 {
-                return Err(RuntimeError::Model("incomplete event stream"));
+                return Err(RuntimeError::ModelTransient(
+                    "incomplete event stream".into(),
+                ));
             }
             Ok(text("final"))
         }

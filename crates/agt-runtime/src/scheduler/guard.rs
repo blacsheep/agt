@@ -24,12 +24,13 @@ pub(crate) fn guarded_store<T>(
     task: &ScheduledTask,
     operation: impl FnOnce(&ScheduleStore) -> crate::Result<T>,
 ) -> crate::Result<T> {
-    let store = ScheduleStore::open(home)
-        .map_err(|_| RuntimeError::Configuration("scheduler unavailable"))?;
+    let store = ScheduleStore::open(home).map_err(|e| {
+        RuntimeError::Configuration(crate::Reason::because("scheduler unavailable", e))
+    })?;
     store.connection.execute_batch("BEGIN IMMEDIATE")?;
-    let cutoff = store
-        .context_cutoff(&task.conversation)
-        .map_err(|_| RuntimeError::Configuration("context reset state unavailable"))?;
+    let cutoff = store.context_cutoff(&task.conversation).map_err(|e| {
+        RuntimeError::Configuration(crate::Reason::because("context reset state unavailable", e))
+    })?;
     let valid = store.authorized(task, now_ms()).unwrap_or(false)
         && BindingStore::open(home)
             .and_then(|s| s.get(&PrincipalId::new(&task.principal)))
@@ -121,12 +122,15 @@ impl ModelClient for ScheduledModel<'_> {
             return Err(RuntimeError::Stopped(crate::StopCode::token(&self.token)));
         }
         guarded(&self.home, &self.task, || Ok(()))?;
-        let mut store = ScheduleStore::open(&self.home)
-            .map_err(|_| RuntimeError::Configuration("scheduler storage unavailable"))?;
-        if !store
-            .debit(&self.task, now_ms())
-            .map_err(|_| RuntimeError::Configuration("scheduler call accounting unavailable"))?
-        {
+        let mut store = ScheduleStore::open(&self.home).map_err(|e| {
+            RuntimeError::Configuration(crate::Reason::because("scheduler storage unavailable", e))
+        })?;
+        if !store.debit(&self.task, now_ms()).map_err(|e| {
+            RuntimeError::Configuration(crate::Reason::because(
+                "scheduler call accounting unavailable",
+                e,
+            ))
+        })? {
             return Err(RuntimeError::Stopped(crate::StopCode::token(&self.token)));
         }
         let response = self

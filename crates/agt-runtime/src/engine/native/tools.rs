@@ -14,17 +14,17 @@ impl NativeRun<'_, '_> {
                 .as_str()
                 .is_none_or(|s| s.trim().is_empty())
         {
-            return Err(RuntimeError::Model("empty final response"));
+            return Err(RuntimeError::Model("empty final response".into()));
         }
         if calls.len() > 1 && calls.iter().any(|c| suspends(&c.function.name)) {
             return Err(RuntimeError::Tool(
-                "task_await/task_yield/task_input must be the only tool call in its batch",
+                "task_await/task_yield/task_input must be the only tool call in its batch".into(),
             ));
         }
         // Validate the entire batch before allowing any side effect.
         for call in &calls {
             if !self.seen_calls.insert(call.id.clone()) {
-                return Err(RuntimeError::Model("duplicate tool call ID"));
+                return Err(RuntimeError::Model("duplicate tool call ID".into()));
             }
             if call.function.name == "delegate" && !self.record.request.delegates.is_empty() {
                 let args: Value = serde_json::from_str(&call.function.arguments)?;
@@ -40,13 +40,13 @@ impl NativeRun<'_, '_> {
                     .is_some_and(|input| input.trim().is_empty() || input.len() > 256 * 1024)
                 {
                     return Err(RuntimeError::Tool(
-                        "delegation target or input is not allowed",
+                        "delegation target or input is not allowed".into(),
                     ));
                 }
             } else if !self.tools.targets.contains_key(&call.function.name)
                 && !self.communication_names.contains(&call.function.name)
             {
-                return Err(RuntimeError::Tool("unknown or unavailable tool"));
+                return Err(RuntimeError::Tool("unknown or unavailable tool".into()));
             }
         }
         Ok(calls)
@@ -240,23 +240,28 @@ fn validate_message(message: &Value) -> Result<Vec<ToolCall>> {
     if message["role"] != "assistant"
         || (!message["content"].is_null() && !message["content"].is_string())
     {
-        return Err(RuntimeError::Model("expected a text assistant message"));
+        return Err(RuntimeError::Model(
+            "expected a text assistant message".into(),
+        ));
     }
     let calls: Vec<ToolCall> = if message["tool_calls"].is_null() {
         Vec::new()
     } else {
         serde_json::from_value(message["tool_calls"].clone())
-            .map_err(|_| RuntimeError::Model("invalid tool calls"))?
+            .map_err(|e| RuntimeError::Model(crate::Reason::because("invalid tool calls", e)))?
     };
     if calls.len() > 32 {
-        return Err(RuntimeError::Model("too many tool calls in one response"));
+        return Err(RuntimeError::Model(
+            "too many tool calls in one response".into(),
+        ));
     }
     for call in &calls {
         if call.kind != "function" || call.id.trim().is_empty() || call.id.len() > 256 {
-            return Err(RuntimeError::Model("invalid function call identity"));
+            return Err(RuntimeError::Model("invalid function call identity".into()));
         }
-        serde_json::from_str::<Value>(&call.function.arguments)
-            .map_err(|_| RuntimeError::Model("tool arguments must be JSON"))?;
+        serde_json::from_str::<Value>(&call.function.arguments).map_err(|e| {
+            RuntimeError::Model(crate::Reason::because("tool arguments must be JSON", e))
+        })?;
     }
     Ok(calls)
 }

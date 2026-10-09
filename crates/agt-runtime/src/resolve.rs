@@ -32,22 +32,39 @@ impl ResolvedAgent {
         let category = CategoryName::new(category).expect("validated category");
         let agent = AgentStore::new(home)
             .read_in(&category, leaf)
-            .map_err(|_| RuntimeError::Configuration("cannot load agent definition"))?
+            .map_err(|e| {
+                RuntimeError::Configuration(crate::Reason::because(
+                    "cannot load agent definition",
+                    e,
+                ))
+            })?
             .config;
         let reference = agent.model.as_ref().ok_or(RuntimeError::Configuration(
-            "external agent requires harness execution",
+            "external agent requires harness execution".into(),
         ))?;
         let model = ModelStore::new(home)
             .read_in(reference.category(), reference.name().as_str())
-            .map_err(|_| RuntimeError::Configuration("cannot load model definition"))?
+            .map_err(|e| {
+                RuntimeError::Configuration(crate::Reason::because(
+                    "cannot load model definition",
+                    e,
+                ))
+            })?
             .config;
         let provider = ProviderStore::new(home)
             .read_in(model.provider.category(), model.provider.name().as_str())
-            .map_err(|_| RuntimeError::Configuration("cannot load provider definition"))?
+            .map_err(|e| {
+                RuntimeError::Configuration(crate::Reason::because(
+                    "cannot load provider definition",
+                    e,
+                ))
+            })?
             .config;
         let base_prompt = PromptStore::new(home)
             .read_in(agent.prompt.category(), agent.prompt.name().as_str())
-            .map_err(|_| RuntimeError::Configuration("cannot load prompt"))?
+            .map_err(|e| {
+                RuntimeError::Configuration(crate::Reason::because("cannot load prompt", e))
+            })?
             .content;
         let (system_prompt, mcps) = load_capabilities(home, &agent, &base_prompt)?;
         // Hash actual loaded values; never persist the credential-bearing material.
@@ -75,19 +92,19 @@ fn load_capabilities(
     for skill in &definition.skills {
         let document = SkillStore::new(home)
             .read_in(skill.category(), skill.package())
-            .map_err(|_| RuntimeError::Configuration("cannot load skill"))?
+            .map_err(|e| {
+                RuntimeError::Configuration(crate::Reason::because("cannot load skill", e))
+            })?
             .document;
         if document.metadata.allowed_tools.is_some() {
             return Err(RuntimeError::Configuration(
-                "skill allowed-tools enforcement is not supported yet",
+                "skill allowed-tools enforcement is not supported yet".into(),
             ));
         }
         system_prompt.push_str("\n\n");
-        system_prompt.push_str(
-            &document
-                .render()
-                .map_err(|_| RuntimeError::Configuration("cannot render skill"))?,
-        );
+        system_prompt.push_str(&document.render().map_err(|e| {
+            RuntimeError::Configuration(crate::Reason::because("cannot render skill", e))
+        })?);
     }
     let mcps = definition
         .mcps
@@ -96,7 +113,12 @@ fn load_capabilities(
             McpStore::new(home)
                 .read_in(reference.category(), reference.name().as_str())
                 .map(|stored| stored.document)
-                .map_err(|_| RuntimeError::Configuration("cannot load MCP definition"))
+                .map_err(|e| {
+                    RuntimeError::Configuration(crate::Reason::because(
+                        "cannot load MCP definition",
+                        e,
+                    ))
+                })
         })
         .collect::<Result<Vec<_>>>()?;
     Ok((system_prompt, mcps))
@@ -108,7 +130,12 @@ impl ResolvedAgent {
         let (category, leaf) = self.name.split_once('/').expect("canonical reference");
         let current = AgentStore::new(home)
             .read_in(&CategoryName::new(category).expect("category"), leaf)
-            .map_err(|_| RuntimeError::Configuration("cannot load agent definition"))?
+            .map_err(|e| {
+                RuntimeError::Configuration(crate::Reason::because(
+                    "cannot load agent definition",
+                    e,
+                ))
+            })?
             .config;
         let mut next = self.clone();
         let definition = next

@@ -37,20 +37,30 @@ impl Runtime<'_> {
                 && let Some(id) = &task.work_id
                 && crate::work::WorkLedger::open(&self.home)
                     .and_then(|l| l.get(id))
-                    .map_err(|_| RuntimeError::Configuration("cannot read continuation"))?
+                    .map_err(|e| {
+                        RuntimeError::Configuration(crate::Reason::because(
+                            "cannot read continuation",
+                            e,
+                        ))
+                    })?
                     .resume_from
                     .is_some()
             {
                 let item = crate::work::WorkLedger::open(&self.home)
                     .and_then(|l| l.get(id))
-                    .map_err(|_| RuntimeError::Configuration("cannot read continuation"))?;
+                    .map_err(|e| {
+                        RuntimeError::Configuration(crate::Reason::because(
+                            "cannot read continuation",
+                            e,
+                        ))
+                    })?;
                 if !matches!(
                     self.store
                         .checkpoint(item.resume_from.as_deref().unwrap())?,
                     crate::work::wait::Checkpoint::Codex { .. }
                 ) {
                     return Err(RuntimeError::Configuration(
-                        "native continuation cannot switch to a harness",
+                        "native continuation cannot switch to a harness".into(),
                     ));
                 }
             }

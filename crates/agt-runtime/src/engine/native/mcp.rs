@@ -27,11 +27,13 @@ impl ToolSession {
             check_canceled(cancellation)?;
             let client = factory
                 .connect(document, &request.working_directory, McpLimits::default())
-                .map_err(|_| RuntimeError::Tool("MCP connection failed"))?;
+                .map_err(|e| {
+                    RuntimeError::Tool(crate::Reason::because("MCP connection failed", e))
+                })?;
             session.clients.push(client);
-            let tools = session.clients[server_index]
-                .list_tools()
-                .map_err(|_| RuntimeError::Tool("MCP tools/list failed"))?;
+            let tools = session.clients[server_index].list_tools().map_err(|e| {
+                RuntimeError::Tool(crate::Reason::because("MCP tools/list failed", e))
+            })?;
             for tool in tools {
                 let reference = agent
                     .definition
@@ -42,7 +44,7 @@ impl ToolSession {
                 let key = serde_json::to_vec(&(&reference, &tool.name))?;
                 let alias = format!("mcp_{}", &crate::fingerprint(&key)[..32]);
                 if session.targets.contains_key(&alias) {
-                    return Err(RuntimeError::Tool("duplicate MCP tool identity"));
+                    return Err(RuntimeError::Tool("duplicate MCP tool identity".into()));
                 }
                 session.schemas.push(json!({"type":"function","function":{
                     "name":alias,"description":format!("{} / {}: {}", document.name, tool.name, tool.description.unwrap_or_default()),
@@ -60,7 +62,7 @@ impl ToolSession {
             }}));
         }
         if session.schemas.len() > 128 {
-            return Err(RuntimeError::Tool("more than 128 tools attached"));
+            return Err(RuntimeError::Tool("more than 128 tools attached".into()));
         }
         Ok(session)
     }
@@ -88,10 +90,11 @@ impl ToolSession {
         let result =
             self.clients[*index].call_tool_with_cancellation(name, arguments, cancellation);
         check_canceled(cancellation)?;
-        let result = result.map_err(|_| RuntimeError::Tool("MCP tools/call failed"))?;
+        let result = result
+            .map_err(|e| RuntimeError::Tool(crate::Reason::because("MCP tools/call failed", e)))?;
         if result.content.iter().any(|block| block.kind != "text") {
             return Err(RuntimeError::Tool(
-                "only text and structured MCP results are supported",
+                "only text and structured MCP results are supported".into(),
             ));
         }
         // MCP _meta is client-only; do not expose it to the model.

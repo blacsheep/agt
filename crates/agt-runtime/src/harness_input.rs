@@ -6,17 +6,20 @@ use serde_json::Value;
 pub(crate) fn instructions(im: &ImStore, task: &ScheduledTask) -> Result<String> {
     let chat = im
         .get_conversation(&ConversationId::new(&task.conversation))
-        .map_err(|_| RuntimeError::Im("cannot read conversation"))?;
-    let members = im
-        .list_members(&chat.id)
-        .map_err(|_| RuntimeError::Im("cannot read conversation members"))?;
+        .map_err(|e| RuntimeError::Im(crate::Reason::because("cannot read conversation", e)))?;
+    let members = im.list_members(&chat.id).map_err(|e| {
+        RuntimeError::Im(crate::Reason::because(
+            "cannot read conversation members",
+            e,
+        ))
+    })?;
     let people = members
         .iter()
         .filter(|m| m.left_message_seq.is_none())
         .map(|m| {
-            let p = im
-                .get_principal(&m.principal_id)
-                .map_err(|_| RuntimeError::Im("cannot read principal"))?;
+            let p = im.get_principal(&m.principal_id).map_err(|e| {
+                RuntimeError::Im(crate::Reason::because("cannot read principal", e))
+            })?;
             Ok(format!(
                 "{} (id: {}, kind: {:?})",
                 serde_json::to_string(&p.display_name)?,
@@ -37,10 +40,10 @@ pub(crate) fn instructions(im: &ImStore, task: &ScheduledTask) -> Result<String>
 fn label(im: &ImStore, value: &Value) -> Result<String> {
     let id = value["sender"]
         .as_str()
-        .ok_or(RuntimeError::Configuration("history sender missing"))?;
+        .ok_or(RuntimeError::Configuration("history sender missing".into()))?;
     let p = im
         .get_principal(&PrincipalId::new(id))
-        .map_err(|_| RuntimeError::Im("cannot read message sender"))?;
+        .map_err(|e| RuntimeError::Im(crate::Reason::because("cannot read message sender", e)))?;
     Ok(format!(
         "{} [id={}, {:?}]",
         serde_json::to_string(&p.display_name)?,
@@ -54,7 +57,7 @@ fn block(im: &ImStore, messages: &[&Value]) -> Result<String> {
         .map(|m| {
             let body = m["body"]
                 .as_str()
-                .ok_or(RuntimeError::Configuration("history body missing"))?;
+                .ok_or(RuntimeError::Configuration("history body missing".into()))?;
             Ok(format!(
                 "{}:\n{}",
                 label(im, m)?,
@@ -79,10 +82,15 @@ fn already_in_thread(
     }
     let id = message["message_id"]
         .as_str()
-        .ok_or(RuntimeError::Configuration("history message id missing"))?;
-    let msg = im
-        .get_message(&MessageId::new(id))
-        .map_err(|_| RuntimeError::Im("cannot inspect published message"))?;
+        .ok_or(RuntimeError::Configuration(
+            "history message id missing".into(),
+        ))?;
+    let msg = im.get_message(&MessageId::new(id)).map_err(|e| {
+        RuntimeError::Im(crate::Reason::because(
+            "cannot inspect published message",
+            e,
+        ))
+    })?;
     let Some(run_id) = msg
         .client_message_id
         .as_deref()
@@ -137,7 +145,7 @@ pub(crate) fn render(
     }
     let chat = im
         .get_conversation(&ConversationId::new(&task.conversation))
-        .map_err(|_| RuntimeError::Im("cannot read conversation"))?;
+        .map_err(|e| RuntimeError::Im(crate::Reason::because("cannot read conversation", e)))?;
     // A normal one-message private turn is precisely what the other participant sent.
     if chat.kind == ConversationKind::Direct && background.is_empty() && current.len() == 1 {
         return Ok(current[0]["body"].as_str().unwrap_or("").to_owned());

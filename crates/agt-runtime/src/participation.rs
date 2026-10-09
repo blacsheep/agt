@@ -93,20 +93,18 @@ pub(crate) fn decide(
 fn parse_decision(message: &Value) -> Result<ParticipationDecision> {
     let invalid = || {
         RuntimeError::Model(
-            "invalid participation decision: arguments do not match the action schema",
+            "invalid participation decision: arguments do not match the action schema".into(),
         )
     };
     let calls = message["tool_calls"].as_array().ok_or(RuntimeError::Model(
-        "invalid participation decision: missing tool call",
+        "invalid participation decision: missing tool call".into(),
     ))?;
     if message["role"] != "assistant"
         || calls.len() != 1
         || calls[0]["type"] != "function"
         || calls[0]["function"]["name"] != "participation_decision"
     {
-        return Err(RuntimeError::Model(
-            "invalid participation decision: expected exactly one participation_decision function call",
-        ));
+        return Err(RuntimeError::Model("invalid participation decision: expected exactly one participation_decision function call".into()));
     }
     calls[0]["id"]
         .as_str()
@@ -128,7 +126,7 @@ fn parse_decision(message: &Value) -> Result<ParticipationDecision> {
         .is_some_and(|reason| reason.chars().count() > REASON_LIMIT)
     {
         return Err(RuntimeError::Model(
-            "invalid participation decision: public_reason exceeds 240 characters",
+            "invalid participation decision: public_reason exceeds 240 characters".into(),
         ));
     }
     if let ParticipationDecision::Wait { wake, .. } = &decision {
@@ -144,9 +142,7 @@ fn parse_decision(message: &Value) -> Result<ParticipationDecision> {
             }
         };
         if !valid {
-            return Err(RuntimeError::Model(
-                "invalid participation decision: wake duration out of range or quiet_seconds exceeds max_wait_seconds",
-            ));
+            return Err(RuntimeError::Model("invalid participation decision: wake duration out of range or quiet_seconds exceeds max_wait_seconds".into()));
         }
     }
     Ok(decision)

@@ -83,7 +83,7 @@ pub(crate) fn complete_with_progress(
                     .is_none_or(|s| s.trim().is_empty())
                     && message["tool_calls"].as_array().is_none_or(Vec::is_empty)
                 {
-                    Err(RuntimeError::Model("empty model response"))
+                    Err(RuntimeError::ModelTransient("empty model response".into()))
                 } else {
                     Ok(message)
                 }
@@ -131,15 +131,7 @@ pub(crate) fn context_rejected(value: &Value) -> bool {
 fn retryable(error: &RuntimeError) -> bool {
     matches!(
         error,
-        RuntimeError::HttpStatus(_)
-            | RuntimeError::Model(
-                "HTTP request failed or timed out"
-                    | "cannot read HTTP response"
-                    | "invalid JSON response"
-                    | "empty model response"
-                    | "model returned an error"
-                    | "incomplete event stream"
-            )
+        RuntimeError::HttpStatus(_) | RuntimeError::ModelTransient(_)
     )
 }
 
@@ -163,8 +155,9 @@ impl ModelClient for ChatCompletions {
         tools: &[Value],
         progress: &mut dyn FnMut(ModelEvent<'_>) -> Result<()>,
     ) -> Result<Value> {
-        let mut url = reqwest::Url::parse(&agent.provider.base_url)
-            .map_err(|_| RuntimeError::Configuration("invalid provider URL"))?;
+        let mut url = reqwest::Url::parse(&agent.provider.base_url).map_err(|e| {
+            RuntimeError::Configuration(crate::Reason::because("invalid provider URL", e))
+        })?;
         if !matches!(url.scheme(), "http" | "https")
             || !url.username().is_empty()
             || url.password().is_some()
@@ -172,7 +165,7 @@ impl ModelClient for ChatCompletions {
             || url.fragment().is_some()
         {
             return Err(RuntimeError::Configuration(
-                "provider URL must be HTTP(S) without credentials, query or fragment",
+                "provider URL must be HTTP(S) without credentials, query or fragment".into(),
             ));
         }
         let responses = agent.model.api_format == ModelApiFormat::Responses;
@@ -218,13 +211,20 @@ impl ModelClient for ChatCompletions {
             .timeout(Duration::from_secs(u64::from(params.timeout)))
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .map_err(|_| RuntimeError::Model("cannot create HTTP client"))?;
+            .map_err(|e| {
+                RuntimeError::Model(crate::Reason::because("cannot create HTTP client", e))
+            })?;
         let response = client
             .post(url)
             .bearer_auth(&agent.provider.api_key)
             .json(&body)
             .send()
-            .map_err(|_| RuntimeError::Model("HTTP request failed or timed out"))?;
+            .map_err(|e| {
+                RuntimeError::ModelTransient(crate::Reason::because(
+                    "HTTP request failed or timed out",
+                    e,
+                ))
+            })?;
         if !response.status().is_success() {
             let status = response.status().as_u16();
             // Inspect a bounded structured error, never persist provider bodies or credentials.
@@ -258,23 +258,28 @@ impl ModelClient for ChatCompletions {
         response
             .take(MAX_RESPONSE_BYTES + 1)
             .read_to_end(&mut bytes)
-            .map_err(|_| RuntimeError::Model("cannot read HTTP response"))?;
+            .map_err(|e| {
+                RuntimeError::ModelTransient(crate::Reason::because("cannot read HTTP response", e))
+            })?;
         if bytes.len() as u64 > MAX_RESPONSE_BYTES {
-            return Err(RuntimeError::Model("response exceeds 4 MiB"));
+            return Err(RuntimeError::Model("response exceeds 4 MiB".into()));
         }
-        let response: Value = serde_json::from_slice(&bytes)
-            .map_err(|_| RuntimeError::Model("invalid JSON response"))?;
+        let response: Value = serde_json::from_slice(&bytes).map_err(|e| {
+            RuntimeError::ModelTransient(crate::Reason::because("invalid JSON response", e))
+        })?;
         if context_rejected(&response) {
             return Err(RuntimeError::ContextWindowRejected);
         }
         if !response["error"].is_null() {
-            return Err(RuntimeError::Model("model returned an error"));
+            return Err(RuntimeError::ModelTransient(
+                "model returned an error".into(),
+            ));
         }
         if response["choices"].as_array().is_some_and(Vec::is_empty)
             || response.is_null()
             || response.as_object().is_some_and(serde_json::Map::is_empty)
         {
-            return Err(RuntimeError::Model("empty model response"));
+            return Err(RuntimeError::ModelTransient("empty model response".into()));
         }
         if responses {
             return responses_message(&response)
@@ -287,7 +292,7 @@ impl ModelClient for ChatCompletions {
                 Ok(attach_usage(message.clone(), &response["usage"], false))
             }
             _ => Err(RuntimeError::Model(
-                "response was incomplete, refused or unsupported",
+                "response was incomplete, refused or unsupported".into(),
             )),
         }
     }
@@ -362,7 +367,7 @@ fn responses_request(messages: &[Value], tools: &[Value]) -> Result<Value> {
                 let mut function = tool["function"]
                     .as_object()
                     .cloned()
-                    .ok_or(RuntimeError::Model("invalid function tool schema"))?;
+                    .ok_or(RuntimeError::Model("invalid function tool schema".into()))?;
                 function.insert("type".into(), json!("function"));
                 // Responses defaults to strict; preserve optional fields in existing
                 // MCP/framework schemas unless the schema explicitly opts in.
@@ -376,7 +381,7 @@ fn responses_request(messages: &[Value], tools: &[Value]) -> Result<Value> {
 }
 
 pub(crate) fn responses_message(response: &Value) -> Result<Value> {
-    let invalid = || RuntimeError::Model("response was incomplete, refused or unsupported");
+    let invalid = || RuntimeError::Model("response was incomplete, refused or unsupported".into());
     if response["status"] != "completed" || !response["error"].is_null() {
         return Err(invalid());
     }

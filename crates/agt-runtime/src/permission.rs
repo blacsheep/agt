@@ -37,13 +37,21 @@ impl PermissionLoop {
         check: &dyn Fn() -> Result<()>,
     ) -> Result<bool> {
         let config = agt_config::runtime::RuntimeConfig::load(&self.home)
-            .map_err(|_| RuntimeError::Configuration("cannot load permission policy"))?
+            .map_err(|e| {
+                RuntimeError::Configuration(crate::Reason::because(
+                    "cannot load permission policy",
+                    e,
+                ))
+            })?
             .permissions;
         Self::new(&self.home, config)
             .run(scope, call, tool, args, input, check)
             .map_err(|e| {
-                e.downcast::<RuntimeError>().unwrap_or_else(|_| {
-                    RuntimeError::Tool("permission request failed; inspect approval records")
+                e.downcast::<RuntimeError>().unwrap_or_else(|e| {
+                    RuntimeError::Tool(crate::Reason::because(
+                        "permission request failed; inspect approval records",
+                        e,
+                    ))
                 })
             })
     }

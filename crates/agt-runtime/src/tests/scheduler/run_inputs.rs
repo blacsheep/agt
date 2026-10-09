@@ -357,7 +357,9 @@ fn failed_follow_up_decision_does_not_discard_the_completed_reply() {
             .first()
             .is_some_and(|t| t["function"]["name"] == "participation_decision")
         {
-            return Err(RuntimeError::Configuration("participation unavailable"));
+            return Err(RuntimeError::Configuration(
+                "participation unavailable".into(),
+            ));
         }
         peer.send(MessageInput {
             conversation: ConversationId::new(&chat),
@@ -507,7 +509,7 @@ fn later_failure_preserves_completed_input_and_published_reply() {
             return Ok(answer("finished correction"));
         }
         assert_eq!(last_input(messages)["messages"][0]["body"], "later failure");
-        Err(RuntimeError::Configuration("later request failed"))
+        Err(RuntimeError::Configuration("later request failed".into()))
     });
     let _ = execute(home.path(), task, &mut model, &CancellationToken::new());
     assert_eq!(step, 2);

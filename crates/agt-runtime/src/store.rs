@@ -27,6 +27,9 @@ pub struct RunRecord {
     pub config_fingerprint: Option<String>,
     pub output: Option<String>,
     pub error: Option<String>,
+    /// Local-only cause chain behind `error`; never forwarded to models or the Web.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostic: Option<String>,
     pub termination: Option<crate::Termination>,
     /// Includes child model calls for parent runs.
     pub model_steps: u32,
@@ -74,7 +77,7 @@ impl RunStore {
             3..=6 => {}
             _ => {
                 return Err(RuntimeError::Configuration(
-                    "unsupported runtime database version",
+                    "unsupported runtime database version".into(),
                 ));
             }
         }
@@ -190,6 +193,7 @@ impl RunStore {
             termination: None,
             model_steps: 0,
             tool_failures: 0,
+            diagnostic: None,
             context: Default::default(),
             progress: None,
             execution: None,
@@ -317,8 +321,12 @@ pub(crate) fn database_path(
     directory: &str,
     name: &str,
 ) -> Result<std::path::PathBuf> {
-    agt_storage::database_path(home, directory, name)
-        .map_err(|_| RuntimeError::Configuration("unsafe or inaccessible database path"))
+    agt_storage::database_path(home, directory, name).map_err(|e| {
+        RuntimeError::Configuration(crate::Reason::because(
+            "unsafe or inaccessible database path",
+            e,
+        ))
+    })
 }
 
 #[cfg(test)]

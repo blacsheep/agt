@@ -66,9 +66,7 @@ impl NativeRun<'_, '_> {
                 + 128
                 > budget
             {
-                return Err(RuntimeError::Model(
-                    "instructions, input and tool schemas exceed context budget; shorten input or configure the model context_window",
-                ));
+                return Err(RuntimeError::Model("instructions, input and tool schemas exceed context budget; shorten input or configure the model context_window".into()));
             }
             let mut call = CallRecord::new(self.record, None, json!({}));
             call.kind = "compaction".into();

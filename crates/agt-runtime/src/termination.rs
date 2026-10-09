@@ -168,20 +168,22 @@ pub(crate) fn guard_cause(
     task: &crate::ScheduledTask,
 ) -> crate::Result<StopCode> {
     // Explain the rejected fence using the same transaction, not a later snapshot.
-    let cutoff = store
-        .context_cutoff(&task.conversation)
-        .map_err(|_| RuntimeError::Configuration("context reset state unavailable"))?;
+    let cutoff = store.context_cutoff(&task.conversation).map_err(|e| {
+        RuntimeError::Configuration(crate::Reason::because("context reset state unavailable", e))
+    })?;
     if let Some(id) = &task.work_id {
-        let item = crate::work::read(&store.connection, id)
-            .map_err(|_| RuntimeError::Configuration("work unavailable"))?;
+        let item = crate::work::read(&store.connection, id).map_err(|e| {
+            RuntimeError::Configuration(crate::Reason::because("work unavailable", e))
+        })?;
         if store
             .context_cutoff(&item.request.origin_conversation)
-            .map_err(|_| RuntimeError::Configuration("context unavailable"))?
+            .map_err(|e| {
+                RuntimeError::Configuration(crate::Reason::because("context unavailable", e))
+            })?
             != item.request.context_epoch
-            || store
-                .context_cutoff(&item.request.report_to)
-                .map_err(|_| RuntimeError::Configuration("context unavailable"))?
-                != item.request.delivery_epoch
+            || store.context_cutoff(&item.request.report_to).map_err(|e| {
+                RuntimeError::Configuration(crate::Reason::because("context unavailable", e))
+            })? != item.request.delivery_epoch
         {
             return Ok(StopCode::ContextReset);
         }
@@ -191,7 +193,9 @@ pub(crate) fn guard_cause(
     }
     if store
         .discussion(&task.discussion)
-        .map_err(|_| RuntimeError::Configuration("discussion unavailable"))?
+        .map_err(|e| {
+            RuntimeError::Configuration(crate::Reason::because("discussion unavailable", e))
+        })?
         .is_some_and(|d| d.state == DiscussionState::Ended)
     {
         return Ok(StopCode::DiscussionStopped);

@@ -54,8 +54,9 @@ impl<'a> Runtime<'a> {
         let request = request.normalize()?;
         let (mut record, claimed) = self.store.claim(&request, None)?;
         if let Some(task) = &self.scheduled_task {
-            crate::work::bind_run(&self.home, task, &record)
-                .map_err(|_| RuntimeError::Configuration("cannot bind work Run"))?;
+            crate::work::bind_run(&self.home, task, &record).map_err(|e| {
+                RuntimeError::Configuration(crate::Reason::because("cannot bind work Run", e))
+            })?;
         }
         if !claimed {
             return Ok(record);
@@ -77,6 +78,7 @@ impl<'a> Runtime<'a> {
             Err(error) => {
                 record.state = crate::termination::finish(&mut record, &error);
                 record.error = Some(error.to_string());
+                record.diagnostic = error.diagnostic();
             }
         }
         self.store.save(&record)?;
@@ -116,13 +118,17 @@ impl<'a> Runtime<'a> {
             working_directory: parent.request.working_directory.clone(),
             trigger: None,
         };
-        let im = ImStore::open(database_path(&self.home, "im", "im.db")?)
-            .map_err(|_| RuntimeError::Im("cannot open message store"))?;
+        let im = ImStore::open(database_path(&self.home, "im", "im.db")?).map_err(|e| {
+            RuntimeError::Im(crate::Reason::because("cannot open message store", e))
+        })?;
         let sender = bind_principal(&im, &parent.request.agent)?;
         let receiver = bind_principal(&im, &request.agent)?;
-        let conversation = im
-            .create_direct(&sender, &receiver)
-            .map_err(|_| RuntimeError::Im("cannot create direct conversation"))?;
+        let conversation = im.create_direct(&sender, &receiver).map_err(|e| {
+            RuntimeError::Im(crate::Reason::because(
+                "cannot create direct conversation",
+                e,
+            ))
+        })?;
         let (mut child, claimed) = self.store.claim(&request, Some(&parent.id))?;
         let initial_steps = *step_count;
         let preparation = check_canceled(cancellation).and_then(|()| {
@@ -135,14 +141,16 @@ impl<'a> Runtime<'a> {
                 metadata: json!({"run_id":child.id,"parent_run_id":parent.id}),
                 idempotency_key: None,
             })
-            .map_err(|_| RuntimeError::Im("cannot publish delegation input"))
+            .map_err(|e| {
+                RuntimeError::Im(crate::Reason::because("cannot publish delegation input", e))
+            })
         });
         if claimed {
             let result = match preparation.as_ref() {
                 Ok(_) => self.drive(&mut child, agents, step_count, cancellation),
                 Err(RuntimeError::Canceled) => Err(RuntimeError::Canceled),
                 Err(RuntimeError::Stopped(code)) => Err(RuntimeError::Stopped(*code)),
-                Err(_) => Err(RuntimeError::Im("cannot publish delegation input")),
+                Err(_) => Err(RuntimeError::Im("cannot publish delegation input".into())),
             };
             child.model_steps = *step_count - initial_steps;
             child = self.finish(child, result)?;
@@ -155,14 +163,14 @@ impl<'a> Runtime<'a> {
             RunState::Canceled => return Err(RuntimeError::Canceled),
             RunState::Failed | RunState::Interrupted => {
                 return Err(RuntimeError::Tool(
-                    "delegated run failed; inspect child run",
+                    "delegated run failed; inspect child run".into(),
                 ));
             }
             RunState::Completed => {}
         }
         let output = child
             .output
-            .ok_or(RuntimeError::Tool("completed child has no output"))?;
+            .ok_or(RuntimeError::Tool("completed child has no output".into()))?;
         check_canceled(cancellation)?;
         im.send_message(SendMessageRequest {
             conversation_id: conversation.id,
@@ -173,7 +181,12 @@ impl<'a> Runtime<'a> {
             metadata: json!({"run_id":child.id,"parent_run_id":parent.id}),
             idempotency_key: None,
         })
-        .map_err(|_| RuntimeError::Im("child completed but reply publication failed"))?;
+        .map_err(|e| {
+            RuntimeError::Im(crate::Reason::because(
+                "child completed but reply publication failed",
+                e,
+            ))
+        })?;
         Ok(output)
     }
 
@@ -204,16 +217,16 @@ pub(crate) fn bind_principal(im: &ImStore, agent: &str) -> Result<PrincipalId> {
     }) {
         Ok(_) => {}
         Err(agt_im::ImError::AlreadyExists(_)) => {
-            let principal = im
-                .get_principal(&id)
-                .map_err(|_| RuntimeError::Im("cannot load participant"))?;
+            let principal = im.get_principal(&id).map_err(|e| {
+                RuntimeError::Im(crate::Reason::because("cannot load participant", e))
+            })?;
             if principal.kind != PrincipalKind::Agent || principal.metadata != metadata {
                 return Err(RuntimeError::Im(
-                    "runtime participant identity is already bound differently",
+                    "runtime participant identity is already bound differently".into(),
                 ));
             }
         }
-        Err(_) => return Err(RuntimeError::Im("cannot bind participant")),
+        Err(_) => return Err(RuntimeError::Im("cannot bind participant".into())),
     }
     Ok(id)
 }

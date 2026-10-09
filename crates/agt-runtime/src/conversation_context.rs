@@ -24,7 +24,12 @@ pub(crate) fn visible_history(
                     after: None,
                 },
             )
-            .map_err(|_| RuntimeError::Im("cannot read visible conversation history"))?;
+            .map_err(|e| {
+                RuntimeError::Im(crate::Reason::because(
+                    "cannot read visible conversation history",
+                    e,
+                ))
+            })?;
         let reached = page.messages.first().is_some_and(|m| m.seq <= cutoff);
         result.extend(
             page.messages
@@ -55,7 +60,12 @@ pub(crate) fn prepare(
     let store = ContextStore::open(home)?;
     let cutoff = crate::ScheduleStore::open(home)
         .and_then(|s| s.context_cutoff(&task.conversation))
-        .map_err(|_| RuntimeError::Configuration("context reset state unavailable"))?;
+        .map_err(|e| {
+            RuntimeError::Configuration(crate::Reason::because(
+                "context reset state unavailable",
+                e,
+            ))
+        })?;
     let history = visible_history(im, task, cutoff)?;
     let tail_budget = crate::context::input_budget(agent) / 4;
     let mut start = 0;

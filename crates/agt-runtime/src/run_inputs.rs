@@ -19,7 +19,7 @@ pub(crate) struct RunInput {
 }
 
 fn unavailable(_: impl std::fmt::Display) -> RuntimeError {
-    RuntimeError::Configuration("run input queue unavailable")
+    RuntimeError::Configuration("run input queue unavailable".into())
 }
 
 fn charge(store: &ScheduleStore, task: &mut ScheduledTask) -> Result<bool> {
@@ -296,7 +296,12 @@ pub(crate) fn complete_turn(
                         .or_else(|| Some(MessageId::new(&task.message))),
                     input_mode: None,
                 })
-                .map_err(|_| RuntimeError::Im("cannot publish completed follow-up reply"))?;
+                .map_err(|e| {
+                    RuntimeError::Im(crate::Reason::because(
+                        "cannot publish completed follow-up reply",
+                        e,
+                    ))
+                })?;
         }
         let mut stmt = store.connection.prepare("SELECT t.record FROM tasks t JOIN run_inputs i ON i.input_task=t.id WHERE i.parent_task=?1 AND i.run_id=?2 AND t.state='input' AND t.id!=?3")?;
         let inputs = stmt

@@ -51,14 +51,53 @@ use serde::{Deserialize, Serialize};
 
 pub type Result<T> = std::result::Result<T, RuntimeError>;
 
+/// A fixed public message plus an optional private cause. Display shows only the
+/// message; the cause is kept for local diagnostics and never sent to models or the Web.
+#[derive(Debug)]
+pub struct Reason {
+    message: &'static str,
+    cause: Option<anyhow::Error>,
+}
+
+impl Reason {
+    pub(crate) fn because(message: &'static str, cause: impl Into<anyhow::Error>) -> Self {
+        Self {
+            message,
+            cause: Some(cause.into()),
+        }
+    }
+
+    pub fn message(&self) -> &'static str {
+        self.message
+    }
+}
+
+impl From<&'static str> for Reason {
+    fn from(message: &'static str) -> Self {
+        Self {
+            message,
+            cause: None,
+        }
+    }
+}
+
+impl std::fmt::Display for Reason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.message)
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
     #[error("invalid request: {0}")]
     Invalid(String),
     #[error("configuration: {0}")]
-    Configuration(&'static str),
+    Configuration(Reason),
     #[error("model: {0}")]
-    Model(&'static str),
+    Model(Reason),
+    /// Transport or response failures that may succeed on retry.
+    #[error("model: {0}")]
+    ModelTransient(Reason),
     #[error(
         "context overflow at {stage}: {tokens} tokens exceed available budget {budget}; compaction not installed"
     )]
@@ -79,9 +118,9 @@ pub enum RuntimeError {
         last: Box<RuntimeError>,
     },
     #[error("tool: {0}")]
-    Tool(&'static str),
+    Tool(Reason),
     #[error("IM: {0}")]
-    Im(&'static str),
+    Im(Reason),
     #[error("request key already belongs to a different request")]
     Conflict,
     #[error("run not found")]
@@ -98,6 +137,21 @@ pub enum RuntimeError {
     Storage(#[from] rusqlite::Error),
     #[error("runtime serialization: {0}")]
     Serialization(#[from] serde_json::Error),
+}
+
+impl RuntimeError {
+    /// Private cause chain for local diagnostics, if the public message hides one.
+    pub fn diagnostic(&self) -> Option<String> {
+        match self {
+            Self::Configuration(reason)
+            | Self::Model(reason)
+            | Self::ModelTransient(reason)
+            | Self::Tool(reason)
+            | Self::Im(reason) => reason.cause.as_ref().map(|cause| format!("{cause:#}")),
+            Self::ModelRetriesExhausted { last, .. } => last.diagnostic(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -202,3 +256,24 @@ pub use tool_details::{ToolDetail, ToolDetailField};
 #[cfg(test)]
 #[path = "tests/progress/tools.rs"]
 mod tool_progress_tests;
+
+#[cfg(test)]
+mod reason_tests {
+    use super::*;
+
+    #[test]
+    fn cause_stays_out_of_public_message() {
+        let cause = anyhow::anyhow!("secret path /home/x/.agt").context("open failed");
+        let error = RuntimeError::Im(Reason::because("cannot open message store", cause));
+        assert_eq!(error.to_string(), "IM: cannot open message store");
+        let diagnostic = error.diagnostic().unwrap();
+        assert!(diagnostic.contains("open failed") && diagnostic.contains("secret path"));
+        let retried = RuntimeError::ModelRetriesExhausted {
+            attempts: 3,
+            last: Box::new(error),
+        };
+        assert!(!retried.to_string().contains("secret"));
+        assert_eq!(retried.diagnostic(), Some(diagnostic));
+        assert_eq!(RuntimeError::Tool("plain".into()).diagnostic(), None);
+    }
+}

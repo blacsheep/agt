@@ -101,7 +101,7 @@ impl NativeRun<'_, '_> {
             Err(error) => {
                 let error = match &error {
                     RuntimeError::Configuration(message) => {
-                        json!({"code":"configuration_error","message":message})
+                        json!({"code":"configuration_error","message":message.message()})
                     }
                     _ => runtime_error(&error),
                 };
@@ -126,7 +126,7 @@ impl NativeRun<'_, '_> {
         let agent = self.agent.reload_capabilities(&self.runtime.home)?;
         if !agent.mcps.is_empty() && !agent.model.capabilities.tool_call {
             return Err(RuntimeError::Configuration(
-                "model tool_call capability is disabled",
+                "model tool_call capability is disabled".into(),
             ));
         }
         if agent.mcps == self.agent.mcps
@@ -164,7 +164,7 @@ impl NativeRun<'_, '_> {
                 .cloned(),
         );
         if tools.schemas.len() > 128 {
-            return Err(RuntimeError::Tool("more than 128 tools attached"));
+            return Err(RuntimeError::Tool("more than 128 tools attached".into()));
         }
         tools.compile_schemas()?;
         let fingerprint = execution_fingerprint(

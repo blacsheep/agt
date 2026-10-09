@@ -163,10 +163,10 @@ pub(crate) fn summarize(
                 .is_some_and(|c| !c.is_empty())
         {
             return Err(RuntimeError::Model(
-                "context summary must contain text without tool calls",
+                "context summary must contain text without tool calls".into(),
             ));
         }
-        let text = text.ok_or(RuntimeError::Model("context summary is empty"))?;
+        let text = text.ok_or(RuntimeError::Model("context summary is empty".into()))?;
         summary = text.to_owned();
         remaining = rest;
     }

@@ -171,8 +171,8 @@ pub(crate) fn runtime_error(error: &crate::RuntimeError) -> Value {
             "Execution was canceled; inspect side effects before retrying.",
         ),
         Budget => ("budget_exhausted", "Model step budget exhausted."),
-        Model(message) => ("model_error", *message),
-        Tool(message) => ("tool_error", *message),
+        Model(reason) | ModelTransient(reason) => ("model_error", reason.message()),
+        Tool(reason) => ("tool_error", reason.message()),
         _ => (
             "execution_error",
             "Execution failed; inspect the host Run and current state before retrying.",

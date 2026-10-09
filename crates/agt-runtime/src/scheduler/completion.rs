@@ -66,7 +66,12 @@ pub(super) fn settle(
                         mentions: Vec::new(),
                         reply_to: Some(reply_message.id),
                     })
-                    .map_err(|_| RuntimeError::Im("cannot publish scheduled reply"))
+                    .map_err(|e| {
+                        RuntimeError::Im(crate::Reason::because(
+                            "cannot publish scheduled reply",
+                            e,
+                        ))
+                    })
             })
             .is_err()
             {
