@@ -42,7 +42,7 @@ pub trait ModelClient {
 }
 
 /// Retries one logical model step, never tools or the whole Run.
-pub(crate) fn complete_with_retry(
+pub fn complete_with_retry(
     model: &mut dyn ModelClient,
     agent: &ResolvedAgent,
     messages: &[Value],
@@ -61,7 +61,7 @@ pub(crate) fn complete_with_retry(
     )
 }
 
-pub(crate) fn complete_with_progress(
+pub fn complete_with_progress(
     model: &mut dyn ModelClient,
     agent: &ResolvedAgent,
     messages: &[Value],
@@ -120,7 +120,7 @@ fn check_retry_canceled(model: &dyn ModelClient, token: &CancellationToken) -> R
     model.check_canceled()
 }
 /// Only explicit provider codes trigger compaction; HTTP 413 alone is not token overflow.
-pub(crate) fn context_rejected(value: &Value) -> bool {
+pub fn context_rejected(value: &Value) -> bool {
     [&value["error"], &value["response"]["error"], value]
         .iter()
         .any(|error| {
@@ -299,7 +299,7 @@ impl ModelClient for ChatCompletions {
 }
 
 // Host-only accounting. Runtime consumes/removes this before appending to history.
-pub(crate) fn attach_usage(mut message: Value, usage: &Value, responses: bool) -> Value {
+pub fn attach_usage(mut message: Value, usage: &Value, responses: bool) -> Value {
     let total = usage["total_tokens"].as_u64().or_else(|| {
         let (input, output) = if responses {
             ("input_tokens", "output_tokens")
@@ -380,7 +380,7 @@ fn responses_request(messages: &[Value], tools: &[Value]) -> Result<Value> {
     Ok(body)
 }
 
-pub(crate) fn responses_message(response: &Value) -> Result<Value> {
+pub fn responses_message(response: &Value) -> Result<Value> {
     let invalid = || RuntimeError::Model("response was incomplete, refused or unsupported".into());
     if response["status"] != "completed" || !response["error"].is_null() {
         return Err(invalid());

@@ -46,6 +46,7 @@ agt-agent      agent.yaml 及 model/harness/prompt/skill/MCP 引用
 agt-harness    harness.yaml 资源、Codex 协议与执行控制
 agt-im         通用参与者、私聊/群聊、消息、已读和事件存储（SQLite）
 agt-service    资源工具、身份权限、Agent 绑定、响应策略和 stdio MCP 服务
+agt-inference  Agent 配置解析、模型协议与流式解析、上下文预算与压缩（无持久化）
 agt-runtime    模型/工具循环、持久化 Run、消息投递调度和显式委派
 agt-cli        agt 命令行
 ```

@@ -1,71 +1,9 @@
 //! Execution facts, separate from task admission and from external side-effect review.
 use crate::DiscussionState;
+use crate::StopCode;
 use crate::{RunRecord, RunState, RuntimeError};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum StopCode {
-    CancellationRequested,
-    TaskCanceled,
-    DiscussionStopped,
-    ContextReset,
-    AuthorizationRevoked,
-    ServiceShutdown,
-    SchedulerLeaseLost,
-    ExecutionOwnerLost,
-    HarnessLeaseLost,
-    HarnessTimeout,
-    ConnectionLost,
-    EngineFailed,
-    EngineInterrupted,
-    ProtocolError,
-    ResultMissing,
-    ResultPersistenceFailed,
-}
-impl std::fmt::Display for StopCode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            serde_json::to_value(self).unwrap().as_str().unwrap()
-        )
-    }
-}
-impl StopCode {
-    pub fn source(self) -> &'static str {
-        match self {
-            Self::TaskCanceled => "task_control",
-            Self::CancellationRequested | Self::ServiceShutdown => "runtime",
-            Self::DiscussionStopped
-            | Self::ContextReset
-            | Self::AuthorizationRevoked
-            | Self::SchedulerLeaseLost
-            | Self::ExecutionOwnerLost => "scheduler",
-            _ => "harness",
-        }
-    }
-    pub fn token(token: &agt_core::CancellationToken) -> Self {
-        match token.reason() {
-            Some("service_shutdown") => Self::ServiceShutdown,
-            Some("scheduler_lease_lost") => Self::SchedulerLeaseLost,
-            Some("task_canceled") => Self::TaskCanceled,
-            Some("authorization_revoked") => Self::AuthorizationRevoked,
-            _ => Self::CancellationRequested,
-        }
-    }
-    fn canceled(self) -> bool {
-        matches!(
-            self,
-            Self::CancellationRequested
-                | Self::TaskCanceled
-                | Self::DiscussionStopped
-                | Self::ContextReset
-                | Self::AuthorizationRevoked
-                | Self::ServiceShutdown
-        )
-    }
-}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Termination {
     pub code: StopCode,

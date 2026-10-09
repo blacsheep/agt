@@ -107,6 +107,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "agt-inference"
+version = "0.1.0"
+dependencies = [
+ "agt-agent",
+ "agt-config",
+ "agt-core",
+ "agt-mcp",
+ "agt-model",
+ "agt-prompt",
+ "agt-provider",
+ "agt-skill",
+ "anyhow",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "agt-mcp"
 version = "0.1.0"
 dependencies = [
@@ -176,6 +198,7 @@ dependencies = [
  "agt-core",
  "agt-harness",
  "agt-im",
+ "agt-inference",
  "agt-mcp",
  "agt-model",
  "agt-prompt",
@@ -239,7 +262,9 @@ name = "agt-storage"
 version = "0.1.0"
 dependencies = [
  "agt-core",
+ "rusqlite",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]

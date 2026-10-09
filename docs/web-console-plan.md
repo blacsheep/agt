@@ -111,7 +111,7 @@ manual-worker acceptance results do not establish new scheduler live-model quali
 
 ## Streaming model progress
 
-`agt-runtime/model_stream.rs` assembles Chat SSE deltas or a Responses completed response;
+`agt-inference/model_stream.rs` assembles Chat SSE deltas or a Responses completed response;
 only validated complete assistant messages enter the tool loop. `ModelClient::complete_stream`
 has a default implementation for nonstreaming clients. Retry attempts reset the preview;
 stream termination errors retry the model request without replaying tools.

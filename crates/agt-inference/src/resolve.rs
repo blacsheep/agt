@@ -21,8 +21,8 @@ pub struct ResolvedAgent {
     pub mcps: Vec<McpDocument>,
     pub builtin_tools: Vec<agt_agent::BuiltinTool>,
     pub fingerprint: String,
-    pub(crate) definition: Option<agt_agent::AgentConfig>,
-    pub(crate) base_prompt: String,
+    pub definition: Option<agt_agent::AgentConfig>,
+    pub base_prompt: String,
 }
 
 impl ResolvedAgent {
@@ -126,7 +126,7 @@ fn load_capabilities(
 
 impl ResolvedAgent {
     /// Reload only mounts. The model, credentials, base prompt and built-in grants stay fixed.
-    pub(crate) fn reload_capabilities(&self, home: &Path) -> Result<Self> {
+    pub fn reload_capabilities(&self, home: &Path) -> Result<Self> {
         let (category, leaf) = self.name.split_once('/').expect("canonical reference");
         let current = AgentStore::new(home)
             .read_in(&CategoryName::new(category).expect("category"), leaf)

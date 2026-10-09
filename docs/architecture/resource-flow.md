@@ -105,7 +105,7 @@ MCP 使用范围由 Agent 装配决定，未装配的工具不可调用；具体
 - [CLI 适配](../../crates/agt-cli/src/main.rs)与[工具协议](../../crates/agt-service/src/tools.rs)。
 - [删除依赖与执行](../../crates/agt-service/src/deletion.rs)。
 - [批次执行](../../crates/agt-runtime/src/engine/native/tools.rs)与[能力刷新](../../crates/agt-runtime/src/engine/native/refresh.rs)。
-- [配置解析](../../crates/agt-runtime/src/resolve.rs)与[MCP 快照](../../crates/agt-runtime/src/engine/native/mcp.rs)。
+- [配置解析](../../crates/agt-inference/src/resolve.rs)与[MCP 快照](../../crates/agt-runtime/src/engine/native/mcp.rs)。
 - [资源回归](../../crates/agt-service/tests/assembly/mod.rs)：七类版本冲突、集合并发与失败原子性。
 - [运行时回归](../../crates/agt-runtime/tests/tool_contract/mod.rs)：自装配、失败保留、授权与工具别名。
 - [挂起恢复回归](../../crates/agt-runtime/src/scheduler_wait_tests.rs)：刷新后恢复且不重放配置写入。

@@ -12,6 +12,7 @@ agt-harness.workspace = true
 agt-agent.workspace = true
 agt-core.workspace = true
 agt-im.workspace = true
+agt-inference.workspace = true
 agt-mcp.workspace = true
 agt-model.workspace = true
 agt-prompt.workspace = true

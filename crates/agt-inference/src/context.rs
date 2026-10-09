@@ -5,10 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 /// Codex approx_token_count: ceil(UTF-8 bytes / 4). Coarse fallback, not a tokenizer.
-pub(crate) fn estimate(text: &str) -> usize {
+pub fn estimate(text: &str) -> usize {
     text.len().div_ceil(4)
 }
-pub(crate) fn size(messages: &[Value], tools: &[Value]) -> usize {
+pub fn size(messages: &[Value], tools: &[Value]) -> usize {
     // Responses output is the canonical history sent by the adapter. Do not count
     // its duplicate normalized content/tool_calls a second time when usage is absent.
     let visible: Vec<_> = messages
@@ -22,17 +22,17 @@ pub(crate) fn size(messages: &[Value], tools: &[Value]) -> usize {
     estimate(&json!([visible, tools]).to_string()) + 32 * messages.len()
 }
 /// Codex usable_context_window: reserve 5% of the configured model window.
-pub(crate) fn input_budget(agent: &ResolvedAgent) -> usize {
+pub fn input_budget(agent: &ResolvedAgent) -> usize {
     agent.model.capabilities.context_window as usize * 95 / 100
 }
 /// Codex auto_compact_token_limit default: begin compaction at 90%.
-pub(crate) fn auto_compact_limit(agent: &ResolvedAgent) -> usize {
+pub fn auto_compact_limit(agent: &ResolvedAgent) -> usize {
     agent.model.capabilities.context_window as usize * 9 / 10
 }
-pub(crate) fn summary_target(agent: &ResolvedAgent) -> usize {
+pub fn summary_target(agent: &ResolvedAgent) -> usize {
     (input_budget(agent) / 12).clamp(128, 2048)
 }
-pub(crate) fn ensure_fits(tokens: usize, budget: usize, stage: &'static str) -> Result<()> {
+pub fn ensure_fits(tokens: usize, budget: usize, stage: &'static str) -> Result<()> {
     if tokens > budget {
         return Err(RuntimeError::ContextOverflow {
             stage,
@@ -46,7 +46,7 @@ pub(crate) fn ensure_fits(tokens: usize, budget: usize, stage: &'static str) -> 
 /// Use reported input+output totals, plus local items added since that response.
 /// Reset on compaction or when a provider omits usage (do not carry stale totals).
 #[derive(Default)]
-pub(crate) struct ContextUsage {
+pub struct ContextUsage {
     reported: Option<(usize, usize)>,
 }
 impl ContextUsage {
@@ -71,7 +71,7 @@ impl ContextUsage {
     }
 }
 
-pub(crate) fn truncate_output(output: &str, tokens: usize) -> String {
+pub fn truncate_output(output: &str, tokens: usize) -> String {
     if estimate(output) <= tokens {
         return output.into();
     }
@@ -97,7 +97,7 @@ pub struct ContextCheckpoint {
 }
 
 /// Exclude opaque Responses items and provider-private reasoning from summary input.
-pub(crate) fn transcript_data(messages: &[Value]) -> String {
+pub fn transcript_data(messages: &[Value]) -> String {
     let data: Vec<_> = messages
         .iter()
         .map(|message| {
@@ -113,7 +113,7 @@ pub(crate) fn transcript_data(messages: &[Value]) -> String {
 
 /// Chunk plain transcript data, never a partial protocol tool-call/output pair.
 /// No tools are supplied: summarization cannot replay any side effect.
-pub(crate) fn summarize(
+pub fn summarize(
     model: &mut dyn ModelClient,
     agent: &ResolvedAgent,
     previous: &str,

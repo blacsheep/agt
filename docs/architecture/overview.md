@@ -63,6 +63,10 @@ flowchart TB
 - 当前每个 Web 事件订阅启动一个长期运行的 `agt events watch`，将 JSONL 桥接成 SSE。
 - IM 自身不调用模型；Runtime 负责执行，Scheduler 负责执行准入，WorkItem 记录工作责任。
 - `agt-service` 不依赖 Runtime。它声明 `WorkControl`、`HarnessControl`、`ExecutionControl`，由 Runtime 实现并注入。
+- `agt-inference` 只负责一次执行内的模型 I/O：Agent 配置解析、Chat Completions/Responses 协议与流式解析、
+  上下文预算与压缩，以及共用的 `RuntimeError`/`StopCode`。它不读写数据库，也不了解调度；`agt-runtime` 原样再导出这些类型。
+- 调度、WorkItem、审批、Harness 会话与 Run 存储共用 `runtime.db` 的事务与同线程连接，属于同一事务域，
+  因此留在 `agt-runtime` 内按模块划分，而不拆成独立 crate。
 - Harness 当前接入本机 Codex app-server，由它拥有内部模型和工具循环；AGT 不把它当作 Native 的 ModelClient。
 
 ## 持久化职责

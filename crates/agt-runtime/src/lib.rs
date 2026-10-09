@@ -1,35 +1,30 @@
 //! Explicit, bounded agent execution. IM remains a runtime-independent store.
 pub mod approval;
 mod audit;
-mod context;
 mod context_store;
 mod conversation_context;
 mod conversation_instructions;
-pub mod events;
-mod permission;
-mod string_enum;
-pub use context::ContextCheckpoint;
 mod engine;
+pub mod events;
 mod harness;
 mod harness_input;
 mod harness_sessions;
+mod permission;
 mod run_inputs;
+mod string_enum;
 pub use harness_sessions::{
     ExecutionState as HarnessExecutionState, HarnessSession, HarnessSessions, SessionExecution,
 };
 mod local_execution;
 pub use local_execution::LocalExecution;
-mod model;
-mod model_stream;
 mod participation;
 mod progress;
-mod resolve;
 mod schedule_state;
 mod schedule_store;
 mod scheduler;
 mod store;
 mod termination;
-pub use termination::{StopCode, Termination};
+pub use termination::Termination;
 pub mod work;
 pub use audit::{CallRecord, CallState};
 pub use schedule_store::{
@@ -41,118 +36,16 @@ pub use scheduler::{
 };
 
 pub use engine::Runtime;
-pub use model::{ChatCompletions, ModelClient, ModelEvent};
 pub use progress::RunProgress;
-pub use resolve::ResolvedAgent;
+// Model I/O lives in agt-inference; these paths keep the existing runtime API.
+pub use agt_inference::{
+    ChatCompletions, ContextCheckpoint, ModelClient, ModelEvent, Reason, ResolvedAgent, Result,
+    RuntimeError, StopCode,
+};
+pub(crate) use agt_inference::{canonical_agent, context, fingerprint, model};
 pub use store::{RunRecord, RunState, RunStore};
 
-use agt_core::CategoryName;
 use serde::{Deserialize, Serialize};
-
-pub type Result<T> = std::result::Result<T, RuntimeError>;
-
-/// A fixed public message plus an optional private cause. Display shows only the
-/// message; the cause is kept for local diagnostics and never sent to models or the Web.
-#[derive(Debug)]
-pub struct Reason {
-    message: &'static str,
-    cause: Option<anyhow::Error>,
-}
-
-impl Reason {
-    pub(crate) fn because(message: &'static str, cause: impl Into<anyhow::Error>) -> Self {
-        Self {
-            message,
-            cause: Some(cause.into()),
-        }
-    }
-
-    pub fn message(&self) -> &'static str {
-        self.message
-    }
-}
-
-impl From<&'static str> for Reason {
-    fn from(message: &'static str) -> Self {
-        Self {
-            message,
-            cause: None,
-        }
-    }
-}
-
-impl std::fmt::Display for Reason {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.message)
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum RuntimeError {
-    #[error("invalid request: {0}")]
-    Invalid(String),
-    #[error("configuration: {0}")]
-    Configuration(Reason),
-    #[error("model: {0}")]
-    Model(Reason),
-    /// Transport or response failures that may succeed on retry.
-    #[error("model: {0}")]
-    ModelTransient(Reason),
-    #[error(
-        "context overflow at {stage}: {tokens} tokens exceed available budget {budget}; compaction not installed"
-    )]
-    ContextOverflow {
-        stage: &'static str,
-        tokens: usize,
-        budget: usize,
-    },
-    #[error(
-        "model rejected context as too large; shorten fixed input or verify model context_window"
-    )]
-    ContextWindowRejected,
-    #[error("model HTTP status {0}")]
-    HttpStatus(u16),
-    #[error("model request failed after {attempts} attempts: {last}")]
-    ModelRetriesExhausted {
-        attempts: u32,
-        last: Box<RuntimeError>,
-    },
-    #[error("tool: {0}")]
-    Tool(Reason),
-    #[error("IM: {0}")]
-    Im(Reason),
-    #[error("request key already belongs to a different request")]
-    Conflict,
-    #[error("run not found")]
-    NotFound,
-    #[error("run is still running or was interrupted; inspect it before a new attempt")]
-    Busy,
-    #[error("execution stopped: {0}")]
-    Stopped(StopCode),
-    #[error("execution canceled")]
-    Canceled,
-    #[error("shared model-step budget exhausted")]
-    Budget,
-    #[error("runtime storage: {0}")]
-    Storage(#[from] rusqlite::Error),
-    #[error("runtime serialization: {0}")]
-    Serialization(#[from] serde_json::Error),
-}
-
-impl RuntimeError {
-    /// Private cause chain for local diagnostics, if the public message hides one.
-    pub fn diagnostic(&self) -> Option<String> {
-        match self {
-            Self::Configuration(reason)
-            | Self::Model(reason)
-            | Self::ModelTransient(reason)
-            | Self::Tool(reason)
-            | Self::Im(reason) => reason.cause.as_ref().map(|cause| format!("{cause:#}")),
-            Self::ModelRetriesExhausted { last, .. } => last.diagnostic(),
-            _ => None,
-        }
-    }
-}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RunRequest {
@@ -229,20 +122,6 @@ impl RunRequest {
     }
 }
 
-pub(crate) fn canonical_agent(raw: &str) -> Result<String> {
-    let (category, name) = raw.split_once('/').unwrap_or(("default", raw));
-    let category = CategoryName::new(category)
-        .map_err(|_| RuntimeError::Invalid("invalid agent category".into()))?;
-    agt_agent::validate_agent_name(name)
-        .map_err(|_| RuntimeError::Invalid("invalid agent name".into()))?;
-    Ok(format!("{category}/{name}"))
-}
-
-pub(crate) fn fingerprint(value: &[u8]) -> String {
-    use sha2::{Digest, Sha256};
-    format!("{:x}", Sha256::digest(value))
-}
-
 mod context_history;
 pub use context_history::context_reset_history;
 
@@ -256,24 +135,3 @@ pub use tool_details::{ToolDetail, ToolDetailField};
 #[cfg(test)]
 #[path = "tests/progress/tools.rs"]
 mod tool_progress_tests;
-
-#[cfg(test)]
-mod reason_tests {
-    use super::*;
-
-    #[test]
-    fn cause_stays_out_of_public_message() {
-        let cause = anyhow::anyhow!("secret path /home/x/.agt").context("open failed");
-        let error = RuntimeError::Im(Reason::because("cannot open message store", cause));
-        assert_eq!(error.to_string(), "IM: cannot open message store");
-        let diagnostic = error.diagnostic().unwrap();
-        assert!(diagnostic.contains("open failed") && diagnostic.contains("secret path"));
-        let retried = RuntimeError::ModelRetriesExhausted {
-            attempts: 3,
-            last: Box::new(error),
-        };
-        assert!(!retried.to_string().contains("secret"));
-        assert_eq!(retried.diagnostic(), Some(diagnostic));
-        assert_eq!(RuntimeError::Tool("plain".into()).diagnostic(), None);
-    }
-}

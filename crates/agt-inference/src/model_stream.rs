@@ -3,7 +3,7 @@ use crate::{ModelEvent, Result, RuntimeError};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read};
 
-pub(crate) fn read(
+pub fn read(
     input: impl Read,
     responses: bool,
     progress: &mut dyn FnMut(ModelEvent<'_>) -> Result<()>,
