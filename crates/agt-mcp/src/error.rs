@@ -28,10 +28,7 @@ pub enum McpError {
         source: agt_core::tool_schema::ContractError,
     },
     #[error(transparent)]
-    Category {
-        #[from]
-        source: agt_config::CategoryError,
-    },
+    Category(#[from] agt_config::CategoryError),
 
     #[error("mcp 名称无效：{name}。名称只能包含 ASCII 字母、数字、'-'、'_'")]
     InvalidName { name: String },

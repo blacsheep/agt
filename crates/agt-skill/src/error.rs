@@ -6,10 +6,7 @@ pub type Result<T> = std::result::Result<T, SkillError>;
 #[derive(Debug, thiserror::Error)]
 pub enum SkillError {
     #[error(transparent)]
-    Category {
-        #[from]
-        source: agt_config::CategoryError,
-    },
+    Category(#[from] agt_config::CategoryError),
 
     #[error("skill 名称无效：{name}。名称必须是 1-64 字符的 lowercase kebab-case")]
     InvalidName {

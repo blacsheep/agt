@@ -637,7 +637,7 @@ impl StderrState {
         self.had_output.store(true, Ordering::Relaxed);
         let previous = self
             .bytes_seen
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
                 Some(value.saturating_add(bytes))
             })
             .unwrap_or_else(|value| value);

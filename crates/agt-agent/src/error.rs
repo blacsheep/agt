@@ -5,10 +5,7 @@ pub type Result<T> = std::result::Result<T, AgentError>;
 #[derive(Debug, thiserror::Error)]
 pub enum AgentError {
     #[error(transparent)]
-    Category {
-        #[from]
-        source: agt_config::CategoryError,
-    },
+    Category(#[from] agt_config::CategoryError),
 
     #[error(
         "agent 名称无效：{name}。首字符必须是 ASCII 字母或数字，后续可包含 ASCII 字母、数字、'-'、'_'；'.' 只能分隔两个字母数字段"

@@ -5,10 +5,7 @@ pub type Result<T> = std::result::Result<T, ModelError>;
 #[derive(Debug, thiserror::Error)]
 pub enum ModelError {
     #[error(transparent)]
-    Category {
-        #[from]
-        source: agt_config::CategoryError,
-    },
+    Category(#[from] agt_config::CategoryError),
 
     #[error(
         "model 名称无效：{name}。名称只能包含 ASCII 字母、数字、'-'、'_'、'.'，且不能是 '.' 或 '..'"

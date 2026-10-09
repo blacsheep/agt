@@ -1738,7 +1738,7 @@ fn decode_message_cursor(cursor: &str, conversation_id: &ConversationId) -> Resu
         ));
     }
     let mut bytes = Vec::with_capacity(cursor.len() / 2);
-    for pair in cursor.as_bytes().chunks_exact(2) {
+    for pair in cursor.as_bytes().as_chunks::<2>().0 {
         let value = std::str::from_utf8(pair)
             .ok()
             .and_then(|value| u8::from_str_radix(value, 16).ok())

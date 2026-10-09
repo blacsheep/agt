@@ -5,10 +5,7 @@ pub type Result<T> = std::result::Result<T, ProviderError>;
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
     #[error(transparent)]
-    Category {
-        #[from]
-        source: agt_config::CategoryError,
-    },
+    Category(#[from] agt_config::CategoryError),
 
     #[error("provider 名称无效：{name}。名称只能包含 ASCII 字母、数字、'-'、'_'")]
     InvalidName { name: String },
