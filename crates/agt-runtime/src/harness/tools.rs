@@ -26,8 +26,8 @@ impl ToolBridge<'_> {
             &format!("call:{}", tool_call.id),
             &[("arguments", &args)],
         )?;
-        let result = self.execute_tool_call(service, name, args);
-        self.after_tool_call(name, tool_call, result)
+        let (result, diagnostic) = self.execute_tool_call(service, name, args);
+        self.after_tool_call(name, tool_call, result, diagnostic)
     }
     fn prepare_tool_call<'a>(
         &self,
@@ -67,44 +67,38 @@ impl ToolBridge<'_> {
         tool_record.kind = "framework".into();
         store.start_call(tool_record)
     }
-    fn execute_tool_call(&self, service: &ToolService, name: &str, args: Value) -> Result<Value> {
-        let home = self.home;
-        let task = self.task;
-        let invoke = || service.call(name, args).map_err(error);
-        if let Some(t) = task
-            && name != "mcp_probe"
-            && !name.starts_with("harness_")
-            && !matches!(
-                name,
-                "task_request"
-                    | "task_get"
-                    | "task_list"
-                    | "task_defer"
-                    | "task_reprioritize"
-                    | "task_execution_policy"
-                    | "task_cancel"
-                    | "task_retry"
-                    | "task_resolve"
-                    | "task_await"
-                    | "task_yield"
-                    | "task_input"
-                    | "task_reply"
-                    | "task_report"
-                    | "task_attention"
-            )
-        {
-            crate::scheduler::guarded(home, t, invoke)
-        } else {
-            invoke()
-        }
+    /// Returns the result and, for a classified framework failure, its hidden cause.
+    fn execute_tool_call(
+        &self,
+        service: &ToolService,
+        name: &str,
+        args: Value,
+    ) -> (Result<Value>, Option<String>) {
+        let diagnostic = std::cell::RefCell::new(None);
+        let invoke = || {
+            service.call(name, args).map_err(|e| {
+                *diagnostic.borrow_mut() = e.diagnostic().map(str::to_owned);
+                error(e)
+            })
+        };
+        let fenced = agt_service::catalog::tool(name).is_some_and(|t| t.fenced());
+        let result = match self.task {
+            Some(task) if fenced => crate::scheduler::guarded(self.home, task, invoke),
+            _ => invoke(),
+        };
+        let diagnostic = diagnostic
+            .into_inner()
+            .or_else(|| result.as_ref().err().and_then(RuntimeError::diagnostic));
+        (result, diagnostic)
     }
     fn after_tool_call(
         &mut self,
         name: &str,
         mut tool_call: crate::CallRecord,
         result: Result<Value>,
+        diagnostic: Option<String>,
     ) -> anyhow::Result<Value> {
-        if matches!(name, "task_await" | "task_yield" | "task_input") && result.is_ok() {
+        if agt_service::catalog::tool(name).is_some_and(|t| t.suspends) && result.is_ok() {
             self.state.awaiting = true;
         }
         let state = if result.is_ok() {
@@ -124,10 +118,13 @@ impl ToolBridge<'_> {
             Ok(value) => value.clone(),
             Err(error) => crate::audit::runtime_error(error),
         };
+        let diagnostic = diagnostic.map(Value::String);
+        let mut fields = vec![("output", &output)];
+        fields.extend(diagnostic.as_ref().map(|d| ("diagnostic", d)));
         self.store.save_tool_detail(
             &tool_call.run_id,
             &format!("call:{}", tool_call.id),
-            &[("output", &output)],
+            &fields,
         )?;
         self.store.finish_call(&tool_call)?;
         result.map_err(Into::into)

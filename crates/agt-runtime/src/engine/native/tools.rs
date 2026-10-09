@@ -73,7 +73,7 @@ impl NativeRun<'_, '_> {
                     json!(error)
                 };
                 let output = json!({"error": error}).to_string();
-                self.after_tool_call(&call, invocation, Ok((output, Some(error))))?;
+                self.after_tool_call(&call, invocation, Ok(ToolOutput::failed(output, error)))?;
                 continue;
             }
             let scope =
@@ -113,12 +113,15 @@ impl NativeRun<'_, '_> {
             )?;
             let affects_capabilities = self.affects_capabilities(&call, &arguments);
             let mut result = self.execute_tool_call(&call, arguments);
-            if affects_capabilities && let Ok((output, None)) = &mut result {
+            if affects_capabilities
+                && let Ok(output) = &mut result
+                && output.error.is_none()
+            {
                 refresh = true;
-                let mut value: Value = serde_json::from_str(output)?;
+                let mut value: Value = serde_json::from_str(&output.text)?;
                 value["runtime_application"] =
                     json!({"state":"pending","boundary":"after_tool_batch"});
-                *output = value.to_string();
+                output.text = value.to_string();
             }
             if let ToolFlow::Suspend = self.after_tool_call(&call, invocation, result)? {
                 return Ok(ToolFlow::Suspend);
@@ -158,24 +161,17 @@ impl NativeRun<'_, '_> {
         self.runtime.store.start_call(invocation)
     }
 
-    fn execute_tool_call(
-        &mut self,
-        call: &ToolCall,
-        arguments: Value,
-    ) -> Result<(String, Option<Value>)> {
+    fn execute_tool_call(&mut self, call: &ToolCall, arguments: Value) -> Result<ToolOutput> {
         if call.function.name == "delegate" {
             let args: Delegation = serde_json::from_str(&call.function.arguments)?;
-            Ok((
-                self.runtime.delegate(
-                    self.record,
-                    args,
-                    &call.id,
-                    self.agents,
-                    self.steps.count,
-                    self.cancellation,
-                )?,
-                None,
-            ))
+            Ok(ToolOutput::ok(self.runtime.delegate(
+                self.record,
+                args,
+                &call.id,
+                self.agents,
+                self.steps.count,
+                self.cancellation,
+            )?))
         } else if self.is_framework(&call.function.name) {
             self.execute_framework_call(call, arguments)
         } else {
@@ -184,7 +180,11 @@ impl NativeRun<'_, '_> {
                 .call(&call.function.name, arguments, self.cancellation)?;
             let error = (serde_json::from_str::<Value>(&output)?["is_error"] == true)
             .then(|| json!({"code":"mcp_tool_error","message":"External MCP tool reported an error; inspect its result before retrying."}));
-            Ok((output, error))
+            Ok(ToolOutput {
+                text: output,
+                error,
+                diagnostic: None,
+            })
         }
     }
 
@@ -192,16 +192,19 @@ impl NativeRun<'_, '_> {
         &mut self,
         call: &ToolCall,
         mut invocation: CallRecord,
-        result: Result<(String, Option<Value>)>,
+        result: Result<ToolOutput>,
     ) -> Result<ToolFlow> {
-        if let Ok((output, None)) = &result
-            && let Ok(value) = serde_json::from_str(output)
+        if let Ok(output) = &result
+            && output.error.is_none()
+            && let Ok(value) = serde_json::from_str(&output.text)
         {
             invocation.summarize_result(&value);
         }
         match &result {
-            Ok((_, None)) => invocation.finish(CallState::Succeeded, None),
-            Ok((_, Some(error))) => invocation.finish(CallState::Failed, Some(error.clone())),
+            Ok(ToolOutput { error: None, .. }) => invocation.finish(CallState::Succeeded, None),
+            Ok(ToolOutput {
+                error: Some(error), ..
+            }) => invocation.finish(CallState::Failed, Some(error.clone())),
             Err(error) => invocation.finish(
                 if matches!(error, RuntimeError::Canceled | RuntimeError::Stopped(_)) {
                     CallState::Canceled
@@ -211,23 +214,28 @@ impl NativeRun<'_, '_> {
                 Some(runtime_error(error)),
             ),
         }
-        let output = match &result {
-            Ok((output, _)) => {
-                serde_json::from_str(output).unwrap_or_else(|_| Value::String(output.clone()))
-            }
-            Err(error) => runtime_error(error),
+        let (output, diagnostic) = match &result {
+            Ok(output) => (
+                serde_json::from_str(&output.text)
+                    .unwrap_or_else(|_| Value::String(output.text.clone())),
+                output.diagnostic.clone(),
+            ),
+            Err(error) => (runtime_error(error), error.diagnostic()),
         };
+        let diagnostic = diagnostic.map(Value::String);
+        let mut fields = vec![("output", &output)];
+        fields.extend(diagnostic.as_ref().map(|d| ("diagnostic", d)));
         self.runtime.store.save_tool_detail(
             &self.record.id,
             &format!("call:{}", invocation.id),
-            &[("output", &output)],
+            &fields,
         )?;
         self.runtime.store.finish_call(&invocation)?;
         if invocation.state != CallState::Succeeded {
             self.record.tool_failures += 1;
             self.runtime.store.save(self.record)?;
         }
-        let (output, _) = result?;
+        let output = result?.text;
         let output = crate::context::truncate_output(
             &output,
             (crate::context::input_budget(&self.agent) / 16).max(128),

@@ -65,6 +65,17 @@ fn business_error_is_audited_and_the_rest_of_the_batch_reaches_the_next_turn() {
     );
     assert!(audit[3].tool_name.is_none());
     let store = RunStore::open(home.path()).unwrap();
+    // The hidden cause reaches only the private tool details, never the audit or model.
+    let failed = store
+        .tool_detail(&run.id, &format!("call:{}", audit[1].id))
+        .unwrap()
+        .unwrap();
+    let diagnostic = &failed.fields["diagnostic"].text;
+    assert!(!diagnostic.is_empty());
+    let audit_error = serde_json::to_string(&audit[1].error).unwrap();
+    assert!(!audit_error.contains("diagnostic") && !audit_error.contains(diagnostic.as_str()));
+    let tool_message = messages[3]["content"].as_str().unwrap();
+    assert!(!tool_message.contains(diagnostic.as_str()));
     let detail = store
         .tool_detail(&run.id, &format!("call:{}", audit[2].id))
         .unwrap()

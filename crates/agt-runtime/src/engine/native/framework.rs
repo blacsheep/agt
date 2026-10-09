@@ -6,7 +6,7 @@ impl NativeRun<'_, '_> {
         &mut self,
         call: &ToolCall,
         arguments: Value,
-    ) -> Result<(String, Option<Value>)> {
+    ) -> Result<ToolOutput> {
         let publishes_here = call.function.name == "framework_message_send"
             && self.record.request.trigger.as_ref().is_some_and(|t| {
                 arguments["conversation"].as_str() == Some(t.conversation_id.as_str())
@@ -78,12 +78,13 @@ impl NativeRun<'_, '_> {
                     self.transcript.sent_messages.entry(identity).or_insert(key);
                 }
                 self.transcript.published |= publishes_here;
-                Ok((serde_json::to_string(&value)?, None))
+                Ok(ToolOutput::ok(serde_json::to_string(&value)?))
             }
-            Err(error) => Ok((
-                error.as_value().to_string(),
-                Some(serde_json::to_value(&error)?),
-            )),
+            Err(error) => Ok(ToolOutput {
+                text: error.as_value().to_string(),
+                error: Some(serde_json::to_value(&error)?),
+                diagnostic: error.diagnostic().map(str::to_owned),
+            }),
         }
     }
 }

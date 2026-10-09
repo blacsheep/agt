@@ -49,6 +49,32 @@ enum ModelTurn {
     },
 }
 
+/// A completed tool call. `error` is the public failure the model sees; `diagnostic`
+/// is its hidden cause, kept only in the private tool details.
+struct ToolOutput {
+    text: String,
+    error: Option<Value>,
+    diagnostic: Option<String>,
+}
+
+impl ToolOutput {
+    fn ok(text: String) -> Self {
+        Self {
+            text,
+            error: None,
+            diagnostic: None,
+        }
+    }
+
+    fn failed(text: String, error: Value) -> Self {
+        Self {
+            text,
+            error: Some(error),
+            diagnostic: None,
+        }
+    }
+}
+
 enum ToolFlow {
     Continue,
     Suspend,

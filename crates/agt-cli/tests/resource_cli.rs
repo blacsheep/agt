@@ -425,3 +425,43 @@ fn mcp_probe_is_explicit_and_checks_tool_schemas() {
     assert!(temp.path().join("calls.starts").exists());
     assert!(!log.exists());
 }
+
+#[test]
+fn tool_failure_cause_goes_to_stderr_only() {
+    let temp = tempfile::tempdir().unwrap();
+    let home = temp.path().join("home");
+    assert!(init(&home).status.success());
+    assert!(
+        run(
+            &home,
+            &["im", "principal", "create", "owner", "--name", "Owner"]
+        )
+        .status
+        .success()
+    );
+    let output = run(
+        &home,
+        &[
+            "--output",
+            "json",
+            "tool",
+            "call",
+            "--principal",
+            "owner",
+            "--manager",
+            "resource_read",
+            "--args",
+            r#"{"kind":"prompt","reference":"missing"}"#,
+        ],
+    );
+    assert!(!output.status.success());
+    let stdout: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(stdout["error"]["code"].is_string());
+    assert!(stdout["error"].get("diagnostic").is_none());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let line = stderr
+        .lines()
+        .find(|l| l.starts_with("diagnostic: "))
+        .expect("diagnostic on stderr");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains(&line["diagnostic: ".len()..]));
+}

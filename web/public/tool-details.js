@@ -1,7 +1,7 @@
 /* Lazy payload loading, scoped to one mounted tool card. No shared private-data cache. */
 window.AgtToolDetails = (() => {
   const states = new WeakMap();
-  const titles = {command:'命令',cwd:'工作目录',arguments:'调用参数',output:'返回结果',aggregatedOutput:'终端输出',changes:'文件变更 / Diff',result:'返回结果',error:'错误',exitCode:'退出码'};
+  const titles = {command:'命令',cwd:'工作目录',arguments:'调用参数',output:'返回结果',aggregatedOutput:'终端输出',changes:'文件变更 / Diff',result:'返回结果',error:'错误',exitCode:'退出码',diagnostic:'诊断（仅本机）'};
   function bind(node, activity, context) {
     if (!context) return;
     let state = states.get(node);

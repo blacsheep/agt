@@ -66,6 +66,10 @@ pub(crate) fn tool(command: ToolCommand, home: &Path, output: OutputMode) -> Res
                 Ok(result) => emit(&result, output),
                 Err(error) => {
                     emit(&error.as_value(), output)?;
+                    // Local operators see the cause; JSON stdout stays the public contract.
+                    if let Some(diagnostic) = error.diagnostic() {
+                        eprintln!("diagnostic: {diagnostic}");
+                    }
                     Err(error.into())
                 }
             }

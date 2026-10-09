@@ -2,6 +2,8 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 /// Safe across the model, MCP and CLI boundaries. Never wraps raw parser/storage text.
+/// The hidden cause behind a classified failure stays in `diagnostic`, which is never
+/// serialized; hosts may record it only in local, operator-only diagnostics.
 #[derive(Clone, Debug, Serialize)]
 pub struct ToolError {
     pub code: &'static str,
@@ -12,6 +14,8 @@ pub struct ToolError {
     pub argument_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema_path: Option<String>,
+    #[serde(skip)]
+    diagnostic: Option<Box<str>>,
 }
 
 impl ToolError {
@@ -22,6 +26,7 @@ impl ToolError {
             field: None,
             argument_path: None,
             schema_path: None,
+            diagnostic: None,
         }
     }
 
@@ -32,6 +37,7 @@ impl ToolError {
             field: field.map(str::to_owned),
             argument_path: None,
             schema_path: None,
+            diagnostic: None,
         }
     }
 
@@ -47,6 +53,7 @@ impl ToolError {
                 .map(str::to_owned),
             argument_path: (!error.field.is_empty()).then_some(error.field),
             schema_path: (!error.schema_path.is_empty()).then_some(error.schema_path),
+            diagnostic: None,
         }
     }
 
@@ -54,10 +61,21 @@ impl ToolError {
         json!({"error": self})
     }
 
+    /// Local cause chain for a classified failure; never part of the public error.
+    pub fn diagnostic(&self) -> Option<&str> {
+        self.diagnostic.as_deref()
+    }
+
     pub(crate) fn classify(error: anyhow::Error) -> Self {
         if let Some(error) = error.downcast_ref::<Self>() {
             return error.clone();
         }
+        let mut public = Self::public(&error);
+        public.diagnostic = Some(format!("{error:#}").into());
+        public
+    }
+
+    fn public(error: &anyhow::Error) -> Self {
         if let Some(agt_mcp::McpError::ToolSchema { tool, source }) =
             error.downcast_ref::<agt_mcp::McpError>()
         {
@@ -155,3 +173,22 @@ impl std::fmt::Display for ToolError {
     }
 }
 impl std::error::Error for ToolError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classified_cause_is_kept_but_never_serialized() {
+        let cause = anyhow::anyhow!("disk I/O at /home/x/.agt/runtime").context("save failed");
+        let error = ToolError::classify(cause);
+        let diagnostic = error.diagnostic().unwrap();
+        assert!(diagnostic.contains("save failed") && diagnostic.contains("/home/x"));
+        let public = error.as_value().to_string();
+        assert!(!public.contains("/home/x") && !public.contains("diagnostic"));
+        assert!(ToolError::new("conflict", "public").diagnostic().is_none());
+        // An explicit ToolError passes through unchanged and carries no cause.
+        let explicit = ToolError::classify(ToolError::new("conflict", "public").into());
+        assert!(explicit.diagnostic().is_none());
+    }
+}
