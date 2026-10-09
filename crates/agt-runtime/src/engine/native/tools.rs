@@ -16,14 +16,7 @@ impl NativeRun<'_, '_> {
         {
             return Err(RuntimeError::Model("empty final response"));
         }
-        if calls.len() > 1
-            && calls.iter().any(|c| {
-                matches!(
-                    c.function.name.as_str(),
-                    "framework_task_await" | "framework_task_yield" | "framework_task_input"
-                )
-            })
-        {
+        if calls.len() > 1 && calls.iter().any(|c| suspends(&c.function.name)) {
             return Err(RuntimeError::Tool(
                 "task_await/task_yield/task_input must be the only tool call in its batch",
             ));
@@ -129,7 +122,7 @@ impl NativeRun<'_, '_> {
         let arguments: Value = serde_json::from_str(&call.function.arguments)?;
         let schema = self.communication.as_ref().and_then(|service| {
             service.schemas().into_iter().find(|s| {
-                format!("framework_{}", s["name"].as_str().expect("tool name"))
+                agt_service::catalog::hosted_name(s["name"].as_str().expect("tool name"))
                     == call.function.name
             })
         });
@@ -230,17 +223,17 @@ impl NativeRun<'_, '_> {
         self.messages
             .push(json!({"role":"tool", "tool_call_id":call.id, "content":output}));
         Ok(
-            if matches!(
-                call.function.name.as_str(),
-                "framework_task_await" | "framework_task_yield" | "framework_task_input"
-            ) && invocation.state == CallState::Succeeded
-            {
+            if suspends(&call.function.name) && invocation.state == CallState::Succeeded {
                 ToolFlow::Suspend
             } else {
                 ToolFlow::Continue
             },
         )
     }
+}
+
+fn suspends(name: &str) -> bool {
+    agt_service::catalog::hosted_tool(name).is_some_and(|t| t.suspends)
 }
 
 fn validate_message(message: &Value) -> Result<Vec<ToolCall>> {

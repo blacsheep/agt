@@ -1,3 +1,4 @@
+use crate::catalog::ToolGroup;
 use crate::{Actor, Binding, BindingStore, MessageInput, Messaging, Resources, Role, ToolError};
 use agt_im::{ConversationId, PrincipalId, PrincipalInput, PrincipalKind};
 use anyhow::{Result, bail};
@@ -116,45 +117,32 @@ impl ToolService {
     }
 
     fn call_inner(&self, name: &str, args: Value) -> Result<Value> {
-        if name == "local_exec" {
-            return self.execution.as_ref().expect("schema checked").call(args);
-        }
-        if name.starts_with("memory_") {
-            return crate::memory::call(
-                &self.home,
-                &self.messaging.im,
-                &self.messaging.actor.principal,
-                name,
-                args,
-            );
-        }
-        if name.starts_with("harness_") {
-            self.require_resource_management()?;
-            return self
-                .harness
-                .as_ref()
-                .expect("schema checked")
-                .call(name, args);
-        }
-        if matches!(
-            name,
-            "task_request"
-                | "task_get"
-                | "task_list"
-                | "task_defer"
-                | "task_reprioritize"
-                | "task_execution_policy"
-                | "task_await"
-                | "task_yield"
-                | "task_input"
-                | "task_reply"
-                | "task_report"
-                | "task_attention"
-                | "task_cancel"
-                | "task_resolve"
-                | "task_retry"
-        ) {
-            return self.work.as_ref().expect("schema checked").call(name, args);
+        let spec = crate::catalog::tool(name).expect("every schema has catalog metadata");
+        match spec.group {
+            ToolGroup::Execution => {
+                return self.execution.as_ref().expect("schema checked").call(args);
+            }
+            ToolGroup::Memory => {
+                return crate::memory::call(
+                    &self.home,
+                    &self.messaging.im,
+                    &self.messaging.actor.principal,
+                    name,
+                    args,
+                );
+            }
+            ToolGroup::Harness => {
+                self.require_resource_management()?;
+                return self
+                    .harness
+                    .as_ref()
+                    .expect("schema checked")
+                    .call(name, args);
+            }
+            ToolGroup::Task => {
+                return self.work.as_ref().expect("schema checked").call(name, args);
+            }
+            ToolGroup::Messaging | ToolGroup::Identity | ToolGroup::Resource => {}
         }
         let m = &self.messaging;
         let resources = Resources::new(&self.home);
@@ -715,4 +703,67 @@ struct McpProbe {
 #[serde(deny_unknown_fields)]
 struct AgentMountList {
     agent: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    struct Stub;
+    impl crate::WorkControl for Stub {
+        fn supports_await(&self) -> bool {
+            true
+        }
+        fn call(&self, _: &str, _: Value) -> Result<Value> {
+            unreachable!()
+        }
+    }
+    impl crate::HarnessControl for Stub {
+        fn call(&self, _: &str, _: Value) -> Result<Value> {
+            unreachable!()
+        }
+    }
+    impl crate::ExecutionControl for Stub {
+        fn call(&self, _: Value) -> Result<Value> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn catalog_matches_every_schema() {
+        let home = tempfile::tempdir().unwrap();
+        agt_im::ImStore::open(home.path().join("im/im.db"))
+            .unwrap()
+            .create_principal(PrincipalInput {
+                id: PrincipalId::new("owner"),
+                kind: PrincipalKind::User,
+                display_name: "owner".into(),
+                metadata: json!({}),
+            })
+            .unwrap();
+        let actor = Actor {
+            principal: PrincipalId::new("owner"),
+            role: Role::Manager,
+            automated_depth: None,
+        };
+        let service = ToolService::open(home.path(), actor)
+            .unwrap()
+            .with_work_control(Box::new(Stub))
+            .with_harness_control(Box::new(Stub))
+            .with_execution_control(Box::new(Stub));
+        let schemas = service.schemas();
+        let names: Vec<_> = schemas
+            .iter()
+            .map(|s| s["name"].as_str().unwrap())
+            .collect();
+        let mut unique: BTreeSet<_> = names.iter().copied().collect();
+        assert_eq!(unique.len(), names.len(), "duplicate schema names");
+        // Memory tools depend on workspace configuration.
+        let memory = crate::memory::schemas();
+        unique.extend(memory.iter().map(|s| s["name"].as_str().unwrap()));
+        let catalog: BTreeSet<_> = crate::catalog::TOOLS.iter().map(|t| t.name).collect();
+        assert_eq!(catalog.len(), crate::catalog::TOOLS.len());
+        assert_eq!(unique, catalog);
+    }
 }

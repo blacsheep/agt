@@ -58,34 +58,16 @@ impl NativeRun<'_, '_> {
                 .call(
                     call.function
                         .name
-                        .strip_prefix("framework_")
+                        .strip_prefix(agt_service::catalog::HOSTED_PREFIX)
                         .expect("tool prefix"),
                     arguments,
                 ))
         };
-        let task_tool = matches!(
-            call.function.name.as_str(),
-            "framework_task_request"
-                | "framework_task_get"
-                | "framework_task_list"
-                | "framework_task_defer"
-                | "framework_task_reprioritize"
-                | "framework_task_execution_policy"
-                | "framework_task_cancel"
-                | "framework_task_retry"
-                | "framework_task_resolve"
-                | "framework_task_await"
-                | "framework_task_yield"
-                | "framework_task_input"
-                | "framework_task_reply"
-                | "framework_task_report"
-                | "framework_task_attention"
-        );
+        let fenced = agt_service::catalog::hosted_tool(&call.function.name)
+            .expect("validated framework tool")
+            .fenced();
         let result = if let Some(task) = &self.runtime.scheduled_task
-            && !task_tool
-            && !call.function.name.starts_with("framework_harness_")
-            && call.function.name != "framework_local_exec"
-            && call.function.name != "framework_mcp_probe"
+            && fenced
         {
             crate::scheduler::guarded(&self.runtime.home, task, operation)?
         } else {

@@ -117,26 +117,11 @@ impl<'run, 'host> NativeRun<'run, 'host> {
             for schema in service.schemas() {
                 let tool_name = schema["name"].as_str().expect("tool name");
                 if record.request.trigger.is_none()
-                    && !tool_name.starts_with("resource_")
-                    && !tool_name.starts_with("harness_")
-                    && !tool_name.starts_with("memory_")
-                    && tool_name != "local_exec"
-                    && tool_name != "provider_models"
-                    && tool_name != "mcp_probe"
-                    && !tool_name.starts_with("agent_mcp_")
-                    && !matches!(
-                        tool_name,
-                        "principal_create"
-                            | "principal_list"
-                            | "agent_bind"
-                            | "agent_set_enabled"
-                            | "agent_unbind"
-                            | "binding_list"
-                    )
+                    && !agt_service::catalog::tool(tool_name).is_some_and(|t| t.explicit_run())
                 {
                     continue;
                 }
-                let name = format!("framework_{}", schema["name"].as_str().expect("tool name"));
+                let name = agt_service::catalog::hosted_name(tool_name);
                 communication_names.insert(name.clone());
                 tools.schemas.push(json!({"type":"function","function":{"name":name,"description":schema["description"],"parameters":schema["inputSchema"]}}));
             }

@@ -116,27 +116,15 @@ impl PreparedHarness {
             .unwrap_or_default()
             .into_iter()
             .filter(|s| {
-                // Explicit runs only expose resource tools; scheduled runs use their fixed IM identity.
-                let name = s["name"].as_str().unwrap_or("");
-                if record.request.trigger.is_none() {
-                    return name.starts_with("resource_")
-                        || name.starts_with("harness_")
-                        || name.starts_with("memory_")
-                        || matches!(
-                            name,
-                            "provider_models"
-                                | "principal_create"
-                                | "principal_list"
-                                | "agent_bind"
-                                | "agent_set_enabled"
-                                | "agent_unbind"
-                                | "binding_list"
-                        );
-                }
-                true
+                // Explicit runs only expose workspace tools; scheduled runs use their fixed IM identity.
+                record.request.trigger.is_some()
+                    || s["name"]
+                        .as_str()
+                        .and_then(agt_service::catalog::tool)
+                        .is_some_and(|t| t.explicit_run())
             })
             .map(|s| Tool {
-                name: format!("framework_{}", s["name"].as_str().unwrap()),
+                name: agt_service::catalog::hosted_name(s["name"].as_str().unwrap()),
                 description: s["description"].as_str().unwrap_or("").into(),
                 input_schema: s["inputSchema"].clone(),
             })

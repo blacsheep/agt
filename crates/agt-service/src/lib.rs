@@ -1,4 +1,5 @@
 mod bindings;
+pub mod catalog;
 pub mod deletion;
 mod error;
 mod harness_tools;
