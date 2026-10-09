@@ -63,7 +63,6 @@ pub struct Discussion {
     pub calls: u32,
     pub max_replies: Option<u32>,
     pub expires_at: i64,
-    pub allow_mcp: bool,
 }
 
 #[derive(Serialize)]
@@ -118,7 +117,7 @@ impl ScheduleStore {
         let version: u32 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
         match version {
             0 => tx.execute_batch("CREATE TABLE coordinator(id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT NOT NULL, expires INTEGER NOT NULL);
-                CREATE TABLE discussions(id TEXT PRIMARY KEY,conversation TEXT NOT NULL,state TEXT NOT NULL,calls INTEGER NOT NULL DEFAULT 0,expires INTEGER NOT NULL,allow_mcp INTEGER NOT NULL,last_human_seq INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE discussions(id TEXT PRIMARY KEY,conversation TEXT NOT NULL,state TEXT NOT NULL,calls INTEGER NOT NULL DEFAULT 0,expires INTEGER NOT NULL,last_human_seq INTEGER NOT NULL DEFAULT 0);
                 CREATE TABLE tasks(id TEXT PRIMARY KEY,discussion TEXT NOT NULL,principal TEXT NOT NULL,conversation TEXT NOT NULL,state TEXT NOT NULL,due INTEGER NOT NULL,quiet INTEGER NOT NULL,version INTEGER NOT NULL,owner TEXT,record TEXT NOT NULL);
                 CREATE UNIQUE INDEX active_principal ON tasks(principal) WHERE state IN ('evaluating','ready_to_reply','responding');
                 CREATE UNIQUE INDEX autonomous_reply_slot ON tasks(conversation) WHERE state='responding' AND json_extract(record,'$.decision_required')=1;
@@ -128,7 +127,7 @@ impl ScheduleStore {
                 CREATE TABLE reconciled(task TEXT PRIMARY KEY);
                 CREATE TABLE human_messages(message TEXT PRIMARY KEY,discussion TEXT NOT NULL);
                 PRAGMA user_version=3;")?,
-            3..=17 => {},
+            3..=18 => {},
             _ => bail!("unsupported scheduler database version"),
         }
         tx.execute_batch("CREATE TABLE IF NOT EXISTS context_resets(conversation TEXT PRIMARY KEY,through_seq INTEGER NOT NULL);")?;
@@ -149,6 +148,21 @@ impl ScheduleStore {
             tx.execute_batch("CREATE TABLE IF NOT EXISTS run_inputs(input_task TEXT PRIMARY KEY,parent_task TEXT NOT NULL,run_id TEXT NOT NULL,mode TEXT NOT NULL,accepted_at INTEGER NOT NULL);
                 CREATE INDEX IF NOT EXISTS run_input_parent ON run_inputs(parent_task);
                 PRAGMA user_version=17;")?;
+        }
+        if version < 18 {
+            if version != 0 {
+                tx.execute_batch("ALTER TABLE discussions DROP COLUMN allow_mcp;")?;
+            }
+            tx.pragma_update(None, "user_version", 18)?;
+            // Only the retired MCP gate is released. Other blockers and discussion
+            // lifecycle checks keep their existing semantics.
+            for mut task in query_tasks(
+                &tx,
+                "SELECT record FROM tasks WHERE state='blocked' AND json_extract(record,'$.reason')='MCP execution needs binding and discussion authorization'",
+            )? {
+                task.wake_for_human(now_ms());
+                save_task(&tx, &task)?;
+            }
         }
         tx.commit()?;
         Ok(Self {
@@ -171,14 +185,8 @@ impl ScheduleStore {
     }
 
     #[cfg(test)]
-    pub(crate) fn start(
-        &self,
-        id: &str,
-        conversation: &str,
-        allow_mcp: bool,
-        now: i64,
-    ) -> Result<()> {
-        self.connection.execute("INSERT OR IGNORE INTO discussions(id,conversation,state,expires,allow_mcp) VALUES(?1,?2,'active',?3,?4)", params![id,conversation,self.config.expires_at(now),allow_mcp])?;
+    pub(crate) fn start(&self, id: &str, conversation: &str, now: i64) -> Result<()> {
+        self.connection.execute("INSERT OR IGNORE INTO discussions(id,conversation,state,expires) VALUES(?1,?2,'active',?3)", params![id,conversation,self.config.expires_at(now)])?;
         Ok(())
     }
 
@@ -187,7 +195,6 @@ impl ScheduleStore {
         message: &str,
         conversation: &str,
         seq: i64,
-        allow_mcp: bool,
         now: i64,
     ) -> Result<()> {
         let tx = self
@@ -209,14 +216,17 @@ impl ScheduleStore {
             [conversation], |r| Ok((r.get(0)?, r.get(1)?)),
         ).optional()?;
         let (discussion, previous_seq) = existing.unwrap_or_else(|| (message.into(), 0));
-        tx.execute("INSERT OR IGNORE INTO discussions(id,conversation,state,expires,allow_mcp) VALUES(?1,?2,'active',?3,?4)", params![discussion,conversation,self.config.expires_at(now),allow_mcp])?;
+        tx.execute("INSERT OR IGNORE INTO discussions(id,conversation,state,expires) VALUES(?1,?2,'active',?3)", params![discussion,conversation,self.config.expires_at(now)])?;
         tx.execute(
             "INSERT INTO human_messages VALUES(?1,?2)",
             params![message, discussion],
         )?;
         if seq > previous_seq {
             tx.execute("DELETE FROM usage WHERE discussion=?1", [&discussion])?;
-            tx.execute("UPDATE discussions SET state='active',last_human_seq=?2,expires=?3,allow_mcp=MAX(allow_mcp,?4) WHERE id=?1", params![discussion,seq,self.config.expires_at(now),allow_mcp])?;
+            tx.execute(
+                "UPDATE discussions SET state='active',last_human_seq=?2,expires=?3 WHERE id=?1",
+                params![discussion, seq, self.config.expires_at(now)],
+            )?;
             // A human turn wakes pending work, including cross-conversation waits.
             // Running snapshots and possible external effects remain untouched.
             for mut task in query_tasks(
@@ -245,13 +255,7 @@ impl ScheduleStore {
             .optional()?)
     }
 
-    pub fn control(
-        &mut self,
-        conversation: &str,
-        action: &str,
-        allow_mcp: bool,
-        now: i64,
-    ) -> Result<()> {
+    pub fn control(&mut self, conversation: &str, action: &str, now: i64) -> Result<()> {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -266,7 +270,7 @@ impl ScheduleStore {
                 )?;
             }
             "resume" => {
-                tx.execute("UPDATE discussions SET state='active',expires=?2,allow_mcp=MAX(allow_mcp,?3) WHERE conversation=?1 AND state!='ended'",params![conversation,self.config.expires_at(now),allow_mcp])?;
+                tx.execute("UPDATE discussions SET state='active',expires=?2 WHERE conversation=?1 AND state!='ended'",params![conversation,self.config.expires_at(now)])?;
                 for mut task in query_tasks(
                     &tx,
                     "SELECT t.record FROM tasks t JOIN discussions d ON d.id=t.discussion WHERE t.state='blocked' AND d.state='active'",
@@ -293,7 +297,7 @@ impl ScheduleStore {
         Ok(self
             .connection
             .query_row(
-                "SELECT id,conversation,state,calls,expires,allow_mcp FROM discussions WHERE id=?1",
+                "SELECT id,conversation,state,calls,expires FROM discussions WHERE id=?1",
                 [id],
                 |r| discussion_row(r, self.config.scheduler.replies_per_agent),
             )
@@ -596,7 +600,7 @@ impl ScheduleStore {
             )
             .optional()?
             .is_some();
-        let mut statement=self.connection.prepare("SELECT id,conversation,state,calls,expires,allow_mcp FROM discussions WHERE id IN (SELECT discussion FROM tasks WHERE state IN ('queued','waiting','ready_to_reply','evaluating','responding','blocked','limited')) OR id IN (SELECT id FROM discussions ORDER BY rowid DESC LIMIT 100) ORDER BY rowid DESC")?;
+        let mut statement=self.connection.prepare("SELECT id,conversation,state,calls,expires FROM discussions WHERE id IN (SELECT discussion FROM tasks WHERE state IN ('queued','waiting','ready_to_reply','evaluating','responding','blocked','limited')) OR id IN (SELECT id FROM discussions ORDER BY rowid DESC LIMIT 100) ORDER BY rowid DESC")?;
         let discussions = statement
             .query_map([], |r| {
                 discussion_row(r, self.config.scheduler.replies_per_agent)
@@ -660,7 +664,6 @@ fn discussion_row(r: &rusqlite::Row<'_>, max_replies: Option<u32>) -> rusqlite::
         calls: r.get(3)?,
         max_replies,
         expires_at: r.get(4)?,
-        allow_mcp: r.get(5)?,
     })
 }
 fn query_tasks(c: &Connection, sql: &str) -> Result<Vec<ScheduledTask>> {
@@ -721,16 +724,68 @@ mod tests {
     fn fixture() -> (tempfile::TempDir, ScheduleStore) {
         let home = tempfile::tempdir().unwrap();
         let mut store = ScheduleStore::open(home.path()).unwrap();
-        store.start("round", "chat", false, 0).unwrap();
+        store.start("round", "chat", 0).unwrap();
         assert!(store.acquire("scheduler:one", 0).unwrap());
         (home, store)
+    }
+
+    #[test]
+    fn legacy_mcp_gate_migrates_without_releasing_other_blockers() {
+        let (home, mut store) = fixture();
+        for (id, state, reason) in [
+            (
+                1,
+                "blocked",
+                "MCP execution needs binding and discussion authorization",
+            ),
+            (2, "blocked", "dependency unresolved"),
+            (
+                3,
+                "failed",
+                "MCP execution needs binding and discussion authorization",
+            ),
+        ] {
+            let mut task = task(id, &format!("agent-{id}"), "chat", false);
+            task.state = state.into();
+            task.reason = Some(reason.into());
+            store.ingest(task).unwrap();
+        }
+        store.control("chat", "pause", 0).unwrap();
+        store.connection.execute_batch("ALTER TABLE discussions ADD COLUMN allow_mcp INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=17;").unwrap();
+        drop(store);
+        let store = ScheduleStore::open(home.path()).unwrap();
+        assert_eq!(store.discussion("round").unwrap().unwrap().state, "paused");
+        assert!(store.candidates().unwrap().is_empty());
+        let resumed = store.get("1").unwrap();
+        assert_eq!(resumed.state, "queued");
+        assert_eq!(resumed.version, 1);
+        assert!(resumed.reason.is_none());
+        assert!(resumed.owner.is_none());
+        assert_eq!(store.get("2").unwrap().state, "blocked");
+        assert_eq!(store.get("3").unwrap().state, "failed");
+        assert!(
+            store
+                .connection
+                .prepare("SELECT allow_mcp FROM discussions")
+                .is_err()
+        );
+        assert!(
+            serde_json::to_value(store.snapshot().unwrap()).unwrap()["discussions"][0]
+                .get("allow_mcp")
+                .is_none()
+        );
+        drop(store);
+        let mut store = ScheduleStore::open(home.path()).unwrap();
+        assert_eq!(store.get("1").unwrap().version, 1);
+        store.control("chat", "resume", now_ms()).unwrap();
+        assert!(store.candidates().unwrap().iter().any(|t| t.id == "1"));
     }
 
     #[test]
     fn ending_target_conversation_stops_incoming_cross_conversation_work() {
         let (_home, mut store) = fixture();
         store.ingest(task(1, "agent", "target", false)).unwrap();
-        store.control("target", "end", false, 1).unwrap();
+        store.control("target", "end", 1).unwrap();
         assert_eq!(store.discussion("round").unwrap().unwrap().state, "ended");
     }
 
@@ -749,9 +804,7 @@ mod tests {
         let audit = serde_json::to_value(&waiting.last_decision).unwrap();
         assert!(store.update(&waiting, 1).unwrap());
         assert_eq!(store.status(1).unwrap().usage[0].replies, 0);
-        store
-            .authorize_human("new-human", "chat", 2, false, 2)
-            .unwrap();
+        store.authorize_human("new-human", "chat", 2, 2).unwrap();
         drop(store);
         let mut store = ScheduleStore::open(home.path()).unwrap();
         let queued = store.get("1").unwrap();
@@ -883,18 +936,18 @@ mod tests {
         store.ingest(task(1, "a", "chat", false)).unwrap();
         store.ingest(task(2, "b", "other", false)).unwrap();
         let a = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
-        store.control("chat", "pause", false, 0).unwrap();
+        store.control("chat", "pause", 0).unwrap();
         assert!(store.claim("2", "scheduler:one", 0).unwrap().is_none());
         for _ in 0..150 {
             assert!(store.debit(&a, 0).unwrap());
         }
-        store.control("chat", "resume", false, 0).unwrap();
+        store.control("chat", "resume", 0).unwrap();
         let b = store.claim("2", "scheduler:one", 0).unwrap().unwrap();
         store.expire(0).unwrap();
         assert_eq!(store.discussion("round").unwrap().unwrap().state, "active");
-        store.control("chat", "end", false, 0).unwrap();
+        store.control("chat", "end", 0).unwrap();
         assert!(!store.authorized(&b, 0).unwrap());
-        store.control("chat", "resume", true, 0).unwrap();
+        store.control("chat", "resume", 0).unwrap();
         assert_eq!(store.discussion("round").unwrap().unwrap().state, "ended");
     }
 
@@ -915,9 +968,7 @@ mod tests {
     #[test]
     fn hundred_replies_reset_only_on_new_human_input_and_not_resume_or_replay() {
         let (_home, mut store) = fixture();
-        store
-            .authorize_human("human-1", "chat", 1, false, 0)
-            .unwrap();
+        store.authorize_human("human-1", "chat", 1, 0).unwrap();
         for id in 1..=100 {
             store.ingest(task(id, "a", "chat", false)).unwrap();
             let mut reply = store
@@ -930,14 +981,10 @@ mod tests {
         store.ingest(task(101, "a", "chat", false)).unwrap();
         assert!(store.claim("101", "scheduler:one", 0).unwrap().is_none());
         assert_eq!(store.get("101").unwrap().state, "limited");
-        store.control("chat", "resume", false, 0).unwrap();
-        store
-            .authorize_human("human-1", "chat", 1, false, 0)
-            .unwrap();
+        store.control("chat", "resume", 0).unwrap();
+        store.authorize_human("human-1", "chat", 1, 0).unwrap();
         assert_eq!(store.status(0).unwrap().usage[0].replies, 100);
-        store
-            .authorize_human("human-2", "chat", 102, false, 0)
-            .unwrap();
+        store.authorize_human("human-2", "chat", 102, 0).unwrap();
         assert_eq!(
             store.human_discussion("human-2").unwrap().as_deref(),
             Some("round")
@@ -949,9 +996,7 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
-        store
-            .authorize_human("human-1", "chat", 1, false, 5_000)
-            .unwrap();
+        store.authorize_human("human-1", "chat", 1, 5_000).unwrap();
         assert_eq!(store.status(5_000).unwrap().usage[0].replies, 1);
     }
 
@@ -1002,9 +1047,7 @@ mod tests {
             store.mark_reconciled(&id.to_string()).unwrap();
         }
         for id in 0..110 {
-            store
-                .start(&format!("new-{id}"), "other", false, 0)
-                .unwrap();
+            store.start(&format!("new-{id}"), "other", 0).unwrap();
         }
         let status = store.status(0).unwrap();
         assert!(status.tasks.iter().any(|t| t.id == "1"));
@@ -1016,14 +1059,10 @@ mod tests {
     #[test]
     fn old_claim_cannot_refund_the_new_human_turn_and_end_stays_idempotent() {
         let (_home, mut store) = fixture();
-        store
-            .authorize_human("human-1", "chat", 1, false, 0)
-            .unwrap();
+        store.authorize_human("human-1", "chat", 1, 0).unwrap();
         store.ingest(task(1, "a", "chat", false)).unwrap();
         let mut old = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
-        store
-            .authorize_human("human-2", "chat", 2, false, 0)
-            .unwrap();
+        store.authorize_human("human-2", "chat", 2, 0).unwrap();
         store
             .connection
             .execute(
@@ -1035,17 +1074,13 @@ mod tests {
         store.update(&old, 0).unwrap();
         assert_eq!(store.status(0).unwrap().usage[0].replies, 10);
         store
-            .authorize_human("late-old-message", "chat", 1, false, 0)
+            .authorize_human("late-old-message", "chat", 1, 0)
             .unwrap();
         assert_eq!(store.status(0).unwrap().usage[0].replies, 10);
-        store.control("chat", "end", false, 0).unwrap();
-        store
-            .authorize_human("human-2", "chat", 2, false, 0)
-            .unwrap();
+        store.control("chat", "end", 0).unwrap();
+        store.authorize_human("human-2", "chat", 2, 0).unwrap();
         assert_eq!(store.discussion("round").unwrap().unwrap().state, "ended");
-        store
-            .authorize_human("human-3", "chat", 3, false, 0)
-            .unwrap();
+        store.authorize_human("human-3", "chat", 3, 0).unwrap();
         assert_eq!(
             store.human_discussion("human-3").unwrap().as_deref(),
             Some("human-3")

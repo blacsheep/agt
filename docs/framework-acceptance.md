@@ -50,7 +50,7 @@ target/debug/agt --home /tmp/agt-framework-demo model create default-model --pro
 target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --manager resource_write --args '{"kind":"prompt","reference":"review","create":true,"data":{"text":"你是审查者；无需发言时输出 [[silent]]。"}}'
 target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --manager resource_write --args '{"kind":"agent","reference":"reviewer","create":true,"data":{"model":"default-model","prompt":"review","skills":[],"mcps":[]}}'
 target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --manager principal_create --args '{"id":"reviewer","name":"Reviewer","kind":"agent"}'
-target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --manager agent_bind --args '{"principal":"reviewer","agent":"reviewer","working_directory":"/tmp/agt-framework-demo","policy":"all","max_steps":8,"allow_mcp":false}'
+target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --manager agent_bind --args '{"principal":"reviewer","agent":"reviewer","working_directory":"/tmp/agt-framework-demo","policy":"all","max_steps":8}'
 ```
 
 按同样方法创建 `planner` Agent、principal 和 binding（可复用模型和 Prompt）。
@@ -171,9 +171,8 @@ Runtime 数据库直接创建 v2 结构，旧版本结构会被拒绝，不在�
 所有新旧绑定的模型调用轮数均不限，旧 `max_steps` 字段仅兼容读取，不再约束执行。
 未被点名的 Agent 消息在非 manual 策略下进入参与判断；显式 mentions 点名的
 同伴消息绕过判断，成员资格与回复上限仍然生效。所有待开始的任务都先等待会话安静满 5 秒，每条新消息重新计时。
-外部 MCP 需要 binding 的 `allow_mcp` 和讨论授权同时开启
-（`schedule start/resume ... --allow-mcp`，或 Web 继续回复授权框）。
-务必只挂载可信配置。
+外部 MCP 按 Native Agent 的装配加载，无需绑定或讨论级额外开关；
+未装配的工具不可调用，具体调用仍经过权限审批。务必只挂载可信配置。
 
 这是可信本地主机框架，不是公网多租户服务。启动者能选择身份和 manager 权限；
 底层 IM CLI 同样属于可信主机接口。资源摘要和工具错误不返回密钥，Provider
@@ -186,7 +185,7 @@ Runtime 数据库直接创建 v2 结构，旧版本结构会被拒绝，不在�
 - `evaluating / ready_to_reply / responding / waiting` 表示参与判断、等待回复名额、正式回复、等待唤醒。
   同会话判断并行，自主回复依次开始；等待名额不占线程，但保留身份。每个 principal 最多开始 100 次回复，新的用户消息获准自动回复后计数归零。
   模型调用次数仅供诊断，不再限制整轮调用或判断次数。单次 Run 的 max_steps 仍然生效。
-- 任务 `limited` 表示 100 次回复达限，发送新用户消息可重置；讨论超时可 resume 续期，但不重置回复计数。`blocked` 检查 MCP 双重授权；`failed / interrupted`
+- 任务 `limited` 表示 100 次回复达限，发送新用户消息可重置；讨论超时可 resume 续期，但不重置回复计数。`blocked` 检查任务记录中的阻塞原因；`failed / interrupted`
   先检查 Run 与实际外部结果，不会自动重跑。Web debug_mode 展示更多诊断信息。
 - 不接话时检查绑定、manual/mentions、讨论是否授权/暂停/结束。
   模型协议必须与 Provider 实际接口一致；支持文本 Chat Completions 和 Responses，

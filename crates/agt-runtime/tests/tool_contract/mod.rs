@@ -198,27 +198,28 @@ fn invalid_framework_arguments_bypass_manual_approval() {
 }
 
 #[test]
-fn hosted_probe_requires_effective_mcp_authorization() {
-    let home = home();
-    let manager = register(home.path(), "valid");
-    let direct = manager
-        .call("direct_create", json!({"principal":"a"}))
-        .unwrap();
-    let sent = manager
-        .call(
-            "message_send",
-            json!({"conversation":direct["id"],"body":"probe","request_key":"probe"}),
-        )
-        .unwrap();
-    for allowed in [false, true] {
+fn hosted_probe_requires_resource_management_capability() {
+    for resource_management in [false, true] {
+        let home = home();
+        let manager = register(home.path(), "valid");
+        if !resource_management {
+            manager.call("resource_write", json!({"kind":"agent","reference":"a","create":false,"data":{"builtin_tools":[]}})).unwrap();
+        }
+        let direct = manager
+            .call("direct_create", json!({"principal":"a"}))
+            .unwrap();
+        let sent = manager
+            .call(
+                "message_send",
+                json!({"conversation":direct["id"],"body":"probe","request_key":"probe"}),
+            )
+            .unwrap();
         let mut req = request();
-        req.request_key = format!("probe-{allowed}");
         req.trigger = Some(agt_runtime::MessageTrigger {
             message_id: agt_im::MessageId::new(sent["message"]["id"].as_str().unwrap()),
             conversation_id: agt_im::ConversationId::new(direct["id"].as_str().unwrap()),
             principal: PrincipalId::new("a"),
             depth: 1,
-            allow_mcp: allowed,
         });
         let mut script = Script::new(vec![("default/a", text("inspected"))]);
         let run = Runtime::open(home.path(), &mut script, &DefaultMcpClientFactory)
@@ -231,10 +232,10 @@ fn hosted_probe_requires_effective_mcp_authorization() {
                 .2
                 .iter()
                 .any(|t| t["function"]["name"] == "framework_mcp_probe"),
-            allowed
+            resource_management
         );
+        assert!(!home.path().join("calls.starts").exists());
     }
-    assert!(!home.path().join("calls.starts").exists());
 }
 
 #[test]
@@ -412,7 +413,7 @@ fn self_skill_refresh_updates_instructions_but_keeps_framework_grants() {
 }
 
 #[test]
-fn self_mount_cannot_expand_host_mcp_authorization() {
+fn hosted_self_mount_is_usable_without_separate_authorization() {
     let home = home();
     let manager = register(home.path(), "valid");
     let conversation = manager
@@ -430,8 +431,16 @@ fn self_mount_cannot_expand_host_mcp_authorization() {
         conversation_id: agt_im::ConversationId::new(conversation["id"].as_str().unwrap()),
         principal: PrincipalId::new("a"),
         depth: 1,
-        allow_mcp: false,
     });
+    // Persisted old Run requests remain readable, but their retired gate has no effect.
+    let mut legacy = serde_json::to_value(&req).unwrap();
+    legacy["trigger"]["allow_mcp"] = json!(false);
+    let req: RunRequest = serde_json::from_value(legacy).unwrap();
+    assert!(
+        serde_json::to_value(&req).unwrap()["trigger"]
+            .get("allow_mcp")
+            .is_none()
+    );
     let mut script = Script::new(vec![
         (
             "default/a",
@@ -441,6 +450,14 @@ fn self_mount_cannot_expand_host_mcp_authorization() {
                 json!({"kind":"agent","reference":"a","create":false,"data":{"mcps":["counter"]}}),
             )]),
         ),
+        (
+            "default/a",
+            calls(vec![call(
+                "count",
+                &mcp_alias("default/counter", "count"),
+                json!({"count":2}),
+            )]),
+        ),
         ("default/a", text("done")),
     ]);
     let run = Runtime::open(home.path(), &mut script, &DefaultMcpClientFactory)
@@ -448,18 +465,19 @@ fn self_mount_cannot_expand_host_mcp_authorization() {
         .run(req, &CancellationToken::new())
         .unwrap();
     assert_eq!(run.state, RunState::Completed, "{:?}", run.error);
-    assert!(!home.path().join("calls.starts").exists());
+    assert_eq!(run.tool_failures, 0);
+    assert!(home.path().join("calls").exists());
     assert!(
         script.seen[1]
             .2
             .iter()
-            .all(|t| !t["function"]["name"].as_str().unwrap().starts_with("mcp_"))
+            .any(|t| t["function"]["name"] == mcp_alias("default/counter", "count"))
     );
     assert!(
         script.seen[1].1.last().unwrap()["content"]
             .as_str()
             .unwrap()
-            .contains("\"state\":\"failed\"")
+            .contains("\"state\":\"applied\"")
     );
 }
 
@@ -531,4 +549,102 @@ fn mount_reordering_keeps_tool_identity_bound_to_the_same_server() {
             .contains("7")
     );
     assert!(!home.path().join("other-calls").exists());
+}
+
+#[test]
+fn registered_but_unmounted_mcp_cannot_be_called() {
+    let home = home();
+    register(home.path(), "valid");
+    let alias = mcp_alias("default/counter", "count");
+    let mut script = Script::new(vec![(
+        "default/a",
+        calls(vec![call("unmounted", &alias, json!({"count":1}))]),
+    )]);
+    let run = Runtime::open(home.path(), &mut script, &DefaultMcpClientFactory)
+        .unwrap()
+        .run(request(), &CancellationToken::new())
+        .unwrap();
+    assert_eq!(run.state, RunState::Failed);
+    assert!(run.error.unwrap().contains("unknown or unavailable tool"));
+    assert!(
+        script.seen[0]
+            .2
+            .iter()
+            .all(|t| t["function"]["name"] != alias)
+    );
+    assert!(!home.path().join("calls.starts").exists());
+    assert!(
+        ApprovalStore::open(home.path())
+            .unwrap()
+            .list(None, None)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn mounted_mcp_still_requires_per_call_approval() {
+    let home = home();
+    let manager = register(home.path(), "valid");
+    manager
+        .call(
+            "resource_write",
+            json!({"kind":"agent","reference":"a","create":false,"data":{"mcps":["counter"]}}),
+        )
+        .unwrap();
+    let mut config = agt_config::RuntimeConfig::load(home.path()).unwrap();
+    config.permissions.mode = agt_config::runtime::PermissionMode::Manual;
+    config.permissions.request_timeout_seconds = 5;
+    config.save(home.path()).unwrap();
+    let path = home.path().to_owned();
+    let human = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let store = ApprovalStore::open(&path).unwrap();
+            if let Some(item) = store.list(None, None).unwrap().first() {
+                store
+                    .decide(
+                        &item.id,
+                        item.revision,
+                        json!("deny"),
+                        "decline MCP call",
+                        None,
+                    )
+                    .unwrap();
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline, "no approval appeared");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    });
+    let mut script = Script::new(vec![
+        (
+            "default/a",
+            calls(vec![call(
+                "count",
+                &mcp_alias("default/counter", "count"),
+                json!({"count":1}),
+            )]),
+        ),
+        ("default/a", text("declined")),
+    ]);
+    let run = Runtime::open(home.path(), &mut script, &DefaultMcpClientFactory)
+        .unwrap()
+        .run(request(), &CancellationToken::new())
+        .unwrap();
+    human.join().unwrap();
+    assert_eq!(run.state, RunState::Completed);
+    assert!(home.path().join("calls.starts").exists());
+    assert!(!home.path().join("calls").exists());
+    assert!(
+        script.seen[1].1.iter().any(|v| v["tool_call_id"] == "count"
+            && v["content"].as_str().unwrap().contains("not executed"))
+    );
+    let item = ApprovalStore::open(home.path())
+        .unwrap()
+        .list(None, None)
+        .unwrap()
+        .remove(0);
+    assert_eq!(item.state, "denied");
+    assert_eq!(item.delivery, "resolved");
 }

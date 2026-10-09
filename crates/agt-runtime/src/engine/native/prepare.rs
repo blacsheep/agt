@@ -14,17 +14,6 @@ impl<'run, 'host> NativeRun<'run, 'host> {
     ) -> Result<Self> {
         check_canceled(cancellation)?;
         let agent = &agents[&record.request.agent];
-        if record
-            .request
-            .trigger
-            .as_ref()
-            .is_some_and(|t| !t.allow_mcp)
-            && !agent.mcps.is_empty()
-        {
-            return Err(RuntimeError::Configuration(
-                "mounted MCP execution requires binding and discussion authorization",
-            ));
-        }
         if (!agent.mcps.is_empty()
             || !agent.builtin_tools.is_empty()
             || !record.request.delegates.is_empty())
@@ -116,9 +105,7 @@ impl<'run, 'host> NativeRun<'run, 'host> {
                         service
                             .with_discussion(runtime.discussion.clone())
                             .with_resource_management(resource_management)
-                            .with_mcp_probe(
-                                record.request.trigger.as_ref().is_none_or(|t| t.allow_mcp),
-                            )
+                            .with_mcp_probe(true)
                     })
                     .map_err(|_| RuntimeError::Tool("cannot initialize framework tools"))
             })

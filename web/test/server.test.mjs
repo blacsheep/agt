@@ -68,15 +68,15 @@ test('automatic reply authorizes exact message, including idempotent retries', a
   assert.deepEqual(seen.filter(a => a[0] === 'schedule'), Array(2).fill(['schedule', 'start', 'one', '--message', 'message-one']));
 });
 
-test('discussion controls require membership and paid confirmation; MCP remains opt-in', async t => {
+test('discussion controls require membership and paid confirmation; mounted MCPs need no separate opt-in', async t => {
   const seen = [];
   const { request } = await fixture(t, async args => { seen.push(args); return args.includes('member_list') ? [{principal_id:'operator',left_message_seq:null}] : []; });
   assert.equal((await request('/api/reply', { action: 'start', conversation: 'one' })).status, 400);
   for (const action of ['start', 'resume', 'pause', 'end']) {
-    assert.equal((await request('/api/reply', { action, conversation: 'one', confirm: true, allow_mcp: true })).status, 202);
+    assert.equal((await request('/api/reply', { action, conversation: 'one', confirm: true })).status, 202);
   }
   assert.deepEqual(seen.filter(a => a[0] === 'schedule'), [
-    ['schedule', 'start', 'one', '--allow-mcp'], ['schedule', 'resume', 'one', '--allow-mcp'], ['schedule', 'pause', 'one'], ['schedule', 'end', 'one'],
+    ['schedule', 'start', 'one'], ['schedule', 'resume', 'one'], ['schedule', 'pause', 'one'], ['schedule', 'end', 'one'],
   ]);
   assert.equal(seen.filter(a => a.includes('member_list')).length, 5);
 });

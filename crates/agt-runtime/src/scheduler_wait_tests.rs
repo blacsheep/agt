@@ -255,7 +255,7 @@ fn end_and_context_reset_do_not_resume_suspended_work() {
         if reset {
             reset_conversation_context(home.path(), &chat, "user").unwrap();
         } else {
-            s.store.control(&chat, "end", false, now_ms()).unwrap();
+            s.store.control(&chat, "end", now_ms()).unwrap();
         }
         crate::work::reconcile(home.path()).unwrap();
         assert!(matches!(

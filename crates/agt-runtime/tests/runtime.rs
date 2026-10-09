@@ -119,7 +119,6 @@ fn hosted_tool_corrections_are_audited_redacted_and_not_replayed() {
         conversation_id: agt_im::ConversationId::new(direct["id"].as_str().unwrap()),
         principal: PrincipalId::new("a"),
         depth: 1,
-        allow_mcp: false,
     });
     let base = json!({"conversation":direct["id"],"body":"private-body-do-not-log","request_key":"private-request-key","reply_to":""});
     let mut unknown = base.clone();
@@ -230,7 +229,6 @@ fn failed_tool_then_silent_remains_visible_on_completed_run() {
         conversation_id: agt_im::ConversationId::new(direct["id"].as_str().unwrap()),
         principal: PrincipalId::new("a"),
         depth: 1,
-        allow_mcp: false,
     });
     Runtime::open(home.path(), &mut model, &DefaultMcpClientFactory)
         .unwrap()
@@ -887,8 +885,6 @@ fn hosted(home: &Path, policy: agt_service::ResponsePolicy) -> agt_service::Tool
                     working_directory: home.to_owned(),
                     policy,
                     max_steps: 6,
-
-                    allow_mcp: false,
                 })
                 .unwrap();
         }
@@ -969,7 +965,6 @@ fn hosted_agent_creates_group_and_contacts_peer_without_parent_child_delegation(
         conversation_id: agt_im::ConversationId::new(direct["id"].as_str().unwrap()),
         principal: PrincipalId::new("a"),
         depth: 1,
-        allow_mcp: false,
     });
     let run = Runtime::open(home.path(), &mut model, &DefaultMcpClientFactory)
         .unwrap()
@@ -1151,7 +1146,6 @@ fn hosted_builtin_resources_work_without_external_mcp_and_keep_fixed_identity() 
         conversation_id: agt_im::ConversationId::new(direct["id"].as_str().unwrap()),
         principal: PrincipalId::new("a"),
         depth: 1,
-        allow_mcp: false,
     });
     let mut script = Script::new(vec![
         (
@@ -1334,7 +1328,6 @@ fn resource_agent_can_create_enable_disable_and_resume_a_teammate() {
     assert_eq!(bound["enabled"], true);
     assert_eq!(binding.agent, "default/teammate");
     assert_eq!(binding.max_steps, 0);
-    assert!(!binding.allow_mcp);
     assert_eq!(binding.policy, agt_service::ResponsePolicy::Mentioned);
     let state = script.seen[2]
         .1
@@ -1394,7 +1387,6 @@ fn identical_sends_with_new_keys_publish_once_per_run() {
         conversation_id: agt_im::ConversationId::new(direct["id"].as_str().unwrap()),
         principal: PrincipalId::new("a"),
         depth: 1,
-        allow_mcp: false,
     });
     let send = |key: &str, reply: Value| json!({"conversation":direct["id"],"body":"same reply","request_key":key,"reply_to":reply});
     let mut model = Script::new(vec![

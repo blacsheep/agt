@@ -26,13 +26,24 @@
    工具增删可用 `add:{mcps:[...]}` / `remove:{mcps:[...]}`，与 CLI 共用资源服务。
    `resource_read` 返回 revision；更新携带 expected_revision 可拒绝过期表单覆盖。
    参见[资源管理](resource-management.md)。
-5. 检查 Agent 的身份、绑定启用状态与 binding/discussion 的 MCP 授权，然后派发新任务。
+5. 检查 Agent 的身份、绑定启用状态与 MCP 装配，然后派发新任务。
 
 这些 Framework 工具只向 manager 或安装 `resource_management` 的 Agent 暴露，
-Native 中也经过现有权限策略。宿主必须另外允许 probe：托管 Native 使用 binding/discussion
-计算后的 allow_mcp；Harness 默认不暴露 AGT probe。直接管理端可显式探测。
+Native 中也经过现有权限策略。Native 的 probe 随资源管理能力提供，
+不要求单独的 MCP 开关；Harness 不暴露 AGT probe。直接管理端可显式探测。
 probe 会执行配置的启动命令或访问 URL，不是静态检查。
 stdio 服务运行在宿主机上，注册和探测本身不提供沙箱。
+
+## MCP 使用边界
+
+Native Agent 只连接自身 `mcps` 装配中的服务，并只接受该快照中列出的工具调用。
+仓库注册不赋予调用能力；没有绑定级或 Discussion 级 MCP 总开关。
+每个实际调用仍经过参数校验和权限策略（模型审核、人工或显式自动放行）。
+修改装配需要资源管理能力，与使用已装配 MCP 是两件事。
+
+升级会删除旧绑定 JSON 和调度数据库中的 `allow_mcp`，解除仅由旧 MCP 总开关
+造成的阻塞；已停用绑定和暂停/结束的讨论不会因此启用。CLI 的 `--allow-mcp`
+和 `agent_bind` 的同名参数已移除，脚本应停止传入。历史 Run 的旧 trigger 仍可读取。
 
 ## Run 内的工具契约
 

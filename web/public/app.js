@@ -727,8 +727,8 @@ async function showCalls(id) {
 }
 function showReplyControls() {
   const conversation = state.conversation?.id; if (!conversation) return;
-  dialog('继续这个会话的回复', `<form id="modal-form"><p>处理当前会话尚未完成的消息，会调用模型并可能产生费用。</p><p class="form-note">消息独立排队；同会话的新消息会在工具执行完成或当前回答结束后继续处理。不同 Agent 可并行判断，自主接话依次开始；明确请求可并行回复。每位 Agent 的回复额度由全局运行设置决定，新的用户消息获准自动回复后计数归零；继续讨论不会重置计数。失败或中断的操作不会自动重跑。</p><div class="check-list"><label><input name="mcp" type="checkbox">本轮允许已在运行设置中授权的外部 MCP</label></div><div class="form-actions"><button class="primary" type="submit">开始回复</button></div></form>`);
-  formHandler(async data => { await api('reply', { conversation, action: 'start', allow_mcp: data.has('mcp'), confirm: true }); $('#modal').close(); await activity(); });
+  dialog('继续这个会话的回复', `<form id="modal-form"><p>处理当前会话尚未完成的消息，会调用模型并可能产生费用。</p><p class="form-note">消息独立排队；同会话的新消息会在工具执行完成或当前回答结束后继续处理。不同 Agent 可并行判断，自主接话依次开始；明确请求可并行回复。每位 Agent 的回复额度由全局运行设置决定，新的用户消息获准自动回复后计数归零；继续讨论不会重置计数。失败或中断的操作不会自动重跑。</p><div class="form-actions"><button class="primary" type="submit">开始回复</button></div></form>`);
+  formHandler(async () => { await api('reply', { conversation, action: 'start', confirm: true }); $('#modal').close(); await activity(); });
 }
 function showNewChat() {
   const people = state.boot.principals.filter(p => p.id !== state.boot.principal && canContact(p));
@@ -807,7 +807,7 @@ function changeAgentEnabled(references, enabled) {
             const principal = agent.split('/').at(-1);
             if (state.boot.principals.some(p=>p.id === principal)) throw new Error('同名身份已存在，请先在运行设置中确认身份，避免覆盖其他 Agent。');
             await ensurePrincipal(principal,principal);
-            await tool('agent_bind',{principal,agent,working_directory:state.boot.home,policy:'mentioned',allow_mcp:false});
+            await tool('agent_bind',{principal,agent,working_directory:state.boot.home,policy:'mentioned'});
           } else for (const b of bindings) await tool('agent_set_enabled',{principal:b.principal,enabled});
           success++; selectedAgents.delete(agent);
         } catch(e) { failures.push(`${agent}：${errorText(e)}`); }
@@ -861,9 +861,9 @@ async function showAgentEdit(reference) {
   } catch (error) { if (generation === modalGeneration && $('#modal').open) { $('#modal-body').innerHTML = ''; modalError(error); } }
 }
 function bindingFields(binding = {}) {
-  return `<p class="form-note">模型步数默认不限，可在全局运行设置中调整；可随时停止讨论或停用 Agent。</p><div class="form-grid">${field('响应策略', `<select name="policy">${options([['mentioned', '私聊 / 群内被提及'], ['all', '所有消息'], ['manual', '不自动回应']], binding.policy || 'mentioned')}</select>`)}</div><div class="form-grid">${field('执行工作目录', `<input name="cwd" value="${esc(binding.working_directory || state.boot.home)}" required>`)}</div><div class="check-list"><label><input type="checkbox" name="allow_mcp" ${binding.allow_mcp ? 'checked' : ''}>允许挂载 MCP（执行批次时仍需再次授权）</label></div>`;
+  return `<p class="form-note">模型步数默认不限，可在全局运行设置中调整；可随时停止讨论或停用 Agent。</p><div class="form-grid">${field('响应策略', `<select name="policy">${options([['mentioned', '私聊 / 群内被提及'], ['all', '所有消息'], ['manual', '不自动回应']], binding.policy || 'mentioned')}</select>`)}</div><div class="form-grid">${field('执行工作目录', `<input name="cwd" value="${esc(binding.working_directory || state.boot.home)}" required>`)}</div>`;
 }
-const bindingData = (data, principal, agent) => ({ principal, agent, working_directory: data.get('cwd'), policy: data.get('policy'), allow_mcp: data.has('allow_mcp') });
+const bindingData = (data, principal, agent) => ({ principal, agent, working_directory: data.get('cwd'), policy: data.get('policy') });
 function showBinding(agent) {
   const binding = state.boot.bindings.find(b => b.agent === agent);
   dialog('运行设置', `<form id="modal-form"><p class="form-note">${esc(agent)} · 修改运行设置不会自动启用已停用的 Agent。修改影响后续执行，已开始的调用可能继续完成。</p>${field('Agent 身份 ID', `<input name="principal" value="${esc(binding?.principal || agent.split('/').at(-1))}" required ${binding ? 'readonly' : ''}>`, '身份不存在时会创建 Agent 身份；已有绑定会更新。')}${bindingFields(binding)}<div class="form-actions">${binding ? '<button id="unbind" type="button" class="quiet">解除运行配置</button>' : ''}<button class="primary" type="submit">保存设置</button></div></form>`);
@@ -871,7 +871,6 @@ function showBinding(agent) {
   if (definition?.harness) {
     const harness = items('harness').find(e=>ref(e)===ref(definition.harness));
     const cwd = $('#modal-form [name=cwd]'); cwd.readOnly=true; cwd.value=harness?.working_directory || state.boot.home;
-    $('#modal-form [name=allow_mcp]').disabled=true;
     const policy = $('#modal-form [name=policy]'); policy.querySelector('[value=all]').disabled=true; if(policy.value==='all')policy.value='mentioned';
     cwd.closest('.field')?.insertAdjacentHTML('beforeend','<small>由Harness管理；外部 Agent 仅响应私聊和群内 @。</small>');
   }
@@ -1262,7 +1261,7 @@ function bindExecutionFields() {
     for (const [name,active] of [['model',!external],['harness',external]]) {
       const input = $(`#modal-form [name=${name}]`); input.disabled=!active; input.required=active;
     }
-    $$('#modal-form [name=mcps], #modal-form [name=allow_mcp]').forEach(input=>{input.disabled=external;});
+    $$('#modal-form [name=mcps]').forEach(input=>{input.disabled=external;});
     const cwd = $('#modal-form [name=cwd]');
     if (cwd) {
       cwd.readOnly=external;

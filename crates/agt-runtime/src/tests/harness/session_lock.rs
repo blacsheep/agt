@@ -46,7 +46,6 @@ fn codex_startup_failure_does_not_poison_the_chat_session() {
             home.path(),
             &chat,
             Some(sent["message"]["id"].as_str().unwrap()),
-            false,
         )
         .unwrap();
         scheduler.scan().unwrap();
@@ -230,7 +229,6 @@ fn confirmed_cancellation_releases_session_for_next_operation() {
         home.path(),
         &chat,
         Some(sent["message"]["id"].as_str().unwrap()),
-        false,
     )
     .unwrap();
     let mut scheduler = Scheduler::open(home.path(), 2).unwrap();

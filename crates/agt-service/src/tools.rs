@@ -67,8 +67,8 @@ impl ToolService {
         }
         result
     }
-    /// The host supplies effective binding AND discussion authorization.
-    /// Resource management alone does not authorize starting an MCP server.
+    /// Whether this execution engine supports AGT MCP probing.
+    /// Resource-management capability is also required; Native calls use tool approval.
     pub fn with_mcp_probe(mut self, enabled: bool) -> Self {
         self.mcp_probe_enabled = enabled;
         self
@@ -560,7 +560,7 @@ fn schemas(role: Role, resource_management: bool) -> Vec<Value> {
         };
         tools.extend([
             schema("principal_create","Register a new identity (resource-managed Agents may create only kind=agent). Does not enable execution: create the Agent resource, register its identity, then agent_bind. Use principal_list before creating; never reuse another Agent identity accidentally.",json!({"id":string,"name":string,"kind":principal_kinds}),&["id","name","kind"]),
-            schema("agent_bind","Configure an Agent identity to run an existing Agent definition. New bindings start enabled; updating an existing disabled binding preserves disabled state, so call agent_set_enabled(true) to resume. Defaults: workspace home directory, unlimited model steps, mentioned policy, MCP disabled. May trigger pending authorized messages. Check binding_list first: reusing a principal updates its existing binding. allow_mcp still requires discussion authorization.",json!({"principal":string,"agent":string,"working_directory":string,"policy":{"enum":["all","mentioned","manual"]},"max_steps":{"type":"integer","description":"Deprecated compatibility field; ignored. Model steps are unlimited."},"allow_mcp":{"type":"boolean","default":false}}),&["principal","agent"]),
+            schema("agent_bind","Configure an Agent identity to run an existing Agent definition. New bindings start enabled; updating an existing disabled binding preserves disabled state, so call agent_set_enabled(true) to resume. Defaults: workspace home directory, unlimited model steps, mentioned policy. MCP tools come from the Agent definition mounts. May trigger pending authorized messages. Check binding_list first: reusing a principal updates its existing binding.",json!({"principal":string,"agent":string,"working_directory":string,"policy":{"enum":["all","mentioned","manual"]},"max_steps":{"type":"integer","description":"Deprecated compatibility field; ignored. Model steps are unlimited."}}),&["principal","agent"]),
             schema("agent_set_enabled","Enable or disable an existing binding across all conversations while preserving identity, history and running settings. Needs agent_bind first. Enabling may process pending authorized messages; disabling cancels further work, but cannot undo external requests. Disabling yourself stops your current hosted task.",json!({"principal":string,"enabled":{"type":"boolean"}}),&["principal","enabled"]),
             schema("agent_unbind","Remove an Agent identity’s running settings and disable execution; identity and messages remain. For ordinary stopping use agent_set_enabled(false) instead. Unbind before deleting a bound Agent resource. Deleting that resource then retires its last-bound identities; historical names/messages remain, but retired identities cannot be reused.",json!({"principal":string}),&["principal"]),
             schema("binding_list","List saved agent bindings, including their enabled state.",json!({}),&[]),

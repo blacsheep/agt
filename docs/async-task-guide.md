@@ -36,7 +36,7 @@ Native 模型需开启 tool_call；Codex 使用框架注入的 dynamicTools。
 同一请求者重用相同 request_key 和参数会返回原任务；不同参数复用该 key 会拒绝。
 不要再用 message_send 重发同一工作请求。任务输入 JSON 编码后最多 120 KiB。
 
-创建请求继承当前已授权的 discussion，不额外获得模型额度或 MCP 权限。
+创建请求继承当前已授权的 discussion，不额外获得模型额度或未装配的 MCP 工具；具体调用仍经过审批。
 执行者停用/manual 时保持排队；暂停或过期讨论不会启动新执行。
 执行完成后结果定向通知 lead，失败和结果不确定也会通知。lead 可以在收到结果后，
 用 task_report 向通知注明的原会话提交持久汇报；message_send 不会消除汇报义务。普通进度不会广播成群聊消息。

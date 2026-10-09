@@ -29,7 +29,7 @@ fn workspace_gate_and_unlimited_budgets_are_enforced() {
     assert!(store.claim(&b,"scheduler:one",0).unwrap().is_none());
     store.config.scheduler.replies_per_agent=None;
     store.config.scheduler.discussion_seconds=None;
-    store.start("unlimited","other",false,0).unwrap();
+    store.start("unlimited","other",0).unwrap();
     assert_eq!(store.discussion("unlimited").unwrap().unwrap().max_replies,None);
     assert_eq!(store.discussion("unlimited").unwrap().unwrap().expires_at,9_007_199_254_740_991);
     store.connection.execute("UPDATE usage SET replies=100000 WHERE principal='a'",[]).unwrap();

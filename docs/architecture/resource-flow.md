@@ -60,7 +60,7 @@ sequenceDiagram
     N->>N: 用旧能力完成本批次剩余调用
     N->>C: 批次结束，读取 MCP/Skill 候选配置
     C->>C: 保留当前模型、Provider、基础 Prompt 和内置能力
-    C->>C: 检查 MCP 授权与模型工具能力
+    C->>C: 检查模型工具能力，按 Agent 装配加载 MCP
     opt MCP 配置或挂载变化
         C->>C: 连接服务、获取 schema、检查工具数量并编译校验器
     end
@@ -94,8 +94,9 @@ Skill 单独变化不会重启现有 MCP 连接。MCP 变化时，候选连接�
 | Model、Provider、基础 Prompt、内置能力、委派配置 | 不随 MCP/Skill 刷新改变当前 Run |
 | Harness 执行 | 不使用 Native 能力刷新；AGT MCP 挂载仍不支持，已有会话保留其配置语义 |
 
-管理员实时切换审批策略的既有行为独立保留。能力刷新不会扩大 Framework 能力、
-绑定或 Discussion 的 MCP 授权；资源的 `revision` 与 Run 的 `config_fingerprint`
+管理员实时切换审批策略的既有行为独立保留。能力刷新不会扩大 Framework 能力。
+MCP 使用范围由 Agent 装配决定，未装配的工具不可调用；具体调用仍经过权限审批，
+没有绑定或 Discussion 的 MCP 总开关。资源的 `revision` 与 Run 的 `config_fingerprint`
 也不是同一个标识：前者检测资源编辑冲突，后者检查执行及恢复配置。
 
 ## 代码与验证入口
@@ -109,5 +110,5 @@ Skill 单独变化不会重启现有 MCP 连接。MCP 变化时，候选连接�
 - [运行时回归](../../crates/agt-runtime/tests/tool_contract/mod.rs)：自装配、失败保留、授权与工具别名。
 - [挂起恢复回归](../../crates/agt-runtime/src/scheduler_wait_tests.rs)：刷新后恢复且不重放配置写入。
 
-本页依据代码与前一实现轮次的回归结果；本次文档修改不重新运行 Rust 或真实模型测试。
+回归使用本地模型和 MCP 夹具，不调用真实模型。
 返回[架构图导航](README.md)。

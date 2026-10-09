@@ -350,10 +350,7 @@ fn human_urgent_beats_aging_and_end_still_cancels_deferred_work() {
         vec![b, a.clone()]
     );
     control.call("task_defer",json!({"task_id":a,"expected_revision":1,"not_before":now_ms()+60_000,"reason":"later"})).unwrap();
-    scheduler
-        .store
-        .control(&chat, "end", false, now_ms())
-        .unwrap();
+    scheduler.store.control(&chat, "end", now_ms()).unwrap();
     scheduler.tick(false).unwrap();
     assert_eq!(view(&control, &a)["state"], "canceled");
     assert!(

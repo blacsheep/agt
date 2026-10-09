@@ -120,6 +120,25 @@ fn framework_schemas_compile_and_nested_validation_rejects_wrong_array_items() {
         agt_core::tool_schema::ToolSchema::compile(&schema["inputSchema"])
             .unwrap_or_else(|e| panic!("{}: {e}", schema["name"]));
     }
+    let binding_schema = s
+        .schemas()
+        .into_iter()
+        .find(|t| t["name"] == "agent_bind")
+        .unwrap();
+    assert!(
+        binding_schema["inputSchema"]["properties"]
+            .get("allow_mcp")
+            .is_none()
+    );
+    assert_eq!(
+        s.call(
+            "agent_bind",
+            json!({"principal":"a","agent":"a","allow_mcp":true})
+        )
+        .unwrap_err()
+        .code,
+        "invalid_arguments"
+    );
     let error = s
         .call("group_create", json!({"title":"x","members":[7]}))
         .unwrap_err();
@@ -128,7 +147,7 @@ fn framework_schemas_compile_and_nested_validation_rejects_wrong_array_items() {
 }
 
 #[test]
-fn probe_requires_host_authorization_and_harness_mounts_stay_rejected() {
+fn probe_requires_engine_support_and_harness_mounts_stay_rejected() {
     let home = home();
     let s = configured(home.path());
     assert!(s.schemas().iter().all(|t| t["name"] != "mcp_probe"));

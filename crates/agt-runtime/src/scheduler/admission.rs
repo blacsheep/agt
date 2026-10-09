@@ -14,7 +14,6 @@ pub(super) struct Admission {
     pub binding: agt_service::Binding,
     pub messaging: Messaging,
     pub trigger: agt_im::Message,
-    pub round: crate::Discussion,
     pub engine: EngineKind,
     pub batch: Vec<Value>,
 }
@@ -118,7 +117,6 @@ pub(super) fn prepare(
         binding,
         messaging,
         trigger,
-        round,
         engine,
         batch,
     }))

@@ -324,8 +324,8 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         const members = await member(conversation);
         if (!members.some(m => m.principal_id === principal && m.left_message_seq === null)) throw new ApiError(403, 'not_member', '退出群聊后不能控制讨论。');
         const paid = ['start', 'resume'].includes(data.action);
-        if (paid && (data.confirm !== true || (data.allow_mcp !== undefined && typeof data.allow_mcp !== 'boolean'))) throw new ApiError(400, 'confirmation_required', '请确认调用模型。');
-        const scheduler = await run(['schedule', data.action, conversation, ...(paid && data.allow_mcp ? ['--allow-mcp'] : [])]);
+        if (paid && data.confirm !== true) throw new ApiError(400, 'confirmation_required', '请确认调用模型。');
+        const scheduler = await run(['schedule', data.action, conversation]);
         send(202, { scheduler });
       } else if (req.method === 'POST' && url.pathname === '/api/calls') {
         const data = await body(req);

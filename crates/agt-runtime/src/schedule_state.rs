@@ -57,11 +57,6 @@ impl ScheduledTask {
         self.decision_required = false;
     }
 
-    pub(crate) fn block_for_mcp(&mut self) {
-        self.state = "blocked".into();
-        self.reason = Some("MCP execution needs binding and discussion authorization".into());
-    }
-
     pub(crate) fn interrupt_publication(&mut self) {
         self.state = "interrupted".into();
         self.reason =

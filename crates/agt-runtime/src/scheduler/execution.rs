@@ -49,16 +49,10 @@ pub(crate) fn execute(
         binding,
         messaging,
         trigger,
-        round,
         ..
     } = admitted;
     if task.state == "evaluating" {
         return engine.evaluate(&mut store, &mut task, &mut scheduled_model, &input);
-    }
-    if engine.needs_mcp_authorization(binding.allow_mcp && round.allow_mcp) {
-        task.block_for_mcp();
-        store.update(&task, now_ms())?;
-        return Ok(());
     }
     let depth = trigger.metadata["automated_depth"]
         .as_u64()
@@ -86,7 +80,6 @@ pub(crate) fn execute(
         conversation_id: trigger.conversation_id.clone(),
         principal: binding.principal.clone(),
         depth,
-        allow_mcp: binding.allow_mcp && round.allow_mcp,
     });
     scheduled_model.task = task.clone();
     let mut runtime = Runtime::open(home, &mut scheduled_model, &DefaultMcpClientFactory)?;

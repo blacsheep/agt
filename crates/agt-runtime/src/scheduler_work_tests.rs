@@ -703,7 +703,6 @@ fn title_metadata_failure_does_not_reclassify_successful_codex_execution() {
         home.path(),
         &direct,
         Some(sent["message"]["id"].as_str().unwrap()),
-        false,
     )
     .unwrap();
     let mut scheduler = Scheduler::open(home.path(), 2).unwrap();

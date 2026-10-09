@@ -131,13 +131,6 @@ impl ScheduledEngine {
         }
     }
 
-    pub(super) fn needs_mcp_authorization(&self, allowed: bool) -> bool {
-        match self {
-            Self::Native(agent) => !(agent.mcps.is_empty() || allowed),
-            Self::Harness => false,
-        }
-    }
-
     pub(super) fn validate_input(&self, input: &str) -> Result<()> {
         if let Self::Native(agent) = self
             && crate::context::estimate(input) + crate::context::estimate(&agent.system_prompt)

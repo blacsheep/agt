@@ -124,18 +124,6 @@ impl NativeRun<'_, '_> {
 
     fn prepare_capabilities(&self) -> Result<(ResolvedAgent, Option<ToolSession>, String)> {
         let agent = self.agent.reload_capabilities(&self.runtime.home)?;
-        if !agent.mcps.is_empty()
-            && self
-                .record
-                .request
-                .trigger
-                .as_ref()
-                .is_some_and(|t| !t.allow_mcp)
-        {
-            return Err(RuntimeError::Configuration(
-                "mounted MCP execution requires binding and discussion authorization",
-            ));
-        }
         if !agent.mcps.is_empty() && !agent.model.capabilities.tool_call {
             return Err(RuntimeError::Configuration(
                 "model tool_call capability is disabled",

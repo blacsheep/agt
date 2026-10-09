@@ -91,10 +91,7 @@ fn explicit_stop_waits_for_live_executor_confirmation() {
     let mut runs = crate::RunStore::open(home.path()).unwrap();
     let (mut run, _) = runs.claim(&request, None).unwrap();
     crate::work::bind_run(home.path(), &task, &run).unwrap();
-    scheduler
-        .store
-        .control(&chat, "end", false, now_ms())
-        .unwrap();
+    scheduler.store.control(&chat, "end", now_ms()).unwrap();
     assert!(guarded(home.path(), &task, || Ok(())).is_err());
     crate::work::reconcile(home.path()).unwrap();
     assert!(matches!(

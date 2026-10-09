@@ -123,8 +123,8 @@ and sends the task back to evaluation without a fixed quiet window.
 At most one autonomous reply starts at a time in a conversation, and it waits for
 existing responders. Human requests and explicitly mentioned peers retain direct
 execution and may reply in parallel across identities, without a fixed quiet window.
-Response policy, active membership, message deletion, expiry and MCP permissions
-remain execution gates. Unmentioned nonmanual peer messages use participation.
+Response policy, active membership, message deletion and expiry remain execution gates.
+MCP availability follows Agent mounts; individual tool calls still require approval. Unmentioned nonmanual peer messages use participation.
 
 One principal has at most one evaluating, ready or responding task across all
 conversations. A ready task reserves the identity but not a thread. Multiple
@@ -134,7 +134,7 @@ principals bound to one Agent definition can execute concurrently.
 
 Each principal may begin 100 replies per discussion between new authorized human
 inputs. A reply is charged at execution admission; decisions, waiting and ready
-queue time do not count. Pre-execution deferral or missing MCP authorization refunds
+queue time do not count. Pre-execution deferral refunds
 that admission, without subtracting from a newer human turn's counters. Failed or
 interrupted execution attempts retain their charge. Agent messages and cross-chat
 peer sends inherit their origin discussion and never reset the allowance.
@@ -173,9 +173,9 @@ runtime/scheduler.db holds discussions, task decisions, waits and reply counters
 An evaluation/ready/wait may have no Run. `schedule status` includes reply usage;
 Web debug mode shows counts, safe reasons and states, never model reasoning.
 
-CLI: `schedule start <conversation> [--message <id>] [--allow-mcp]`,
+CLI: `schedule start <conversation> [--message <id>]`,
 `schedule run --watch [--concurrency 3]`, `schedule status`,
-`schedule pause|end <conversation>`, `schedule resume <conversation> [--allow-mcp]`,
+`schedule pause|end <conversation>`, `schedule resume <conversation>`,
 and `schedule delete <conversation> --actor <principal>`.
 Start with --message authorizes that human message idempotently; without it, start
 authorizes pending human deliveries and resumes. Non-watch execution drains only

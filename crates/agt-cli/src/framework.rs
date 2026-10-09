@@ -86,8 +86,6 @@ pub(crate) enum ScheduleCommand {
         conversation: String,
         #[arg(long)]
         message: Option<String>,
-        #[arg(long)]
-        allow_mcp: bool,
     },
     /// Stop claiming work; current replies may finish
     Pause {
@@ -112,8 +110,6 @@ pub(crate) enum ScheduleCommand {
     /// Explicitly renew the finite discussion allowance
     Resume {
         conversation: String,
-        #[arg(long)]
-        allow_mcp: bool,
     },
     /// Stop related work and reset model context; preserve IM history
     Reset {
@@ -163,13 +159,12 @@ pub(crate) fn schedule(command: ScheduleCommand, home: &Path, output: OutputMode
         ScheduleCommand::Start {
             conversation,
             message,
-            allow_mcp,
-        } => agt_runtime::start_discussion(home, &conversation, message.as_deref(), allow_mcp)?,
+        } => agt_runtime::start_discussion(home, &conversation, message.as_deref())?,
         ScheduleCommand::Pause { conversation } => {
-            agt_runtime::ScheduleStore::open(home)?.control(&conversation, "pause", false, now())?
+            agt_runtime::ScheduleStore::open(home)?.control(&conversation, "pause", now())?
         }
         ScheduleCommand::End { conversation } => {
-            agt_runtime::ScheduleStore::open(home)?.control(&conversation, "end", false, now())?;
+            agt_runtime::ScheduleStore::open(home)?.control(&conversation, "end", now())?;
             agt_runtime::HarnessSessions::open(home)?.cancel_conversation(&conversation)?
         }
         ScheduleCommand::Dissolve {
@@ -187,15 +182,9 @@ pub(crate) fn schedule(command: ScheduleCommand, home: &Path, output: OutputMode
                 output,
             );
         }
-        ScheduleCommand::Resume {
-            conversation,
-            allow_mcp,
-        } => agt_runtime::ScheduleStore::open(home)?.control(
-            &conversation,
-            "resume",
-            allow_mcp,
-            now(),
-        )?,
+        ScheduleCommand::Resume { conversation } => {
+            agt_runtime::ScheduleStore::open(home)?.control(&conversation, "resume", now())?
+        }
         ScheduleCommand::Reset {
             conversation,
             actor,

@@ -117,7 +117,6 @@ pub struct MessageTrigger {
     pub conversation_id: agt_im::ConversationId,
     pub principal: agt_im::PrincipalId,
     pub depth: u32,
-    pub allow_mcp: bool,
 }
 
 impl RunRequest {

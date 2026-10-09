@@ -49,7 +49,7 @@ Web 模型列表读取改为复用 provider_models，避免独立实现同一功
 托管运行使用绑定身份；显式运行使用该 Agent 的固定 runtime 身份。
 委派子 Agent 只使用自己的工具挂载，不继承父 Agent 的资源权限。
 同 home 执行；工作目录不会改变资源管理范围。
-无需启动外部 MCP，内置工具不依赖 allow_mcp；显式勾选挂载是权限来源。
+无需启动外部 MCP；内置能力的显式挂载是权限来源。
 模型需启用 tool_call。取消挂载从下一次运行生效，不取消已经开始的调用。
 现有讨论结束／租约失效时阻止后续框架副作用的检查继续生效。
 审计只记录参数形状和安全错误，不记录密钥、资源正文等原始参数。
@@ -68,7 +68,7 @@ Web 模型列表读取改为复用 provider_models，避免独立实现同一功
 1. `resource_write(kind=agent, create=true)` 保存配置，不自动运行。
 2. 用 `principal_list` / `binding_list` 检查身份，`principal_create(kind=agent)` 创建新身份。
 3. `agent_bind(principal, agent)` 创建绑定并默认启用：目录默认 home、模型调用轮数不限、
-   policy 默认 mentioned、allow_mcp 默认 false。更新已停用的绑定不会自动启用。
+   policy 默认 mentioned；MCP 按 Agent 装配加载。更新已停用的绑定不会自动启用。
 4. `agent_set_enabled(principal, enabled)` 保留设置启停；启用可能处理已授权的积压消息。
 5. `agent_unbind` 删除运行设置，用于解除配置或删除 Agent 前清理，非普通停用。
 

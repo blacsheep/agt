@@ -56,8 +56,6 @@ fn fixture() -> (tempfile::TempDir, ToolService, String) {
                     working_directory: path.into(),
                     policy: ResponsePolicy::All,
                     max_steps: 4,
-
-                    allow_mcp: false,
                 })
                 .unwrap();
         }
@@ -88,13 +86,7 @@ fn begin(home: &Path, user: &ToolService, chat: &str) -> Scheduler {
             json!({"conversation":chat,"body":"question","request_key":"root"}),
         )
         .unwrap();
-    start_discussion(
-        home,
-        chat,
-        Some(sent["message"]["id"].as_str().unwrap()),
-        false,
-    )
-    .unwrap();
+    start_discussion(home, chat, Some(sent["message"]["id"].as_str().unwrap())).unwrap();
     let mut scheduler = Scheduler::open(home, 3).unwrap();
     scheduler.scan().unwrap();
     scheduler
@@ -338,7 +330,7 @@ fn end_during_model_call_fences_framework_send_and_final_output() {
         ) -> crate::Result<Value> {
             ScheduleStore::open(&self.home)
                 .unwrap()
-                .control(&self.chat, "end", false, now_ms())
+                .control(&self.chat, "end", now_ms())
                 .unwrap();
             Ok(self.answer.clone())
         }
@@ -513,7 +505,6 @@ fn human_burst_queues_independent_inputs_without_fixed_delay() {
             home.path(),
             &chat,
             Some(sent["message"]["id"].as_str().unwrap()),
-            false,
         )
         .unwrap();
     }
@@ -740,7 +731,6 @@ fn three_agents_count_zero_through_ten_without_a_depth_cutoff() {
             working_directory: home.path().into(),
             policy: ResponsePolicy::All,
             max_steps: 4,
-            allow_mcp: false,
         })
         .unwrap();
     user.call("member_add", json!({"conversation":chat,"principal":"c"}))
@@ -889,7 +879,7 @@ fn reset_stops_inflight_reply_preserves_history_and_excludes_old_input() {
         .call("message_history", json!({"conversation":chat}))
         .unwrap();
     assert_eq!(history["messages"].as_array().unwrap().len(), 1);
-    start_discussion(home.path(), &chat, None, false).unwrap();
+    start_discussion(home.path(), &chat, None).unwrap();
     assert!(
         scheduler
             .store
@@ -909,7 +899,6 @@ fn reset_stops_inflight_reply_preserves_history_and_excludes_old_input() {
         home.path(),
         &chat,
         Some(message["message"]["id"].as_str().unwrap()),
-        false,
     )
     .unwrap();
     scheduler.scan().unwrap();
@@ -1029,10 +1018,10 @@ fn conversation_summary_survives_reopen_is_private_and_invalidates_deleted_sourc
 fn reset_schema_upgrade_preserves_existing_discussions() {
     let home = tempfile::tempdir().unwrap();
     let store = ScheduleStore::open(home.path()).unwrap();
-    store.start("existing", "chat", false, now_ms()).unwrap();
+    store.start("existing", "chat", now_ms()).unwrap();
     store
         .connection
-        .execute_batch("DROP TABLE context_reset_events; DROP TABLE context_resets; DROP TABLE work_reports; DROP TABLE work_fairness; DROP TABLE work_waits; DROP TABLE work_dependencies; DROP TABLE work_publications; DROP TABLE work_inbox; DROP TABLE work_outbox; DROP TABLE work_items; PRAGMA user_version=3;")
+        .execute_batch("DROP TABLE context_reset_events; DROP TABLE context_resets; DROP TABLE work_reports; DROP TABLE work_fairness; DROP TABLE work_waits; DROP TABLE work_dependencies; DROP TABLE work_publications; DROP TABLE work_inbox; DROP TABLE work_outbox; DROP TABLE work_items; ALTER TABLE discussions ADD COLUMN allow_mcp INTEGER NOT NULL DEFAULT 0; PRAGMA user_version=3;")
         .unwrap();
     drop(store);
     let migrated = ScheduleStore::open(home.path()).unwrap();
@@ -1043,7 +1032,7 @@ fn reset_schema_upgrade_preserves_existing_discussions() {
             .connection
             .pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
             .unwrap(),
-        17
+        18
     );
 }
 
@@ -1187,13 +1176,7 @@ fn external_engine_uses_private_sessions_incremental_history_and_reset() {
                 json!({"conversation":chat,"body":key,"request_key":key}),
             )
             .unwrap();
-        start_discussion(
-            path,
-            &chat,
-            Some(sent["message"]["id"].as_str().unwrap()),
-            false,
-        )
-        .unwrap();
+        start_discussion(path, &chat, Some(sent["message"]["id"].as_str().unwrap())).unwrap();
         scheduler.scan().unwrap();
         let task = claim(&mut scheduler, "a");
         execute(path, task.clone(), &mut NoModel, &CancellationToken::new()).unwrap();
@@ -1248,13 +1231,7 @@ fn external_group_requires_mention_and_reset_cancels_without_publication() {
             json!({"conversation":chat,"body":"HANG","mentions":["a"],"request_key":"hang"}),
         )
         .unwrap();
-    start_discussion(
-        path,
-        &chat,
-        Some(sent["message"]["id"].as_str().unwrap()),
-        false,
-    )
-    .unwrap();
+    start_discussion(path, &chat, Some(sent["message"]["id"].as_str().unwrap())).unwrap();
     scheduler.scan().unwrap();
     let task = claim(&mut scheduler, "a");
     let task_id = task.id.clone();
@@ -1470,7 +1447,6 @@ fn harness_session_snapshots_models_names_and_compaction_are_isolated() {
         path,
         &chat,
         Some(message["message"]["id"].as_str().unwrap()),
-        false,
     )
     .unwrap();
     scheduler.scan().unwrap();
@@ -1540,3 +1516,57 @@ mod harness_tool_tests;
 
 #[path = "tests/scheduler/run_inputs.rs"]
 mod run_input_tests;
+
+#[test]
+fn scheduled_native_uses_mounted_mcp_without_an_opt_in() {
+    let (home, user, _) = fixture();
+    let server = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/contract_mcp.py");
+    user.call("resource_write", json!({"kind":"mcp","reference":"counter","create":true,
+        "data":{"mcpServers":{"counter":{"command":"python3","args":[server,"valid",home.path().join("calls")]}}}})).unwrap();
+    user.call(
+        "resource_write",
+        json!({"kind":"agent","reference":"a","create":false,
+        "data":{"mcps":["counter"],"builtin_tools":[]}}),
+    )
+    .unwrap();
+    let chat = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let task = claim(&mut scheduler, "a");
+    let id = task.id.clone();
+    struct UseMcp(bool);
+    impl ModelClient for UseMcp {
+        fn complete(
+            &mut self,
+            _: &ResolvedAgent,
+            _: &[Value],
+            tools: &[Value],
+        ) -> crate::Result<Value> {
+            if self.0 {
+                return Ok(json!({"role":"assistant","content":"counted"}));
+            }
+            self.0 = true;
+            let tool = tools
+                .iter()
+                .find(|t| t["function"]["name"].as_str().unwrap().starts_with("mcp_"))
+                .expect("mounted tool is available");
+            Ok(
+                json!({"role":"assistant","tool_calls":[{"id":"count","type":"function",
+                "function":{"name":tool["function"]["name"],"arguments":"{\"count\":1}"}}]}),
+            )
+        }
+    }
+    execute(
+        home.path(),
+        task,
+        &mut UseMcp(false),
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    assert_eq!(scheduler.store.get(&id).unwrap().state, "completed");
+    assert!(home.path().join("calls").exists());
+}

@@ -32,7 +32,7 @@ fn send(home: &Path, user: &ToolService, chat: &str, body: &str, mode: Option<&s
         )
         .unwrap();
     let id = value["message"]["id"].as_str().unwrap();
-    start_discussion(home, chat, Some(id), false).unwrap();
+    start_discussion(home, chat, Some(id)).unwrap();
     id.into()
 }
 fn last_input(messages: &[Value]) -> Value {
@@ -405,19 +405,13 @@ fn pause_and_reply_allowance_leave_inputs_pending() {
     let mut scheduler = begin(home.path(), &user, &chat);
     let task = claim(&mut scheduler, "a");
     send(home.path(), &user, &chat, "queued correction", None);
-    scheduler
-        .store
-        .control(&chat, "pause", false, now_ms())
-        .unwrap();
+    scheduler.store.control(&chat, "pause", now_ms()).unwrap();
     assert!(
         crate::run_inputs::take(home.path(), &task, "test", InputMode::Steering)
             .unwrap()
             .is_none()
     );
-    scheduler
-        .store
-        .control(&chat, "resume", false, now_ms())
-        .unwrap();
+    scheduler.store.control(&chat, "resume", now_ms()).unwrap();
     scheduler.store.connection.execute("INSERT INTO usage(discussion,principal,replies) VALUES(?1,'a',100) ON CONFLICT(discussion,principal) DO UPDATE SET replies=100",[&task.discussion]).unwrap();
     assert!(
         crate::run_inputs::take(home.path(), &task, "test", InputMode::Steering)

@@ -26,8 +26,6 @@ pub struct Binding {
     /// Legacy field retained for saved bindings; no longer limits execution.
     #[serde(default)]
     pub max_steps: u32,
-    #[serde(default)]
-    pub allow_mcp: bool,
 }
 
 #[derive(Serialize)]
@@ -52,7 +50,7 @@ impl BindingStore {
         match version {
             0 => tx.execute_batch("CREATE TABLE bindings(principal TEXT PRIMARY KEY, agent TEXT NOT NULL, definition TEXT NOT NULL);
                 CREATE TABLE response_policies(conversation TEXT NOT NULL,principal TEXT NOT NULL,policy TEXT NOT NULL,PRIMARY KEY(conversation,principal)); PRAGMA user_version=1;")?,
-            1..=4 => {},
+            1..=5 => {},
             _ => bail!("unsupported bindings database version"),
         }
         if version < 2 {
@@ -71,6 +69,13 @@ impl BindingStore {
                 CREATE TRIGGER IF NOT EXISTS policy_added AFTER INSERT ON response_policies BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'binding',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
                 CREATE TRIGGER IF NOT EXISTS policy_changed AFTER UPDATE ON response_policies BEGIN INSERT INTO change_outbox(conversation,kind,at) VALUES(NEW.conversation,'binding',CAST(unixepoch('subsec')*1000 AS INTEGER)); END;
                 PRAGMA user_version=4;")?;
+        }
+        if version < 5 {
+            // Remove the retired gate from strict Binding JSON, including disabled bindings.
+            tx.execute_batch(
+                "UPDATE bindings SET definition=json_remove(definition,'$.allow_mcp');
+                PRAGMA user_version=5;",
+            )?;
         }
         tx.commit()?;
         Ok(Self {
@@ -93,7 +98,6 @@ impl BindingStore {
             if binding.policy == ResponsePolicy::All {
                 binding.policy = ResponsePolicy::Mentioned;
             }
-            binding.allow_mcp = false;
         }
         binding.agent = format!("{category}/{name}");
         let im = ImStore::open(crate::database_path(&self.home, "im", "im.db")?)?;
@@ -229,5 +233,53 @@ impl BindingStore {
             Some(value) => serde_json::from_str(&value)?,
             None => binding.policy,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_mcp_flag_is_removed_from_enabled_and_disabled_bindings() {
+        let home = tempfile::tempdir().unwrap();
+        let store = BindingStore::open(home.path()).unwrap();
+        for (principal, enabled) in [("a", true), ("b", false)] {
+            let definition = serde_json::json!({"principal":principal,"agent":"default/test",
+                "working_directory":home.path(),"policy":"mentioned","max_steps":0,"allow_mcp":enabled});
+            store.connection.execute("INSERT INTO bindings(principal,agent,definition,enabled) VALUES(?1,'default/test',?2,?3)",
+                params![principal,definition.to_string(),enabled]).unwrap();
+        }
+        store
+            .connection
+            .pragma_update(None, "user_version", 4)
+            .unwrap();
+        drop(store);
+        let store = BindingStore::open(home.path()).unwrap();
+        let bindings = store.list_with_state().unwrap();
+        assert_eq!(bindings.len(), 2);
+        assert!(bindings[0].enabled);
+        assert!(!bindings[1].enabled);
+        assert_eq!(store.list().unwrap().len(), 1);
+        for binding in bindings {
+            assert!(
+                serde_json::to_value(binding)
+                    .unwrap()
+                    .get("allow_mcp")
+                    .is_none()
+            );
+        }
+        let remaining: i64 = store.connection.query_row(
+            "SELECT COUNT(*) FROM bindings WHERE json_type(definition,'$.allow_mcp') IS NOT NULL", [], |r| r.get(0)).unwrap();
+        assert_eq!(remaining, 0);
+        drop(store);
+        assert_eq!(
+            BindingStore::open(home.path())
+                .unwrap()
+                .list_with_state()
+                .unwrap()
+                .len(),
+            2
+        );
     }
 }

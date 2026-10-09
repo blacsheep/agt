@@ -9,12 +9,7 @@ use std::path::Path;
 
 /// Explicit authorization of human messages; merely starting the daemon does not
 /// infer over arbitrary old inboxes. Descendants inherit the authorized round.
-pub fn start_discussion(
-    home: &Path,
-    conversation: &str,
-    message: Option<&str>,
-    allow_mcp: bool,
-) -> Result<()> {
+pub fn start_discussion(home: &Path, conversation: &str, message: Option<&str>) -> Result<()> {
     let im = im(home)?;
     let id = ConversationId::new(conversation);
     if im.get_conversation(&id)?.state != ConversationState::Active {
@@ -50,17 +45,11 @@ pub fn start_discussion(
             && message.metadata["discussion_id"].is_null()
             && im.get_principal(&message.sender_id)?.kind == PrincipalKind::User
         {
-            store.authorize_human(
-                message.id.as_str(),
-                conversation,
-                message.seq,
-                allow_mcp,
-                now_ms(),
-            )?;
+            store.authorize_human(message.id.as_str(), conversation, message.seq, now_ms())?;
         }
     }
     if message.is_none() {
-        store.control(conversation, "resume", allow_mcp, now_ms())?;
+        store.control(conversation, "resume", now_ms())?;
     }
     Ok(())
 }
