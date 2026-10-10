@@ -1,7 +1,8 @@
 /* Execution ledger: compact rows, explicit status, independently expandable tool details. */
-.live-replies { flex: 0 1 auto; min-height: 0; max-height: min(36vh, 300px); overflow: auto; padding: 0 20px; border-top: 1px solid var(--line); background: var(--paper); scrollbar-gutter: stable; }
-.live-reply { padding: 12px 0; color: var(--ink); }
-.live-reply + .live-reply { border-top: 1px solid var(--line); }
+.live-replies { flex: 0 1 auto; min-height: 0; max-height: min(36vh, 300px); overflow: auto; padding: 4px clamp(16px, 4vw, 48px) 2px calc(clamp(16px, 4vw, 48px) + 46px); scrollbar-gutter: stable; }
+@media (max-width: 760px) { .live-replies { padding: 4px 12px 2px; } }
+.live-reply { margin: 4px 0; padding: 10px 14px; border-radius: 4px 16px 16px 16px; background: var(--surface, var(--paper)); box-shadow: var(--shadow-sm); color: var(--ink); }
+.live-reply + .live-reply { margin-top: 8px; }
 .live-reply > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; list-style: none; }
 .live-reply > summary::-webkit-details-marker, .tool-card > summary::-webkit-details-marker { display: none; }
 .live-reply > summary::after { content: '⌄'; color: var(--muted); flex: 0 0 auto; }
@@ -11,9 +12,10 @@
 .live-reply .live-phase { flex: 1; min-width: 0; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .live-reply > summary > small { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .run-indicator { color: var(--accent); flex: 0 0 16px; text-align: center; font-size: 15px; }
+.live-reply[data-state="running"] .run-indicator { flex: 0 0 14px; width: 14px; height: 14px; border-radius: 50%; font-size: 0; background: conic-gradient(from 0deg, #5b5ff0, #8a4fe0, #22b8cf, #5b5ff0); -webkit-mask: radial-gradient(circle, transparent 4px, #000 5px); mask: radial-gradient(circle, transparent 4px, #000 5px); animation: agt-ring 1.2s linear infinite; }
 .live-reply[data-state="completed"] .run-indicator { color: var(--status-done); }
 .live-reply:not([data-state="running"]) .live-phase { color: var(--muted); }
-.live-body { padding: 10px 0 0 24px; }
+.live-body { padding: 8px 0 0 24px; }
 .live-preview { margin: 0 0 4px; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; max-height: 100px; overflow: auto; }
 .live-preview p, .live-preview ul, .live-preview ol, .live-preview pre, .live-preview blockquote { margin: 0 0 6px; }
 .live-preview ul, .live-preview ol { padding-left: 20px; }
@@ -25,7 +27,7 @@
 .run-progress-note { color: var(--status-attention); }
 .run-approval-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .harness-activity { display: grid; gap: 6px; }
-.tool-card { border: 1px solid var(--line); border-left: 3px solid var(--s-9aa5b5, #9aa5b5); border-radius: 5px; background: var(--paper); min-width: 0; }
+.tool-card { border: 1px solid var(--line); border-left: 3px solid var(--s-9aa5b5, #9aa5b5); border-radius: 8px; background: var(--surface-2, var(--paper)); min-width: 0; }
 .tool-card[data-status="running"] { border-left-color: var(--accent-fill, var(--accent)); background: var(--s-f8faff, #f8faff); }
 .tool-card[data-status="completed"] { border-left-color: var(--status-done); }
 .tool-card[data-status="failed"], .tool-card[data-status="unsupported"] { border-left-color: var(--s-b04735, #b04735); }
