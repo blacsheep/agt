@@ -116,7 +116,7 @@ impl PermissionLoop {
         };
         check()?;
         // Subscribe before creating the request so no decision hint is missed.
-        let mut listener = agt_storage::wake::Listener::open(&self.home).ok();
+        let mut listener = agt_storage::wake::Hints::open(&self.home);
         let store = ApprovalStore::open(&self.home)?;
         let Request {
             scope,
@@ -147,7 +147,7 @@ impl PermissionLoop {
         loop {
             check_canceled(cancellation)?;
             if !hinted && checked.elapsed() < RECHECK {
-                hinted = wait_hint(&mut listener);
+                hinted = listener.wait(TICK);
                 continue;
             }
             checked = Instant::now();
@@ -221,7 +221,7 @@ impl PermissionLoop {
                     Decision::Pending => {}
                 }
             }
-            hinted = wait_hint(&mut listener);
+            hinted = listener.wait(TICK);
         }
     }
 }
@@ -232,19 +232,6 @@ pub(crate) struct Request<'a> {
     pub tool: &'a str,
     pub arguments: &'a Value,
     pub input: &'a str,
-}
-
-// Wake hints are optional; storage polling, expiry and cancellation still work
-// when the socket cannot be created or later fails. Sleep to avoid a busy loop.
-fn wait_hint(listener: &mut Option<agt_storage::wake::Listener>) -> bool {
-    if let Some(active) = listener {
-        match active.wait(TICK) {
-            Ok(hinted) => return hinted,
-            Err(_) => *listener = None,
-        }
-    }
-    std::thread::sleep(TICK);
-    false
 }
 
 fn load_config(home: &Path) -> Result<PermissionConfig> {

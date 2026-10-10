@@ -16,24 +16,20 @@ pub(super) struct Bridge<'a> {
 
 /// Tracks when each pending approval last read storage and the latest wake hint.
 pub(super) struct Wake {
-    listener: Option<agt_storage::wake::Listener>,
+    listener: agt_storage::wake::Hints,
     hinted_at: Instant,
     checked: HashMap<String, Instant>,
 }
 impl Wake {
     pub(super) fn open(home: &std::path::Path) -> Self {
         Self {
-            listener: agt_storage::wake::Listener::open(home).ok(),
+            listener: agt_storage::wake::Hints::open(home),
             hinted_at: Instant::now(),
             checked: HashMap::new(),
         }
     }
     fn due(&mut self, id: &str) -> bool {
-        // Without a listener every poll reads storage, as before.
-        let Some(listener) = &self.listener else {
-            return true;
-        };
-        if listener.wait(Duration::ZERO).unwrap_or(true) {
+        if self.listener.wait(Duration::ZERO) {
             self.hinted_at = Instant::now();
         }
         let due = self
@@ -87,5 +83,25 @@ impl agt_harness::ApprovalHandler for Bridge<'_> {
 impl Drop for Bridge<'_> {
     fn drop(&mut self) {
         let _ = self.store.invalidate_run(&self.scope.run_id);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unavailable_hints_preserve_per_approval_rechecks() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::create_dir(home.path().join("runtime")).unwrap();
+        std::fs::write(home.path().join("runtime/wake"), b"blocked").unwrap();
+        let mut wake = Wake::open(home.path());
+        assert!(wake.due("first"));
+        assert!(!wake.due("first"));
+        assert!(wake.due("second"));
+        wake.checked
+            .insert("first".into(), Instant::now() - RECHECK);
+        assert!(wake.due("first"));
+        assert!(!wake.due("second"));
     }
 }

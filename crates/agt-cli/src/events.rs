@@ -22,7 +22,7 @@ pub fn dispatch(command: EventCommand, home: &Path) -> Result<()> {
         conversation,
         mut after,
     } = command;
-    let listener = agt_storage::wake::Listener::open(home)?;
+    let mut listener = agt_storage::wake::Hints::open(home);
     let mut feed = agt_runtime::events::Events::open(home)?;
     let token = crate::signals::cancellation();
     let mut stdout = io::stdout().lock();
@@ -41,7 +41,7 @@ pub fn dispatch(command: EventCommand, home: &Path) -> Result<()> {
         }
         let deadline = Instant::now() + Duration::from_secs(15);
         while !token.is_canceled() && Instant::now() < deadline {
-            if listener.wait(Duration::from_millis(250))? {
+            if listener.wait(Duration::from_millis(250)) {
                 break;
             }
         }

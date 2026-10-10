@@ -9,13 +9,53 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 use std::{
-    io,
+    io::{self, Write},
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[cfg(unix)]
 static NEXT: AtomicU64 = AtomicU64::new(0);
+
+/// Optional notification accelerator. Callers must periodically recheck durable storage.
+/// A failed listener is dropped and diagnosed once; subsequent waits only sleep.
+pub struct Hints {
+    listener: Option<Listener>,
+}
+impl Hints {
+    pub fn open(home: &Path) -> Self {
+        let listener = match Listener::open(home) {
+            Ok(listener) => Some(listener),
+            Err(error) => {
+                Self::diagnose(&error);
+                None
+            }
+        };
+        Self { listener }
+    }
+
+    pub fn wait(&mut self, timeout: Duration) -> bool {
+        let started = Instant::now();
+        if let Some(listener) = &self.listener {
+            match listener.wait(timeout) {
+                Ok(hinted) => return hinted,
+                Err(error) => {
+                    Self::diagnose(&error);
+                    self.listener = None;
+                }
+            }
+        }
+        std::thread::sleep(timeout.saturating_sub(started.elapsed()));
+        false
+    }
+
+    fn diagnose(error: &io::Error) {
+        let _ = writeln!(
+            io::stderr().lock(),
+            "wake hints unavailable; falling back to periodic storage checks: {error}"
+        );
+    }
+}
 
 pub struct Listener {
     #[cfg(unix)]
@@ -36,8 +76,9 @@ impl Listener {
                 NEXT.fetch_add(1, Ordering::Relaxed)
             ));
             let socket = UnixDatagram::bind(&path)?;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
-            Ok(Self { socket, path })
+            let listener = Self { socket, path };
+            fs::set_permissions(&listener.path, fs::Permissions::from_mode(0o600))?;
+            Ok(listener)
         }
         #[cfg(not(unix))]
         {
@@ -127,6 +168,48 @@ pub fn notify(home: &Path) {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    #[test]
+    fn unavailable_hints_sleep_and_keep_polling() {
+        let home = tempfile::tempdir().unwrap();
+        fs::create_dir(home.path().join("runtime")).unwrap();
+        fs::write(home.path().join("runtime/wake"), b"blocked").unwrap();
+        let mut hints = Hints::open(home.path());
+        assert!(hints.listener.is_none());
+        for _ in 0..2 {
+            let started = Instant::now();
+            assert!(!hints.wait(Duration::from_millis(10)));
+            assert!(started.elapsed() >= Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn failed_wait_drops_listener_and_falls_back() {
+        use std::os::fd::OwnedFd;
+        let home = tempfile::tempdir().unwrap();
+        let path = home.path().join("not-a-socket");
+        let fd: OwnedFd = fs::File::create(&path).unwrap().into();
+        let mut hints = Hints {
+            listener: Some(Listener {
+                socket: UnixDatagram::from(fd),
+                path: path.clone(),
+            }),
+        };
+        let started = Instant::now();
+        assert!(!hints.wait(Duration::from_millis(10)));
+        assert!(started.elapsed() >= Duration::from_millis(10));
+        assert!(hints.listener.is_none());
+        assert!(!path.exists());
+        assert!(!hints.wait(Duration::ZERO));
+    }
+
+    #[test]
+    fn optional_hints_receive_notifications() {
+        let home = tempfile::tempdir().unwrap();
+        let mut hints = Hints::open(home.path());
+        notify(home.path());
+        assert!(hints.wait(Duration::from_millis(10)));
+    }
+
     #[test]
     fn hints_fan_out_and_cleanup_without_payloads() {
         let home = tempfile::tempdir().unwrap();

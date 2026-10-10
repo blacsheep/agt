@@ -65,7 +65,7 @@ impl Scheduler {
 
     pub fn run(&mut self, watch: bool, token: &CancellationToken) -> Result<()> {
         // Subscribe before the first snapshot: commits during tick leave a queued hint.
-        let listener = agt_storage::wake::Listener::open(&self.home)?;
+        let mut listener = agt_storage::wake::Hints::open(&self.home);
         loop {
             if token.is_canceled() {
                 for (_, cancel, _) in &self.jobs {
@@ -82,9 +82,7 @@ impl Scheduler {
                     break;
                 }
                 let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-                if remaining.is_zero()
-                    || listener.wait(remaining.min(Duration::from_millis(250)))?
-                {
+                if remaining.is_zero() || listener.wait(remaining.min(Duration::from_millis(250))) {
                     break;
                 }
             }

@@ -1583,3 +1583,21 @@ fn scheduled_native_uses_mounted_mcp_without_an_opt_in() {
     );
     assert!(home.path().join("calls").exists());
 }
+
+#[cfg(unix)]
+#[test]
+fn unavailable_hints_do_not_stop_scheduler_or_cancellation() {
+    let (home, _, _) = fixture();
+    std::fs::create_dir_all(home.path().join("runtime")).unwrap();
+    std::fs::write(home.path().join("runtime/wake"), b"blocked").unwrap();
+    let mut scheduler = Scheduler::open(home.path(), 1).unwrap();
+    let token = CancellationToken::new();
+    let cancel = token.clone();
+    let thread = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(300));
+        cancel.cancel();
+    });
+    scheduler.run(true, &token).unwrap();
+    assert!(token.is_canceled());
+    thread.join().unwrap();
+}
