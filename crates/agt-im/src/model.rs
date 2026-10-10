@@ -157,6 +157,16 @@ pub struct ConversationSummary {
     pub dissolved: bool,
     #[serde(default)]
     pub last_viewed_at: Option<i64>,
+    /// Newest non-deleted message inside the viewer's membership history, body truncated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_message: Option<MessagePreview>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct MessagePreview {
+    pub sender_id: PrincipalId,
+    pub body: String,
+    pub created_at: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

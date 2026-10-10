@@ -344,7 +344,15 @@ impl ImStore {
                        AND msg.seq >= cm.joined_message_seq
                        AND msg.deleted_at IS NULL
                        AND msg.sender_id != cm.principal_id
-                       AND cm.left_message_seq IS NULL), cm.left_message_seq,cm.hidden,c.dissolved,cm.last_viewed_at
+                       AND cm.left_message_seq IS NULL), cm.left_message_seq,cm.hidden,c.dissolved,cm.last_viewed_at,
+                    (SELECT json_object('sender_id', m.sender_id, 'body', substr(m.body, 1, 120), 'created_at', m.created_at)
+                     FROM messages m
+                     WHERE m.conversation_id = c.id AND m.deleted_at IS NULL
+                       AND EXISTS(SELECT 1 FROM membership_history h
+                                  WHERE h.conversation = c.id AND h.principal = cm.principal_id
+                                    AND m.seq >= h.message_start
+                                    AND (h.message_end IS NULL OR m.seq <= h.message_end))
+                     ORDER BY m.seq DESC LIMIT 1)
              FROM conversations c
              JOIN conversation_members cm ON cm.conversation_id = c.id
              WHERE cm.principal_id = ?1 AND (?2 OR cm.hidden=0)
@@ -363,6 +371,9 @@ impl ImStore {
                     hidden: row.get(11)?,
                     dissolved: row.get(12)?,
                     last_viewed_at: row.get(13)?,
+                    last_message: row
+                        .get::<_, Option<String>>(14)?
+                        .and_then(|json| serde_json::from_str(&json).ok()),
                 })
             },
         )?;
@@ -1894,6 +1905,11 @@ mod tests {
 
         let summaries = store.list_conversations(&member).expect("summaries");
         assert_eq!(summaries[0].unread_count, 1);
+        let preview = summaries[0].last_message.as_ref().expect("preview");
+        assert_eq!(
+            (preview.sender_id.as_str(), preview.body.as_str()),
+            (owner.as_str(), "one")
+        );
         store.mark_read(&conversation.id, &member, 1).expect("read");
         let summaries = store.list_conversations(&member).expect("summaries");
         assert_eq!(summaries[0].unread_count, 0);
@@ -2145,6 +2161,46 @@ mod tests {
                 .is_empty()
         );
         assert_eq!(store.list_conversations(&member).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn conversation_preview_stays_inside_membership_history() {
+        let store = ImStore::open_in_memory().expect("open store");
+        let owner = principal(&store, "owner");
+        let member = principal(&store, "member");
+        let conversation = store
+            .create_group(&owner, Some("team".to_string()), vec![member.clone()])
+            .expect("group");
+        store
+            .send_message(message(
+                conversation.id.clone(),
+                owner.clone(),
+                "before leaving",
+            ))
+            .expect("visible message");
+        store
+            .leave_conversation(&conversation.id, &member)
+            .expect("leave");
+        store
+            .send_message(message(
+                conversation.id.clone(),
+                owner.clone(),
+                "after leaving",
+            ))
+            .expect("hidden message");
+        let preview = |viewer: &PrincipalId| {
+            store.list_conversations(viewer).unwrap()[0]
+                .last_message
+                .clone()
+                .map(|m| m.body)
+        };
+        assert_eq!(preview(&member).as_deref(), Some("before leaving"));
+        assert_eq!(preview(&owner).as_deref(), Some("after leaving"));
+        let long = "长".repeat(200);
+        store
+            .send_message(message(conversation.id.clone(), owner.clone(), &long))
+            .expect("long message");
+        assert_eq!(preview(&owner).unwrap().chars().count(), 120);
     }
 
     #[test]
