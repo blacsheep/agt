@@ -111,9 +111,15 @@ try {
     const menuShot=await cdp('Page.captureScreenshot',{format:'png'});
     await writeFile('/tmp/agt-collaboration-menu.png',Buffer.from(menuShot.data,'base64'));
   }
-  await evaluate(`layoutPreferences.conversations=true; renderLayout(); document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true,cancelable:true}));`);
-  assert.equal(await evaluate('document.activeElement.id'),'search');
-  assert.equal(await evaluate('layoutPreferences.conversations'),false);
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true,cancelable:true}));`);
+  assert.equal(await evaluate('document.querySelector("#palette").open && document.activeElement.id'),'palette-input');
+  await evaluate(`const p=document.querySelector('#palette-input'); p.value='产品设计'; p.dispatchEvent(new Event('input'));`);
+  assert.match(await evaluate('document.querySelector("#palette-list [aria-selected=true]").textContent'),/产品设计/);
+  await evaluate(`document.querySelector('#palette-input').value='<img src=x onerror=window.paletteInjected=1>'; document.querySelector('#palette-input').dispatchEvent(new Event('input'));`);
+  assert.equal(await evaluate('window.paletteInjected===undefined && !document.querySelector("#palette-list img")'),true);
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true,cancelable:true}));`);
+  assert.equal(await evaluate('document.querySelector("#palette").open'),false);
+  await evaluate('layoutPreferences.conversations=false; renderLayout(); document.querySelector("#search").focus();');
   await evaluate(`document.querySelector('#search').value='tech'; renderConversations();`);
   await click('#clear-search');
   assert.equal(await evaluate('document.querySelector("#search").value'),'');

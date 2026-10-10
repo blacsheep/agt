@@ -37,7 +37,7 @@ window.createInteractionGraph = (onSelect) => {
     const neighborhood = new Set([focus]);
     edges.forEach(e => { if (e.from === focus || e.to === focus) { neighborhood.add(e.from); neighborhood.add(e.to); } });
     const now = Date.now();
-    svg.innerHTML = `<defs><marker id="ix-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#7d96b8"/></marker></defs><g class="ix-world">
+    svg.innerHTML = `<defs><linearGradient id="ix-ring-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b5ff0"/><stop offset=".5" stop-color="#8a4fe0"/><stop offset="1" stop-color="#22b8cf"/></linearGradient><marker id="ix-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="#7d96b8"/></marker></defs><g class="ix-world">
       ${edges.map((e,i) => {
         const a = positions.get(e.from), b = positions.get(e.to), dx = b.x-a.x, dy = b.y-a.y, length = Math.hypot(dx,dy) || 1;
         const x1=a.x+dx/length*36, y1=a.y+dy/length*36, x2=b.x-dx/length*40, y2=b.y-dy/length*40;
@@ -50,7 +50,7 @@ window.createInteractionGraph = (onSelect) => {
       }).join('')}
       ${[...nodes.values()].map(n => {
         const p=positions.get(n.id), lit=edges.some(e => e.until>now && (e.from===n.id || e.to===n.id));
-        return `<g class="ix-node ${n.group?'group':''} ${focus===n.id?'focused':''} ${focus&&!neighborhood.has(n.id)?'dim':''} ${n.running?'running':''} ${n.tone||''} ${lit?'fresh':''}" data-node="${esc(n.id)}" transform="translate(${p.x} ${p.y})" tabindex="0" role="button" aria-label="${esc(n.label+'，'+n.status)}">
+        return `<g data-tone="${n.group?'':toneOf(n.id)}" class="ix-node ${n.group?'group':''} ${focus===n.id?'focused':''} ${focus&&!neighborhood.has(n.id)?'dim':''} ${n.running?'running':''} ${n.tone||''} ${lit?'fresh':''}" data-node="${esc(n.id)}" transform="translate(${p.x} ${p.y})" tabindex="0" role="button" aria-label="${esc(n.label+'，'+n.status)}">
           <circle class="ix-node-halo" r="43"/>${n.group?'<rect class="ix-node-face" x="-27" y="-27" width="54" height="54" rx="12" transform="rotate(45)"/>':'<circle class="ix-node-face" r="31"/>'}
           <text class="ix-node-initial" text-anchor="middle" y="6">${esc(n.group?'#':n.label.slice(0,2))}</text>
           <circle class="ix-node-state" cx="25" cy="22" r="6"/>

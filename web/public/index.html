@@ -14,6 +14,7 @@
     <script src="/tool-activity.js" defer></script>
     <script src="/execution-view.js" defer></script>
     <script src="/app.js" defer></script>
+    <script src="/palette.js" defer></script>
     <script src="/tasks.js" defer></script>
     <script src="/permission-mode.js" defer></script>
     <script src="/approvals.js" defer></script>
@@ -61,6 +62,7 @@
             </div>
             <button id="new-chat" class="primary"><span aria-hidden="true">＋</span> 新建会话</button>
           </div></div>
+          <button id="open-palette" class="palette-trigger" type="button" aria-label="搜索或跳转（Ctrl+K）"><span aria-hidden="true">⌕</span><span class="palette-trigger-label">搜索或跳转</span><kbd>⌘K</kbd></button>
           <select id="theme-select" class="theme-select" aria-label="外观" title="外观"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
           <label class="debug-toggle"><input id="debug-mode" type="checkbox" />调试模式</label>
           <span id="connection" class="status-pill">连接中</span
@@ -229,6 +231,7 @@
           </div>
           <button id="new-agent" class="primary">＋ 创建 Agent</button>
         </div>
+        <div id="team-pulse" class="team-pulse" aria-label="团队状态"></div>
         <div class="agent-batch-bar" aria-label="批量管理 Agent">
           <label><input id="select-all-agents" type="checkbox"> 全选</label>
           <span id="agent-selection-count" role="status">已选 0 位</span>
@@ -268,5 +271,10 @@
       <div id="modal-error" class="form-error hidden" role="alert"></div>
     </dialog>
     <div id="conversation-menu" class="context-menu hidden" role="menu" aria-label="会话操作"></div>
-  </body>
+      <dialog id="palette" class="palette" aria-label="命令面板">
+      <div class="palette-search"><span aria-hidden="true">⌕</span><input id="palette-input" type="text" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" placeholder="搜索会话、联系人、页面或操作…" autocomplete="off" /><kbd>Esc</kbd></div>
+      <ul id="palette-list" role="listbox" aria-label="结果"></ul>
+      <p class="palette-foot"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>Enter</kbd> 打开</span><span><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> 随时唤起</span></p>
+    </dialog>
+</body>
 </html>

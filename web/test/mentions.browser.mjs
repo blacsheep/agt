@@ -32,6 +32,9 @@ try {
   const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   await wait('document.querySelector("#connection")?.textContent === "本地已连接"');
 
+  await evaluate('renderMessages()');
+  assert.match(await evaluate('document.querySelector("#messages .welcome h2").textContent'), /好，/);
+  assert.equal(await evaluate('!!document.querySelector("#messages [data-empty-new-chat]")'), true);
   await evaluate(`
     state.polling = true;
     state.conversation = {id: 'sample', state: 'active'};
@@ -48,6 +51,14 @@ try {
   assert.deepEqual(await evaluate('mentionedPrincipals(document.querySelector("#message-body").value)'), ['lead']);
   await type('@开发'); await key('Tab');
   assert.equal(await evaluate('document.querySelector("#message-body").value'), '@developer ');
+  await type('/st');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll("#mention-menu strong")].map(e => e.textContent.split(" ")[0])'), ['/status', '/stop']);
+  await key('Escape');
+  assert.equal(await evaluate('document.querySelector("#mention-menu").classList.contains("hidden")'), true);
+  await type('/zz');
+  assert.equal(await evaluate('document.querySelector("#mention-menu").classList.contains("hidden")'), true);
+  await type('hello /st');
+  assert.equal(await evaluate('document.querySelector("#mention-menu").classList.contains("hidden")'), true);
   await type('@特殊'); await click('#mention-option-0');
   assert.deepEqual(await evaluate('mentionedPrincipals(document.querySelector("#message-body").value)'), ['role:with space']);
   await type('@同名'); await key('Enter');

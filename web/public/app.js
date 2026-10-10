@@ -305,6 +305,13 @@ document.addEventListener('pointerdown', event => { if (!event.target.closest('#
 window.addEventListener('resize', () => closeConversationMenu());
 document.addEventListener('scroll', event => { if (!event.target.closest?.('#conversation-menu')) closeConversationMenu(); }, true);
 function clearConversation() { closeCommandPanel(); document.body.classList.remove('mobile-chat-open'); $('#latest-message').classList.add('hidden'); closeConversationMenu(); $('#group-drawer').close(); state.conversation = null; state.members = []; state.messages = []; state.contextResets = []; state.cursor = null; state.generation++; renderLiveReplies(); renderMessages(); renderChatHead(); setupReadOnly(); }
+async function startDirect(principal) {
+  try {
+    const c = await tool('direct_create', { principal });
+    if (c.state !== 'active') { showRestoreChat(c); return; }
+    switchPage('chat'); await api('conversation', {action:'show',conversation:c.id}); await conversations(); await selectConversation(c.id);
+  } catch (e) { notify(errorText(e), true); }
+}
 async function selectConversation(id) {
   closeCommandPanel();
   if (state.sending) { notify('消息正在发送，请稍后切换会话。'); return; }
@@ -444,6 +451,13 @@ function agentStates(tasks) {
 }
 const decisionReasons = { relevant_expertise: '有相关信息可以补充', correction_needed: '需要纠正已有信息', direct_question: '有待回答的问题', already_answered: '问题已有回答', not_relevant: '当前话题无需参与', observe_discussion: '等待其他成员补充' };
 const decisionActions = { participate: '参与发言', silent: '本次不发言', wait: '等待观察' };
+// What an identity is doing right now in conversations the viewer can see.
+function workingState(principal) {
+  const task = state.scheduler.online && state.scheduler.tasks.find(t => t.principal === principal && ['evaluating', 'responding', 'input'].includes(t.state));
+  if (!task) return null;
+  const c = state.conversations.find(e => e.conversation.id === task.conversation)?.conversation;
+  return { label: task.state === 'evaluating' ? '正在思考' : '正在回复', conversation: c ? conversationName(c) : '' };
+}
 function participationView(t) {
   const round = state.scheduler.discussions.find(d => d.id === t.discussion);
   const active = ['queued', 'evaluating', 'ready_to_reply', 'responding', 'input', 'waiting', 'blocked', 'limited'].includes(t.state);
@@ -574,10 +588,26 @@ function renderMentions() {
   const ids = mentionedPrincipals($('#message-body').value);
   $('#mention-summary').textContent = ids.length ? `已提及 ${ids.length} 位成员` : '输入 @ 选择成员 · @all 提及所有人';
 }
+// Typing "/" at the start of the draft lists the commands this conversation supports.
+function showCommandOptions() {
+  const input = $('#message-body'), match = input.value.match(/^\/([a-z]*)$/i);
+  if (!match || input.selectionStart !== input.value.length || !state.conversation) return false;
+  mentionOptions = availableChatCommands().filter(c => c.name.startsWith(match[1].toLowerCase())).map(c => ({ command: c.name, id: c.name, name: c.label, description: c.description }));
+  if (!mentionOptions.length) return true;
+  mentionIndex = 0;
+  $('#mention-menu').innerHTML = mentionOptions.map((m, i) => `<button type="button" role="option" id="mention-option-${i}" aria-selected="${i === 0}" data-mention-index="${i}" tabindex="-1"><span class="mention-symbol command">/</span><span><strong>/${esc(m.command)} · ${esc(m.name)}</strong><small>${esc(m.description)}</small></span></button>`).join('');
+  $('#mention-menu').classList.remove('hidden');
+  input.setAttribute('aria-expanded', 'true');
+  input.setAttribute('aria-activedescendant', 'mention-option-0');
+  $$('#mention-menu button').forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => insertMention(Number(b.dataset.mentionIndex)); });
+  return true;
+}
 function showMentionOptions() {
   renderMentions();
+  if (state.sending || state.viewer !== state.boot?.principal) return;
+  if (showCommandOptions()) return;
   const query = mentionQuery();
-  if (!query || state.sending || state.viewer !== state.boot?.principal) return;
+  if (!query) return;
   const candidates = [{ id: 'all', all: true, name: '所有人', description: '当前会话的所有其他成员' }, ...mentionMembers().map(m => ({ id: m.principal_id, name: nameOf(m.principal_id), description: m.principal_id }))];
   mentionOptions = candidates.filter(m => `${m.id} ${m.name}`.toLowerCase().includes(query.text.toLowerCase()));
   if (!mentionOptions.length) return;
@@ -589,6 +619,10 @@ function showMentionOptions() {
   $$('#mention-menu button').forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => insertMention(Number(b.dataset.mentionIndex)); });
 }
 function insertMention(index) {
+  if (mentionOptions[index]?.command) {
+    $('#message-body').value = '/' + mentionOptions[index].command;
+    closeMentions(); $('#composer').requestSubmit(); return;
+  }
   const query = mentionQuery(), option = mentionOptions[index];
   if (!query || !option) return;
   const input = $('#message-body');
@@ -636,9 +670,29 @@ async function messages(force = false, older = false) {
   updateLatestMessage();
   if (!older) markRead();
 }
+function renderWelcome(first) {
+  const hour = new Date().getHours();
+  const hello = hour < 6 ? '夜深了' : hour < 11 ? '早上好' : hour < 14 ? '中午好' : hour < 18 ? '下午好' : '晚上好';
+  const agents = state.boot.principals.filter(p => p.kind === 'agent' && p.id !== state.boot.principal && canContact(p));
+  const description = id => { const binding = state.boot.bindings.find(b => b.principal === id); return items('agent').find(a => ref(a) === binding?.agent)?.description || 'Agent'; };
+  const unread = state.conversations.filter(e => e.unread_count > 0 && !e.hidden);
+  const recent = (unread.length ? unread : state.conversations.filter(e => !e.hidden)).slice(0, 3);
+  $('#messages').innerHTML = `<section class="welcome">
+    <div class="welcome-hero"><span class="welcome-mark" aria-hidden="true"></span><h2>${hello}，${esc(nameOf(state.boot.principal))}</h2><p>${first ? '从和一位 Agent 私聊开始，或者拉一个群让它们一起讨论。' : unread.length ? `有 ${unread.reduce((n, e) => n + e.unread_count, 0)} 条新消息等你查看。` : '今天想和谁一起推进工作？'}</p></div>
+    ${agents.length ? `<div class="welcome-block"><h3>你的 Agent</h3><div class="welcome-agents">${agents.map(p => { const work = workingState(p.id); return `<button type="button" class="welcome-agent${work ? ' working' : ''}" data-welcome-direct="${esc(p.id)}" data-tone="${toneOf(p.id)}"><span class="avatar" data-tone="${toneOf(p.id)}" aria-hidden="true">${esc(initialOf(p.name || p.id))}</span><strong>${esc(p.name || p.id)}</strong><small>${esc(work ? `${work.label}${work.conversation ? ' · ' + work.conversation : ''}` : description(p.id))}</small><span class="welcome-go">私聊 →</span></button>`; }).join('')}</div></div>` : `<div class="welcome-block"><h3>还没有可聊天的 Agent</h3><p class="welcome-note">先到 Agent 团队创建一位，再回来和它对话。</p></div>`}
+    ${recent.length ? `<div class="welcome-block"><h3>${unread.length ? '未读' : '最近'}</h3><div class="welcome-recent">${recent.map(({ conversation: c, last_message, member_count, unread_count }) => `<button type="button" data-welcome-open="${esc(c.id)}"><span class="avatar${c.kind === 'group' ? ' group' : ''}" data-tone="${toneOf(c.id)}" aria-hidden="true">${esc(initialOf(conversationName(c)))}</span><span><strong>${esc(conversationName(c))}</strong><small>${esc(previewText(last_message, c, member_count))}</small></span>${unread_count ? `<span class="unread-badge">${unread_count > 99 ? '99+' : unread_count}</span>` : ''}</button>`).join('')}</div></div>` : ''}
+    <div class="welcome-actions"><button type="button" class="primary" data-empty-new-chat>${first ? '创建第一个会话' : '＋ 新建群聊'}</button><button type="button" class="secondary" data-welcome-palette>搜索或跳转 <kbd>⌘K</kbd></button>${agents.length ? '' : '<button type="button" class="secondary" data-welcome-agents>前往 Agent 团队</button>'}</div>
+  </section>`;
+  $('[data-empty-new-chat]').addEventListener('click', showNewChat);
+  $('[data-welcome-palette]').addEventListener('click', () => AgtPalette.open());
+  $('[data-welcome-agents]')?.addEventListener('click', () => switchPage('agents'));
+  $$('[data-welcome-direct]').forEach(b => b.onclick = () => startDirect(b.dataset.welcomeDirect));
+  $$('[data-welcome-open]').forEach(b => b.onclick = () => selectConversation(b.dataset.welcomeOpen));
+}
 function renderMessages() {
   if (!state.conversation) {
     const first = !state.conversations.length && !isObserver();
+    if (!isObserver()) { renderWelcome(first); return; }
     $('#messages').innerHTML = `<div class="empty"><h2>${first ? '还没有会话' : '选择一个会话'}</h2><p>${first ? '新建私聊或群聊，邀请 Agent 加入。消息和执行记录都保存在本机。' : isObserver() ? '从左侧列表选择会话，只读查看。' : '从左侧列表打开会话，或新建一个会话。'}</p>${isObserver() ? '' : `<button class="primary" type="button" data-empty-new-chat>${first ? '创建第一个会话' : '新建会话'}</button>`}</div>`;
     $('[data-empty-new-chat]')?.addEventListener('click', showNewChat);
     return;
@@ -702,6 +756,8 @@ function renderLiveReplies() {
 }
 function renderActivity() {
   document.body.classList.toggle('no-conversation', !state.conversation);
+  if (state.page === 'agents') renderAgentPulse();
+  if (!state.conversation && state.page === 'chat') $$('.welcome-agent').forEach(b => { const work = workingState(b.dataset.welcomeDirect); b.classList.toggle('working', !!work); });
   renderLiveReplies();
   $('#activity-title').textContent = debugMode ? '运行观察' : '成员状态';
   $('#activity-hint').textContent = debugMode ? '点击查看调用' : '点击查看回复状态';
@@ -837,21 +893,32 @@ function changeAgentEnabled(references, enabled) {
     } finally { agentBatchBusy=false; renderAgents(); }
   });
 }
+function renderAgentPulse() {
+  let working = 0, enabled = 0;
+  $$('#agents .agent-card').forEach(card => {
+    const work = (card.dataset.principals || '').split(' ').filter(Boolean).map(workingState).find(Boolean);
+    card.classList.toggle('working', !!work); if (work) working++;
+    if (card.querySelector('.binding-indicator.bound')) enabled++;
+    card.querySelector('.agent-live').textContent = work ? `${work.label}${work.conversation ? ' · ' + work.conversation : ''}` : '';
+  });
+  const total = items('agent').length;
+  $('#team-pulse').innerHTML = total ? `<span><strong>${total}</strong> 位 Agent</span><span><strong>${enabled}</strong> 已启用</span><span class="${working ? 'live' : ''}"><strong>${working}</strong> 正在工作</span>` : '';
+}
 function renderAgents() {
   $('#agents').innerHTML = items('agent').map(a => {
     const bindings = state.boot.bindings.filter(b => b.agent === ref(a));
     const binding = bindings[0], enabled = bindings.some(b => b.enabled !== false);
     const status = enabled ? bindings.some(b=>b.enabled === false) ? '部分启用' : '已启用' : binding ? '已停用' : '未启用';
     const model = a.harness ? `Codex · ${ref(a.harness)}` : a.model ? `${a.model.category || 'default'}/${a.model.name}` : '未配置模型';
-    return `<article class="agent-card" data-tone="${toneOf(ref(a))}"><label class="agent-select"><input type="checkbox" data-select-agent="${esc(ref(a))}" ${selectedAgents.has(ref(a)) ? 'checked' : ''} ${agentBatchBusy ? 'disabled' : ''}><span class="visually-hidden">选择 ${esc(a.name)}</span></label><div class="card-head"><div class="avatar" data-tone="${toneOf(ref(a))}" aria-hidden="true">${esc(initialOf(a.name))}</div><div><h3>${esc(a.name)}</h3><small>${esc(model)}</small></div><span class="binding-indicator ${enabled ? 'bound' : ''}" title="${status}">${status}</span></div><p class="agent-description">${esc(a.description || '尚未填写角色说明。')}</p><div class="agent-capabilities"><span class="tag">${a.skills?.length || 0} Skills · ${a.mcps?.length || 0} MCP</span>${a.builtin_tools?.includes('resource_management') ? '<span class="tag good">内置资源管理</span>' : ''}</div><div class="card-actions"><button class="secondary" data-toggle-agent="${esc(ref(a))}" data-enable="${!enabled}" ${agentBatchBusy ? 'disabled' : ''}>${enabled ? '停用' : '启用'}</button><button class="secondary" data-edit-agent="${esc(ref(a))}">编辑角色</button>${binding ? `<button class="quiet" data-direct="${esc(binding.principal)}">发起私聊 ↗</button>` : ''}</div><details class="card-options"><summary>配置与管理</summary><div><button class="secondary" data-bind="${esc(ref(a))}">运行设置</button>${resourceActions('agent', a)}</div></details></article>`;
+    return `<article class="agent-card" data-tone="${toneOf(ref(a))}" data-principals="${esc(bindings.map(b => b.principal).join(' '))}"><label class="agent-select"><input type="checkbox" data-select-agent="${esc(ref(a))}" ${selectedAgents.has(ref(a)) ? 'checked' : ''} ${agentBatchBusy ? 'disabled' : ''}><span class="visually-hidden">选择 ${esc(a.name)}</span></label><div class="card-head"><div class="avatar" data-tone="${toneOf(ref(a))}" aria-hidden="true">${esc(initialOf(a.name))}</div><div><h3>${esc(a.name)}</h3><small>${esc(model)}</small></div><span class="binding-indicator ${enabled ? 'bound' : ''}" title="${status}">${status}</span></div><p class="agent-live" aria-live="polite"></p><p class="agent-description">${esc(a.description || '尚未填写角色说明。')}</p><div class="agent-capabilities"><span class="tag">${a.skills?.length || 0} Skills · ${a.mcps?.length || 0} MCP</span>${a.builtin_tools?.includes('resource_management') ? '<span class="tag good">内置资源管理</span>' : ''}</div><div class="card-actions"><button class="secondary" data-toggle-agent="${esc(ref(a))}" data-enable="${!enabled}" ${agentBatchBusy ? 'disabled' : ''}>${enabled ? '停用' : '启用'}</button><button class="secondary" data-edit-agent="${esc(ref(a))}">编辑角色</button>${binding ? `<button class="quiet" data-direct="${esc(binding.principal)}">发起私聊 ↗</button>` : ''}</div><details class="card-options"><summary>配置与管理</summary><div><button class="secondary" data-bind="${esc(ref(a))}">运行设置</button>${resourceActions('agent', a)}</div></details></article>`;
   }).join('') || empty('创建你的第一位 Agent', '先在资源库配置模型，再为 Agent 指定角色与能力。');
-  renderAgentSelection();
+  renderAgentSelection(); renderAgentPulse();
   $$('[data-select-agent]').forEach(b=>b.onchange=()=>{ b.checked ? selectedAgents.add(b.dataset.selectAgent) : selectedAgents.delete(b.dataset.selectAgent); renderAgentSelection(); });
   $$('[data-toggle-agent]').forEach(b=>b.onclick=()=>changeAgentEnabled([b.dataset.toggleAgent],b.dataset.enable === 'true'));
   bindResourceActions($('#agents'));
   $$('[data-edit-agent]').forEach(b => b.onclick = () => showAgentEdit(b.dataset.editAgent));
   $$('[data-bind]').forEach(b => b.onclick = () => showBinding(b.dataset.bind));
-  $$('[data-direct]').forEach(b => b.onclick = async () => { try { const c = await tool('direct_create', { principal: b.dataset.direct }); if (c.state !== 'active') { showRestoreChat(c); return; } switchPage('chat'); await api('conversation', {action:'show',conversation:c.id}); await conversations(); await selectConversation(c.id); } catch (e) { notify(errorText(e), true); } });
+  $$('[data-direct]').forEach(b => b.onclick = () => startDirect(b.dataset.direct));
 }
 function builtinFields(selected = []) {
   const groups=[['resource_management','资源管理','创建和修改资源、绑定 Agent 并启用或停用。不自动获得本机命令权限。'],['task_collaboration','任务协作','委派可追踪任务、处理结果、安排依赖和并行策略。显式任务支持检查点等待。'],['local_execution','本机命令 · 原生 Agent','允许执行 Bash，另需在运行设置开启本机执行。命令具有服务账号权限，工作目录不是沙箱；Codex 使用自己的执行权限。']];
@@ -1119,11 +1186,6 @@ $('#end-reply').onclick = () => {
 $('#search').oninput = () => { closeConversationMenu(); renderConversations(); };
 $('#clear-search').onclick = () => { $('#search').value=''; renderConversations(); $('#search').focus(); };
 $('#back-to-conversations').onclick = () => { document.body.classList.remove('mobile-chat-open'); layoutPreferences.conversations=false; renderLayout(); $('#search').focus({preventScroll:true}); };
-document.addEventListener('keydown', event => {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && !event.isComposing && !document.querySelector('dialog[open]') && ['chat','observer'].includes(state.page) && !choosingIdentity) {
-    event.preventDefault(); document.body.classList.remove('mobile-chat-open'); layoutPreferences.conversations=false; renderLayout(); $('#search').focus(); $('#search').select();
-  }
-});
 function resizeComposer() {
   const input = $('#message-body');
   if (!input || !input.getClientRects().length) return;
@@ -1175,6 +1237,7 @@ $('#message-body').onclick = showMentionOptions;
 $('#message-body').onblur = closeMentions;
 $('#message-body').onkeydown = event => {
   if (event.isComposing) return;
+  if (event.key === 'Enter' && !event.shiftKey && mentionOptions[mentionIndex]?.command) { event.preventDefault(); insertMention(mentionIndex); return; }
   if (event.key === 'Enter' && !event.shiftKey && AgtCommands.parse($('#message-body').value)?.type === 'command') { event.preventDefault(); $('#composer').requestSubmit(); return; }
   if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); closeMentions(); $('#composer').requestSubmit(); return; }
   if (!mentionOptions.length) return;
