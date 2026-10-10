@@ -497,7 +497,7 @@ function renderPresence(tasks) {
     }
   });
   previous.forEach(node => node.remove());
-  if (!rows.length && !box.children.length) box.innerHTML = '<p class="presence-empty">暂无参与状态<br><span>发送消息后，在这里查看成员的回应与等待。</span></p>';
+  if (!rows.length && !box.children.length) box.innerHTML = '<p class="presence-empty">暂无成员在处理<br><span>发送消息后，这里显示每位 Agent 是在思考、回复还是等待。</span></p>';
 }
 function participationSummary(tasks) {
   const groups = new Map();
@@ -676,7 +676,7 @@ function renderActivity() {
   const rounds = state.scheduler.discussions.filter(d => state.conversation ? d.conversation === state.conversation.id : state.conversations.some(c => c.conversation.id === d.conversation));
   $('#scheduler-state').textContent = state.scheduler.online ? '调度服务在线' : '调度服务离线';
   $('.execution-top').classList.toggle('offline', !state.scheduler.online);
-  $('#scheduler-detail').textContent = debugMode ? rounds.slice(0, 3).map(d => d.state + ' · 模型调用 ' + d.calls + ' 次 · 每位 Agent 回复上限 ' + (d.max_replies ?? '不限')).join('；') || '尚未授权讨论轮次' : '当前进度与模型决定，分开查看。';
+  $('#scheduler-detail').textContent = debugMode ? rounds.slice(0, 3).map(d => d.state + ' · 模型调用 ' + d.calls + ' 次 · 每位 Agent 回复上限 ' + (d.max_replies ?? '不限')).join('；') || '尚未授权讨论轮次' : '';
   renderPresence(tasks);
   const runs = debugMode ? state.runs : state.runs.filter(r => state.conversation ? r.conversation === state.conversation.id : state.conversations.some(c => c.conversation.id === r.conversation));
   $('#run-count').textContent = runs.length; $('#failure-count').textContent = runs.reduce((n,r) => n + r.tool_failures,0);
@@ -776,6 +776,7 @@ function renderAgentSelection() {
   all.indeterminate = selectedAgents.size > 0 && selectedAgents.size < agents.length;
   all.disabled = agentBatchBusy || !agents.length;
   for (const id of ['enable-agents','disable-agents']) $('#'+id).disabled = agentBatchBusy || !selectedAgents.size;
+  $('.agent-batch-bar').classList.toggle('has-selection', selectedAgents.size > 0);
 }
 function changeAgentEnabled(references, enabled) {
   const names = [...references]; if (!names.length || agentBatchBusy) return;
@@ -1311,6 +1312,7 @@ function closeCommandPanel(restoreFocus = false) {
   $('#command-panel').classList.add('hidden');
   document.body.classList.remove('command-panel-open');
   $('#chat-commands').setAttribute('aria-expanded','false');
+  $('#chat-tasks').setAttribute('aria-expanded','false');
   $('#command-panel-body').innerHTML='';
   if (restoreFocus) $($('#command-panel').dataset.mode === 'approvals' ? '#ix-approvals' : $('#command-panel').dataset.mode === 'tasks' ? '#chat-tasks' : '#chat-commands').focus();
   commandPanelHome.append($('#command-panel'));
@@ -1322,7 +1324,9 @@ function commandPanel(title, content, kind = 'help') {
   const opening = $('#command-panel').classList.contains('hidden');
   $('#command-panel').classList.remove('hidden');
   document.body.classList.add('command-panel-open');
-  $('#chat-commands').setAttribute('aria-expanded','true');
+  $('#chat-commands').setAttribute('aria-expanded',String(!['tasks','approvals'].includes(kind)));
+  $('#chat-tasks').setAttribute('aria-expanded',String(kind==='tasks'));
+  $('#command-panel-kind').textContent={tasks:'任务',approvals:'权限审批'}[kind] || '会话控制';
   $('#command-panel-title').textContent=title;
   $('#command-panel-context').textContent=kind==='approvals' ? '当前观察身份可见的审批' : state.conversation ? conversationName(state.conversation) : '';
   $('#command-panel-body').innerHTML=content;

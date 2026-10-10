@@ -49,9 +49,7 @@
       <header class="topbar">
         <div class="topbar-location">
           <button id="toggle-nav" class="icon-button" type="button" aria-controls="workspace-nav" aria-expanded="true" aria-label="收起导航" title="收起导航">☰</button>
-        <div class="breadcrumb">
-          工作台 <span>/</span> <strong id="page-label">会话空间</strong>
-        </div>
+        <div class="breadcrumb"><strong id="page-label">会话空间</strong></div>
         </div>
         <div class="top-actions">
           <div id="topbar-tools" class="topbar-tools"><div class="workspace-tools" id="workspace-tools">
@@ -98,7 +96,7 @@
               <div class="chat-actions hidden">
                 <button id="execute" class="quiet" disabled>继续回复</button>
                 <button id="end-reply" class="stop-button" disabled>停止本群 Agent</button>
-                <button id="chat-tasks" class="secondary" type="button" aria-controls="command-panel">任务</button>
+                <button id="chat-tasks" class="secondary" type="button" aria-controls="command-panel" aria-expanded="false">任务</button>
                 <button id="chat-commands" class="secondary" type="button" aria-controls="command-panel" aria-expanded="false" aria-label="展开会话控制" disabled><span aria-hidden="true">/</span> 会话控制</button>
                 <button id="group-info" class="quiet" disabled>群信息</button>
               </div>
@@ -144,7 +142,7 @@
             </form>
           </section>
           <aside id="command-panel" class="command-panel hidden" aria-labelledby="command-panel-title">
-            <header class="command-panel-head"><div><span class="tiny-label">会话控制</span><h2 id="command-panel-title">命令</h2></div><button id="close-command-panel" class="icon-button" type="button" aria-label="收起会话控制">×</button></header>
+            <header class="command-panel-head"><div><span id="command-panel-kind" class="tiny-label">会话控制</span><h2 id="command-panel-title">命令</h2></div><button id="close-command-panel" class="icon-button" type="button" aria-label="收起会话控制">×</button></header>
             <p id="command-panel-context" class="command-panel-context"></p>
             <nav id="command-panel-nav" class="command-panel-nav" aria-label="会话命令"></nav>
             <div id="command-panel-body" class="command-panel-body"></div>

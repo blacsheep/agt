@@ -1110,9 +1110,6 @@ main {
 .breadcrumb {
   color: var(--muted);
 }
-.breadcrumb span {
-  color: #c3cbd5;
-}
 .section-heading {
   align-items: center;
   gap: 20px;
@@ -1505,7 +1502,7 @@ body.nav-collapsed {
   background: var(--paper);
 }
 .breadcrumb {
-  font-size: 13px;
+  font-size: 15px;
 }
 .top-actions {
   display: flex;
@@ -2162,7 +2159,7 @@ body.nav-collapsed {
   font-weight: 750;
   padding-right: 4px;
 }
-#chat-commands[aria-expanded=true] {
+#chat-commands[aria-expanded=true], #chat-tasks[aria-expanded=true] {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
@@ -2263,6 +2260,7 @@ body.nav-collapsed {
   min-height: 60px;
   padding: 10px 20px;
 }
+.chat-actions #execute:disabled, .chat-actions #end-reply:disabled,
 .chat-actions.hidden {
   display: none !important;
 }
@@ -2419,6 +2417,9 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ======== Member status and activity ======== */
+#scheduler-detail:empty {
+  display: none;
+}
 .run-summary {
   font-size: 13px;
   line-height: 1.9;
@@ -2577,9 +2578,6 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ======== Application shell: rail, top bar, pages ======== */
-.breadcrumb span {
-  margin: 0 8px;
-}
 
 /* ======== Conversation list ======== */
 .conversation-item.selected strong {
@@ -2873,6 +2871,9 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ======== Agents and resources ======== */
+.agent-batch-bar:not(.has-selection) button {
+  display: none;
+}
 .card-head .avatar {
   width: 36px;
   height: 36px;
@@ -3026,7 +3027,6 @@ input:focus, select:focus, textarea:focus {
   padding: 16px 20px;
 }
 .resource-list {
-  min-height: 180px;
   border-radius: 10px;
 }
 @media (max-width:760px) {
