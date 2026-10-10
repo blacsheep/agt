@@ -35,7 +35,7 @@ window.AgtExecutionView = (() => {
       let node=previous.get(run.id);previous.delete(run.id);
       if(!node){
         node=document.createElement('details');node.className='live-reply';node.dataset.run=run.id;
-        node.innerHTML='<summary><span class="run-indicator" aria-hidden="true"></span><strong></strong><span class="live-phase"></span><small></small><button type="button" class="run-dismiss" aria-label="关闭执行提示" title="关闭提示，执行记录仍保留">×</button></summary><div class="live-body"><div class="run-approval-actions"></div><p class="live-preview"></p><p class="live-caption"></p><p class="run-progress-note"></p><div class="harness-activity"></div><p class="run-history-note"></p></div>';
+        node.innerHTML='<summary><span class="run-indicator" aria-hidden="true"></span><strong></strong><span class="live-phase"></span><small></small><button type="button" class="run-dismiss" aria-label="关闭执行提示" title="关闭提示，执行记录仍保留">×</button></summary><div class="live-body"><div class="run-approval-actions"></div><div class="live-preview md"></div><p class="live-caption"></p><p class="run-progress-note"></p><div class="harness-activity"></div><p class="run-history-note"></p></div>';
         node.querySelector('summary').addEventListener('click',()=>{node.dataset.disclosure='user';});
       }
       if(!node.dataset.disclosure)node.open=!!(items.length||approvals.length)&&run.state==='running';
@@ -59,7 +59,7 @@ window.AgtExecutionView = (() => {
       const clock=node.querySelector(':scope > summary > small');clock.dataset.started=started??'';clock.dataset.ended=ended??'';clock.dataset.status=run.state;clock.dataset.attempt=p?.attempt||0;
       clock.textContent=AgtToolActivity.duration({started_at:started,updated_at:ended,status:run.state==='running'?'running':'completed'})+(p?.attempt>1?` · 第 ${p.attempt}/10 次尝试`:'');
       const preview=node.querySelector('.live-preview'), following=!node.isConnected||preview.scrollHeight-preview.scrollTop-preview.clientHeight<30;
-      set(node,'.live-preview',p?.preview||'');preview.hidden=!p?.preview;
+      const source=p?.preview||'';if(preview.dataset.source!==source){preview.dataset.source=source;preview.innerHTML=source?window.AgtMarkdown.render(source):'';}preview.hidden=!source;
       set(node,'.live-caption',p?.preview?'生成预览 · 完成后发布正式消息':p?.phase==='retrying'?'本次预览已清除，正在重新请求。':'');
       const age=p?.protocol_at?Math.max(0,Math.floor((Date.now()-p.protocol_at)/1000)):0;
       set(node,'.run-progress-note',activity?.approvals_unavailable?'审批状态暂时无法读取。':age>30?'暂未收到新进度，执行结果尚未确认。':'');

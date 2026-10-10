@@ -14,7 +14,12 @@
 .live-reply[data-state="completed"] .run-indicator { color: var(--status-done); }
 .live-reply:not([data-state="running"]) .live-phase { color: var(--muted); }
 .live-body { padding: 10px 0 0 24px; }
-.live-preview { margin: 0 0 4px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 100px; overflow: auto; }
+.live-preview { margin: 0 0 4px; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; max-height: 100px; overflow: auto; }
+.live-preview p, .live-preview ul, .live-preview ol, .live-preview pre, .live-preview blockquote { margin: 0 0 6px; }
+.live-preview ul, .live-preview ol { padding-left: 20px; }
+.live-preview pre { padding: 8px 10px; border-radius: 6px; background: #f3f5f9; overflow-x: auto; white-space: pre; }
+.live-preview code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.live-preview .md-heading { font-weight: 650; }
 .live-caption, .run-progress-note, .run-history-note { font-size: 11px; color: var(--muted); margin: 6px 0; line-height: 1.6; }
 .live-caption:empty, .run-progress-note:empty, .run-history-note:empty, .run-approval-actions:empty { display: none; }
 .run-progress-note { color: var(--status-attention); }
