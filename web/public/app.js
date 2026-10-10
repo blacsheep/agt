@@ -56,6 +56,7 @@ const previewText = (last, c, members) => {
   const who = last.sender_id === state.viewer ? '我' : c.kind === 'group' ? nameOf(last.sender_id) : '';
   return who ? `${who}：${body}` : body;
 };
+const dayLabel = value => { const d = new Date(value), today = new Date(), yesterday = new Date(today - 864e5); return d.toDateString() === today.toDateString() ? '今天' : d.toDateString() === yesterday.toDateString() ? '昨天' : d.toLocaleDateString('zh-CN', { year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric', month: 'long', day: 'numeric', weekday: 'short' }); };
 const listTime = value => { if (!value) return ''; const d = new Date(value), now = new Date(); return d.toDateString() === now.toDateString() ? d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : d.getFullYear() === now.getFullYear() ? `${d.getMonth() + 1}/${d.getDate()}` : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`; };
 const dateTime = value => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 // Avatar tint index; the page CSP forbids inline styles, so tones are CSS classes.
@@ -643,13 +644,17 @@ function renderMessages() {
     return;
   }
   const timeline=[...state.messages.map(m=>({seq:m.seq, message:m})), ...(state.contextResets || []).map(r=>({seq:r.through_seq,reset:r}))].sort((a,b)=>a.seq-b.seq || (a.reset?1:0)-(b.reset?1:0) || (a.reset?.id||0)-(b.reset?.id||0));
+  let lastDay = null;
   $('#messages').innerHTML = timeline.map(entry => {
     if(entry.reset) return `<div class="context-divider" role="separator" aria-label="上下文已重置"><span><strong>新上下文</strong><time>${esc(new Date(entry.reset.created_at).toLocaleString())}</time><small>从这里重新开始 · 聊天记录保留</small></span></div>`;
     const m=entry.message;
     const own = m.sender_id === state.boot.principal;
+    const day = new Date(m.created_at).toDateString();
+    const divider = day !== lastDay ? `<div class="day-divider" role="separator"><span>${esc(dayLabel(m.created_at))}</span></div>` : '';
+    lastDay = day;
     const previous = timeline[timeline.indexOf(entry) - 1]?.message;
     const grouped = previous && previous.sender_id === m.sender_id && m.created_at - previous.created_at < 5 * 60 * 1000;
-    return `<article class="message ${own ? 'own' : ''} ${grouped ? 'grouped' : ''}" data-tone="${toneOf(m.sender_id)}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${esc(own ? '你' : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time>${dateTime(m.created_at)}</time></div>${m.deleted_at ? '<div class="bubble deleted">此消息已删除</div>' : `<div class="bubble md">${AgtMarkdown.render(m.body)}</div>`}<div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? '查看投递 ↗' : '回复情况'}</button></div></div></article>`;
+    return divider + `<article class="message ${own ? 'own' : ''} ${grouped && !divider ? 'grouped' : ''}" data-tone="${toneOf(m.sender_id)}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${esc(own ? '你' : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time title="${esc(new Date(m.created_at).toLocaleString('zh-CN'))}">${esc(new Date(m.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))}</time></div>${m.deleted_at ? '<div class="bubble deleted">此消息已删除</div>' : `<div class="bubble md">${AgtMarkdown.render(m.body)}</div>`}<div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? '查看投递 ↗' : '回复情况'}</button></div></div></article>`;
   }).join('') || empty('会话已就绪', '发送第一条消息，邀请 Agent 回应。');
   $$('[data-status]').forEach(button => button.onclick = () => showStatus(button.dataset.status));
 }
