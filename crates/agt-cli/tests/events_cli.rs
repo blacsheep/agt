@@ -60,7 +60,7 @@ fn long_home_events_keep_polling_and_stop_cleanly() {
     });
     let page = || -> serde_json::Value {
         let line = receive
-            .recv_timeout(Duration::from_secs(25))
+            .recv_timeout(Duration::from_secs(4))
             .unwrap()
             .unwrap();
         serde_json::from_str(&line).unwrap()

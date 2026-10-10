@@ -732,3 +732,71 @@ mod expiry;
 mod termination;
 
 mod notification_processing;
+
+#[cfg(unix)]
+#[test]
+fn unavailable_hints_dispatch_new_work_promptly() {
+    let (home, user, _) = external_fixture();
+    let chat = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let mut task = scheduler.store.tasks().unwrap().remove(0);
+    let source = task.message.clone();
+    // Finish the original conversational task, leaving an idle authorized discussion.
+    task.state = TaskState::Completed;
+    scheduler.store.update(&task, now_ms()).unwrap();
+    std::fs::write(home.path().join("runtime/wake"), b"blocked").unwrap();
+    let token = CancellationToken::new();
+    let cancel = token.clone();
+    let path = home.path().to_owned();
+    let producer = std::thread::spawn(move || {
+        struct CancelOnDrop(CancellationToken);
+        impl Drop for CancelOnDrop {
+            fn drop(&mut self) {
+                self.0.cancel();
+            }
+        }
+        let _guard = CancelOnDrop(cancel);
+        std::thread::sleep(Duration::from_millis(300));
+        let control = TaskControl::local(
+            &path,
+            Actor {
+                principal: PrincipalId::new("user"),
+                role: Role::Manager,
+                automated_depth: None,
+            },
+        );
+        let item = control
+            .call(
+                "task_request",
+                json!({
+                    "assignee":"a", "conversation":chat, "input":"implement and test",
+                    "request_key":"fallback-work", "source_message":source
+                }),
+            )
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(4);
+        loop {
+            let result = control
+                .call("task_get", json!({"task_id":item["id"]}))
+                .unwrap();
+            if result["state"] == "succeeded" {
+                assert_eq!(result["output"], "fixture final answer");
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "work not completed promptly: {result}"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    });
+    let result = scheduler.run(true, &token);
+    token.cancel();
+    producer.join().unwrap();
+    result.unwrap();
+}

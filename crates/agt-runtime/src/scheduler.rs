@@ -76,10 +76,15 @@ impl Scheduler {
             if (token.is_canceled() || !watch) && self.jobs.is_empty() {
                 break;
             }
-            let deadline = std::time::Instant::now() + self.next_wake_delay()?;
+            let waiting = std::time::Instant::now();
+            let mut deadline = waiting + self.next_wake_delay()?;
             loop {
                 if token.is_canceled() || self.jobs.iter().any(|(_, _, job)| job.is_finished()) {
                     break;
+                }
+                // Recheck availability during the wait: the socket can fail after open.
+                if !listener.available() {
+                    deadline = deadline.min(waiting + Duration::from_secs(1));
                 }
                 let remaining = deadline.saturating_duration_since(std::time::Instant::now());
                 if remaining.is_zero() || listener.wait(remaining.min(Duration::from_millis(250))) {

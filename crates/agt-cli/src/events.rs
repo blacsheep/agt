@@ -39,9 +39,14 @@ pub fn dispatch(command: EventCommand, home: &Path) -> Result<()> {
         if more || page.more {
             continue;
         }
-        let deadline = Instant::now() + Duration::from_secs(15);
-        while !token.is_canceled() && Instant::now() < deadline {
-            if listener.wait(Duration::from_millis(250)) {
+        let waiting = Instant::now();
+        let mut deadline = waiting + Duration::from_secs(15);
+        while !token.is_canceled() {
+            if !listener.available() {
+                deadline = deadline.min(waiting + Duration::from_secs(1));
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() || listener.wait(remaining.min(Duration::from_millis(250))) {
                 break;
             }
         }

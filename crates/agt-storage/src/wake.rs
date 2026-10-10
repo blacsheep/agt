@@ -6,19 +6,23 @@ use std::{
         fs::{FileTypeExt, PermissionsExt},
         net::UnixDatagram,
     },
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::AtomicU64,
 };
 use std::{
     io::{self, Write},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };
 
 #[cfg(unix)]
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
+static WARNED: AtomicBool = AtomicBool::new(false);
+
 /// Optional notification accelerator. Callers must periodically recheck durable storage.
-/// A failed listener is dropped and diagnosed once; subsequent waits only sleep.
+/// Failed listeners are dropped; degradation is diagnosed once per process.
+/// Subsequent waits only sleep.
 pub struct Hints {
     listener: Option<Listener>,
 }
@@ -32,6 +36,12 @@ impl Hints {
             }
         };
         Self { listener }
+    }
+
+    /// Whether this instance can still receive local wake hints.
+    /// False on unsupported platforms; callers should use short polling intervals.
+    pub fn available(&self) -> bool {
+        cfg!(unix) && self.listener.is_some()
     }
 
     pub fn wait(&mut self, timeout: Duration) -> bool {
@@ -50,6 +60,9 @@ impl Hints {
     }
 
     fn diagnose(error: &io::Error) {
+        if WARNED.swap(true, Ordering::Relaxed) {
+            return;
+        }
         let _ = writeln!(
             io::stderr().lock(),
             "wake hints unavailable; falling back to periodic storage checks: {error}"
@@ -57,6 +70,8 @@ impl Hints {
     }
 }
 
+/// Low-level, fallible socket listener. Runtime callers should use [Hints]
+/// so notification failures do not interrupt business execution.
 pub struct Listener {
     #[cfg(unix)]
     socket: UnixDatagram,
@@ -169,12 +184,41 @@ pub fn notify(home: &Path) {
 mod tests {
     use super::*;
     #[test]
+    fn degradation_is_diagnosed_once_per_process() {
+        const CHILD: &str = "AGT_WAKE_DIAGNOSTIC_TEST";
+        if std::env::var_os(CHILD).is_some() {
+            let home = tempfile::tempdir().unwrap();
+            fs::create_dir(home.path().join("runtime")).unwrap();
+            fs::write(home.path().join("runtime/wake"), b"blocked").unwrap();
+            for _ in 0..3 {
+                assert!(!Hints::open(home.path()).available());
+            }
+            return;
+        }
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "wake::tests::degradation_is_diagnosed_once_per_process",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr)
+                .matches("wake hints unavailable")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn unavailable_hints_sleep_and_keep_polling() {
         let home = tempfile::tempdir().unwrap();
         fs::create_dir(home.path().join("runtime")).unwrap();
         fs::write(home.path().join("runtime/wake"), b"blocked").unwrap();
         let mut hints = Hints::open(home.path());
-        assert!(hints.listener.is_none());
+        assert!(!hints.available());
         for _ in 0..2 {
             let started = Instant::now();
             assert!(!hints.wait(Duration::from_millis(10)));
@@ -194,10 +238,11 @@ mod tests {
                 path: path.clone(),
             }),
         };
+        assert!(hints.available());
         let started = Instant::now();
         assert!(!hints.wait(Duration::from_millis(10)));
         assert!(started.elapsed() >= Duration::from_millis(10));
-        assert!(hints.listener.is_none());
+        assert!(!hints.available());
         assert!(!path.exists());
         assert!(!hints.wait(Duration::ZERO));
     }
@@ -206,6 +251,7 @@ mod tests {
     fn optional_hints_receive_notifications() {
         let home = tempfile::tempdir().unwrap();
         let mut hints = Hints::open(home.path());
+        assert!(hints.available());
         notify(home.path());
         assert!(hints.wait(Duration::from_millis(10)));
     }
