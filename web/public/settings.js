@@ -20,17 +20,39 @@ window.AgtSettings = (() => {
     const reviewer=$('[data-setting="permissions.reviewer_model"]')?.value;
     $('#permission-review-status').textContent=mode==='model_review'&&!reviewer
       ?'尚未选择审核模型：Native 请求将全部转人工。请选择下方审核模型并保存；对当前等待和后续请求生效。Codex 使用独立的 Harness 处理模式。'
-      :'本策略仅用于 Native 工具调用。Codex 使用独立的 Harness 处理模式。保存后对当前等待及后续请求生效。';
+      :'';
+  }
+  // Highlight rows whose value differs from the loaded snapshot, and the save bar while anything is unsaved.
+  function readValue(input) {
+    const key=input.dataset.setting;
+    if(['permissions.mode','permissions.harness_mode'].includes(key)) return input.value;
+    if(key==='permissions.reviewer_model') return input.value||null;
+    if(input.type==='checkbox') return input.checked;
+    return input.disabled?null:Number(input.value);
+  }
+  function markChanges() {
+    let changed=0;
+    $$('#runtime-config-form .setting-row').forEach(row=>{
+      const input=row.querySelector('[data-setting]');
+      const differs=!!input && readValue(input)!==valueAt(snapshot,input.dataset.setting);
+      row.classList.toggle('changed',differs); if(differs) changed++;
+    });
+    dirty=changed>0;
+    $('.settings-save')?.classList.toggle('dirty',dirty);
+    $('#settings-feedback').textContent=dirty?`${changed} 项未保存`:'没有未保存的修改';
   }
   function render(schema) {
-    $('#runtime-settings').innerHTML=`<form id="runtime-config-form"><p class="settings-intro">工作空间默认策略 · CLI 临时覆盖不显示在这里。未填写的配置采用后端默认值。</p><p id="permission-review-status" class="form-note" role="status"></p>${sections.map(([group,title,description])=>`<section class="settings-section"><header><h2>${title}</h2><p>${description}</p></header>${schema.fields.filter(f=>f.key.startsWith(group+'.')).map(f=>{
+    $('#runtime-settings').innerHTML=`<div class="settings-layout"><nav class="settings-nav" aria-label="设置分区">${sections.map(([group,title])=>`<button type="button" data-settings-jump="${group}">${title}</button>`).join('')}</nav><form id="runtime-config-form"><p class="settings-intro">工作空间默认策略；CLI 的临时覆盖不显示在这里，未填写的项采用默认值。</p><p id="permission-review-status" class="settings-warning" role="status"></p>${sections.map(([group,title,description])=>`<section class="settings-section" id="settings-${group}"><header><h2>${title}</h2><p>${description}</p></header>${schema.fields.filter(f=>f.key.startsWith(group+'.')).map(f=>{
       const value=valueAt(snapshot,f.key), reviewer=f.key==='permissions.reviewer_model', harness=f.key==='permissions.harness_mode', mode=harness||f.key==='permissions.mode', boolean=typeof value==='boolean', unlimited=!reviewer&&!mode&&!f.key.startsWith('permissions.')&&(f.default===null||(!boolean&&f.key!=='execution.output_bytes'));
       return `<div class="setting-row"><div class="setting-copy"><label for="setting-${f.key}">${esc(names[f.key]||f.key)}</label><p>${esc(f.description)}</p><small>生效：${esc(f.effective)} · 默认：${esc(f.default===null?(reviewer?'未配置':'不限'):typeof f.default==='boolean'?(f.default?'开启':'关闭'):f.default)}</small><details><summary>配置键</summary><code>${esc(f.key)}</code></details></div><div class="setting-control">${mode?`<select id="setting-${f.key}" data-setting="${f.key}">${harness?'':`<option value="model_review" ${value==='model_review'?'selected':''}>模型审核，异常转人工</option>`}<option value="manual" ${value==='manual'?'selected':''}>人工审批</option><option value="auto_allow" ${value==='auto_allow'?'selected':''}>自动放行</option></select>`:reviewer?`<select id="setting-${f.key}" data-setting="${f.key}">${reviewerOptions(value)}</select>`:boolean?`<label class="setting-switch"><input id="setting-${f.key}" data-setting="${f.key}" type="checkbox" ${value?'checked':''}> 开启</label>`:`<input id="setting-${f.key}" data-setting="${f.key}" type="number" min="${f.key==='execution.output_bytes'?1024:1}" step="1" value="${value??''}" ${value===null?'disabled':''} required aria-label="${esc(names[f.key])}">${unlimited?`<label><input data-unlimited="${f.key}" type="checkbox" ${value===null?'checked':''}> 不限</label>`:''}`}</div></div>`;
-    }).join('')}</section>`).join('')}<div class="settings-save"><p id="settings-feedback" role="status">修改后保存；调度相关设置建议统一重启服务。</p><button class="primary" type="submit">保存设置</button></div></form>`;
-    $$('[data-unlimited]').forEach(box=>box.onchange=()=>{const input=document.getElementById('setting-'+box.dataset.unlimited);input.disabled=box.checked;if(!box.checked&&!input.value)input.value=String(schema.fields.find(f=>f.key===box.dataset.unlimited).default??1);});
+    }).join('')}</section>`).join('')}<div class="settings-save"><p id="settings-feedback" role="status">没有未保存的修改</p><small>调度相关设置建议保存后统一重启服务。</small><button class="primary" type="submit">保存设置</button></div></form></div>`;
+    $$('[data-settings-jump]').forEach(button=>button.onclick=()=>document.getElementById('settings-'+button.dataset.settingsJump).scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'}));
+    const observer=new IntersectionObserver(entries=>{for(const entry of entries) if(entry.isIntersecting) $$('[data-settings-jump]').forEach(b=>b.setAttribute('aria-current',String('settings-'+b.dataset.settingsJump===entry.target.id)));},{rootMargin:'-20% 0px -70% 0px'});
+    $$('.settings-section').forEach(section=>observer.observe(section));
+    $$('[data-unlimited]').forEach(box=>box.onchange=()=>{const input=document.getElementById('setting-'+box.dataset.unlimited);input.disabled=box.checked;if(!box.checked&&!input.value)input.value=String(schema.fields.find(f=>f.key===box.dataset.unlimited).default??1);markChanges();});
     reviewStatus();
-    $('#runtime-config-form').onchange=reviewStatus;
-    $('#runtime-config-form').oninput=()=>{reviewStatus();dirty=true;$('#settings-feedback').textContent='有未保存修改';};
+    $('#runtime-config-form').onchange=()=>{reviewStatus();markChanges();};
+    $('#runtime-config-form').oninput=()=>{reviewStatus();markChanges();};
     $('#runtime-config-form').onsubmit=async e=>{
       e.preventDefault();const button=e.currentTarget.querySelector('[type=submit]');button.disabled=true;
       const request=++generation;
@@ -39,7 +61,7 @@ window.AgtSettings = (() => {
         $$('[data-setting]').forEach(input=>{const [group,key]=input.dataset.setting.split('.');config[group][key]=['permissions.mode','permissions.harness_mode'].includes(input.dataset.setting)?input.value:input.dataset.setting==='permissions.reviewer_model'?(input.value||null):input.type==='checkbox'?input.checked:input.disabled?null:Number(input.value);});
         const saved=await api('config',{config,expected:snapshot});
         if(request!==generation)return;
-        snapshot=saved;dirty=false;$('#settings-feedback').textContent='已保存。请按各项生效说明操作；现有讨论到期时间未被自动延长。';
+        snapshot=saved;markChanges();$('#settings-feedback').textContent='已保存。请按各项生效说明操作；现有讨论到期时间未被自动延长。';
       }catch(e){if(request===generation)$('#settings-feedback').textContent=errorText(e)+' 如果其他窗口修改过配置，请重新读取。';}
       finally{if(request===generation)button.disabled=false;}
     };

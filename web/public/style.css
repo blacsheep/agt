@@ -813,7 +813,7 @@ input:disabled, select:disabled, textarea:disabled {
 #page-settings .runtime-settings {
   margin-left: 0;
   margin-right: 0;
-  max-width: 1040px;
+  max-width: 1240px;
 }
 .agent-card .binding-indicator {
   margin-right: 4px;
@@ -3342,6 +3342,64 @@ button:disabled, .chat-actions button:disabled {
 }
 
 /* ======== Settings and approvals ======== */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.settings-nav {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 2px;
+}
+.settings-nav button {
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+.settings-nav button:hover {
+  background: var(--accent-light);
+  color: var(--ink);
+}
+.settings-nav button[aria-current=true] {
+  border-left-color: var(--accent-fill, var(--accent));
+  background: var(--accent-light);
+  color: var(--ink);
+  font-weight: 600;
+}
+.settings-section {
+  scroll-margin-top: 16px;
+}
+.settings-warning {
+  margin: 0 0 20px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--s-e7c27a, #e7c27a);
+  background: var(--s-fff6e5, #fff6e5);
+  color: var(--i-6b4a0c, #6b4a0c);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.settings-warning:empty {
+  display: none;
+}
+.setting-row.changed {
+  box-shadow: inset 3px 0 var(--accent-fill, var(--accent));
+  background: var(--accent-light);
+}
+@media (max-width: 1100px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settings-nav {
+    display: none;
+  }
+}
 .settings-intro {
   color: var(--muted);
   font-size: 13px;
@@ -3405,8 +3463,24 @@ button:disabled, .chat-actions button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 16px 0 24px;
+  gap: 16px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: 8px;
+  padding: 14px 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px 10px 0 0;
+  background: var(--paper);
+  box-shadow: 0 -6px 16px var(--s-172b4714, rgba(23, 43, 71, 0.08));
+}
+.settings-save small {
+  margin-left: auto;
+  color: var(--muted);
+}
+.settings-save.dirty p {
+  color: var(--ink);
+  font-weight: 600;
 }
 @media (max-width:600px) {
   .setting-row {
@@ -3423,6 +3497,10 @@ button:disabled, .chat-actions button:disabled {
   .settings-save {
     align-items: flex-start;
     flex-direction: column;
+    gap: 8px;
+  }
+  .settings-save small {
+    margin-left: 0;
   }
 }
 
@@ -4983,6 +5061,10 @@ button:disabled, .chat-actions button:disabled {
    Accent fills use --accent-fill so text and filled controls can keep contrast separately. */
 :root[data-theme=dark] {
   color-scheme: dark;
+  --s-e7c27a: #6b5320;
+  --s-fff6e5: #2a2414;
+  --i-6b4a0c: #f0cf8a;
+  --s-172b4714: rgba(0, 0, 0, 0.45);
   --bg: #0f141b;
   --paper: #171d26;
   --ink: #e3e9f2;
