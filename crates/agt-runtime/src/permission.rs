@@ -116,7 +116,7 @@ impl PermissionLoop {
         };
         check()?;
         // Subscribe before creating the request so no decision hint is missed.
-        let listener = agt_storage::wake::Listener::open(&self.home)?;
+        let mut listener = agt_storage::wake::Listener::open(&self.home).ok();
         let store = ApprovalStore::open(&self.home)?;
         let Request {
             scope,
@@ -147,7 +147,7 @@ impl PermissionLoop {
         loop {
             check_canceled(cancellation)?;
             if !hinted && checked.elapsed() < RECHECK {
-                hinted = listener.wait(TICK)?;
+                hinted = wait_hint(&mut listener);
                 continue;
             }
             checked = Instant::now();
@@ -221,7 +221,7 @@ impl PermissionLoop {
                     Decision::Pending => {}
                 }
             }
-            hinted = listener.wait(TICK)?;
+            hinted = wait_hint(&mut listener);
         }
     }
 }
@@ -232,6 +232,19 @@ pub(crate) struct Request<'a> {
     pub tool: &'a str,
     pub arguments: &'a Value,
     pub input: &'a str,
+}
+
+// Wake hints are optional; storage polling, expiry and cancellation still work
+// when the socket cannot be created or later fails. Sleep to avoid a busy loop.
+fn wait_hint(listener: &mut Option<agt_storage::wake::Listener>) -> bool {
+    if let Some(active) = listener {
+        match active.wait(TICK) {
+            Ok(hinted) => return hinted,
+            Err(_) => *listener = None,
+        }
+    }
+    std::thread::sleep(TICK);
+    false
 }
 
 fn load_config(home: &Path) -> Result<PermissionConfig> {
@@ -254,6 +267,125 @@ mod tests {
         config.permissions.mode = mode;
         config.save(home.path()).unwrap();
         home
+    }
+
+    #[cfg(unix)]
+    fn without_wake(mode: PermissionMode) -> (tempfile::TempDir, Scope) {
+        let home = home(mode);
+        let (record, _) = crate::RunStore::open(home.path())
+            .unwrap()
+            .claim(&crate::RunRequest::new("a", "task"), None)
+            .unwrap();
+        // Deterministic socket failure without changing directory permissions.
+        std::fs::write(home.path().join("runtime/wake"), b"unavailable").unwrap();
+        assert!(agt_storage::wake::Listener::open(home.path()).is_err());
+        let scope = Scope::new(&record, None);
+        (home, scope)
+    }
+
+    #[cfg(unix)]
+    fn request(scope: &Scope) -> Request<'_> {
+        Request {
+            scope,
+            call: "call-1",
+            tool: "framework_message_send",
+            arguments: &Value::Null,
+            input: "task",
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn auto_allow_works_without_wake_socket() {
+        let (home, scope) = without_wake(PermissionMode::AutoAllow);
+        let (allowed, _) = PermissionLoop::load(home.path())
+            .unwrap()
+            .authorize(request(&scope), &CancellationToken::new(), &|| Ok(()))
+            .unwrap();
+        assert!(allowed);
+        let item = ApprovalStore::open(home.path())
+            .unwrap()
+            .list(None, None)
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(item.delivery, Delivery::Resolved);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn manual_decisions_work_without_wake_socket() {
+        for allow in [false, true] {
+            let (home, scope) = without_wake(PermissionMode::Manual);
+            let path = home.path().to_owned();
+            let human = std::thread::spawn(move || {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                loop {
+                    let store = ApprovalStore::open(&path).unwrap();
+                    if let Some(item) = store.list(None, None).unwrap().pop() {
+                        store
+                            .decide(
+                                &item.id,
+                                item.revision,
+                                json!(if allow { "allow" } else { "deny" }),
+                                "human",
+                                None,
+                            )
+                            .unwrap();
+                        break;
+                    }
+                    assert!(Instant::now() < deadline);
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            });
+            let (allowed, _) = PermissionLoop::load(home.path())
+                .unwrap()
+                .authorize(request(&scope), &CancellationToken::new(), &|| Ok(()))
+                .unwrap();
+            human.join().unwrap();
+            assert_eq!(allowed, allow);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancellation_and_expiry_work_without_wake_socket() {
+        for cancel in [false, true] {
+            let (home, scope) = without_wake(PermissionMode::Manual);
+            let mut config = RuntimeConfig::load(home.path()).unwrap();
+            config.permissions.request_timeout_seconds = if cancel { 30 } else { 1 };
+            config.save(home.path()).unwrap();
+            let token = CancellationToken::new();
+            let child = token.clone();
+            let handle = std::thread::spawn(move || {
+                if cancel {
+                    std::thread::sleep(Duration::from_millis(150));
+                    child.cancel();
+                }
+            });
+            let started = Instant::now();
+            let result = PermissionLoop::load(home.path()).unwrap().authorize(
+                request(&scope),
+                &token,
+                &|| Ok(()),
+            );
+            handle.join().unwrap();
+            assert!(matches!(result, Err(RuntimeError::Stopped(_))));
+            if cancel {
+                assert!(started.elapsed() < Duration::from_secs(3));
+            }
+            let item = ApprovalStore::open(home.path())
+                .unwrap()
+                .list(None, None)
+                .unwrap()
+                .pop()
+                .unwrap();
+            assert!(item.decision.is_none());
+            assert_eq!(item.delivery, Delivery::Invalidated);
+            if !cancel {
+                assert_eq!(item.state, ApprovalState::Expired);
+            }
+        }
     }
 
     #[test]

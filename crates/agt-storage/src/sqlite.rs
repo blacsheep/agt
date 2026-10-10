@@ -91,8 +91,12 @@ pub fn open(
     if !pending.is_empty() {
         enable_wal(&connection)?;
         install(&connection, &pending)?;
-        let mut ready = initialized().lock().unwrap_or_else(|e| e.into_inner());
-        ready.extend(pending.iter().map(|s| (path.clone(), s.module)));
+        // Releasing a savepoint does not commit its enclosing transaction. Only
+        // cache installations that cannot still disappear with an outer rollback.
+        if connection.is_autocommit() {
+            let mut ready = initialized().lock().unwrap_or_else(|e| e.into_inner());
+            ready.extend(pending.iter().map(|s| (path.clone(), s.module)));
+        }
     }
     Ok(connection)
 }
@@ -125,11 +129,12 @@ pub fn write(connection: &Connection) -> rusqlite::Result<Write<'_>> {
 
 impl Write<'_> {
     pub fn commit(mut self) -> rusqlite::Result<()> {
-        self.open = false;
         match &self.savepoint {
             None => self.connection.execute_batch("COMMIT"),
             Some(name) => self.connection.execute_batch(&format!("RELEASE {name}")),
-        }
+        }?;
+        self.open = false;
+        Ok(())
     }
 
     /// Commit on success, roll back on failure; the result passes through.
@@ -262,6 +267,82 @@ mod tests {
     };
 
     #[test]
+    fn failed_commit_rolls_back_and_leaves_connection_reusable() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "PRAGMA foreign_keys=ON;
+            CREATE TABLE parent(id INTEGER PRIMARY KEY);
+            CREATE TABLE child(id INTEGER REFERENCES parent(id) DEFERRABLE INITIALLY DEFERRED);",
+        )
+        .unwrap();
+        for use_finish in [false, true] {
+            let tx = write(&db).unwrap();
+            tx.execute("INSERT INTO child VALUES(1)", []).unwrap();
+            let result = if use_finish {
+                tx.finish(Ok::<_, rusqlite::Error>(()))
+            } else {
+                tx.commit()
+            };
+            assert!(result.is_err());
+            assert!(db.is_autocommit());
+            assert_eq!(
+                db.query_row("SELECT COUNT(*) FROM child", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+        }
+        let tx = write(&db).unwrap();
+        tx.execute_batch("INSERT INTO parent VALUES(1); INSERT INTO child VALUES(1);")
+            .unwrap();
+        tx.commit().unwrap();
+        assert!(db.is_autocommit());
+        assert_eq!(
+            db.query_row("SELECT COUNT(*) FROM child", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn nested_schema_install_is_cached_only_after_outer_commit() {
+        const B: Schema = Schema {
+            module: "b",
+            version: 1,
+            ddl: "CREATE TABLE b(x);",
+        };
+        for commit in [false, true] {
+            let home = tempfile::tempdir().unwrap();
+            let db = ("runtime", "schema.db");
+            let connection = open(home.path(), db, &[&A]).unwrap();
+            let key = (
+                crate::database_path(home.path(), db.0, db.1).unwrap(),
+                B.module,
+            );
+            {
+                let outer = write(&connection).unwrap();
+                open(home.path(), db, &[&B]).unwrap();
+                // Repeated opens within the transaction must not promote tentative DDL.
+                open(home.path(), db, &[&B]).unwrap();
+                assert!(!initialized().lock().unwrap().contains(&key));
+                if commit {
+                    outer.commit().unwrap();
+                }
+            }
+            let exists: bool = connection
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='b')",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(exists, commit);
+            let reopened = open(home.path(), db, &[&B]).unwrap();
+            reopened.execute("INSERT INTO b VALUES(1)", []).unwrap();
+            assert!(initialized().lock().unwrap().contains(&key));
+        }
+    }
+
+    #[test]
     fn nested_writes_share_the_thread_connection() {
         let home = tempfile::tempdir().unwrap();
         let db = ("runtime", "nested.db");
@@ -308,7 +389,10 @@ mod tests {
         };
         let other = tempfile::tempdir().unwrap();
         open(other.path(), db, &[&A]).unwrap();
-        initialized().lock().unwrap().clear();
+        initialized().lock().unwrap().remove(&(
+            crate::database_path(other.path(), db.0, db.1).unwrap(),
+            A.module,
+        ));
         assert!(matches!(
             open(other.path(), db, &[&newer]),
             Err(SchemaError::Unsupported { found: 1, .. })
