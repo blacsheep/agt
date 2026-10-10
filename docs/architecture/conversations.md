@@ -44,7 +44,7 @@ IM schema v4 新增个人成员行的 `last_viewed_at`，v2/v3 自动升级。We
 
 ## Agent 资源删除与身份历史
 
-解除运行配置只删除 binding，不删除身份。bindings schema v3 保存最后绑定来源，
+解除运行配置只删除 binding，不删除身份。绑定模块保存最后绑定来源，
 改绑时更新来源，解绑后仍保留。删除 Agent 资源（含级联删除）会软删除该来源的
 Agent 身份；现有 runtime 身份的 agent_ref metadata 也参与匹配。
 已删除身份保留名称、成员关系和消息，不能重新绑定、新建私聊、入群或发送新消息；

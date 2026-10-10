@@ -47,4 +47,4 @@ sequenceDiagram
 - [汇报责任](../../crates/agt-runtime/src/work/reporting.rs)。
 - [并行与资源互斥](../../crates/agt-runtime/src/work/execution_policy.rs)。
 
-详细行为见[异步任务使用指南](../async-task-guide.md)；返回[架构图导航](README.md)。
+详细行为见[异步任务使用指南](../guide/tasks.md)；返回[架构图导航](README.md)。

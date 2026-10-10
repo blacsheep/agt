@@ -1,4 +1,4 @@
-# 运行策略、Agent Memory 与本机执行
+# 运行配置、记忆与本机执行
 
 本阶段将运行默认值集中到 AGT home 的 `config.yaml`。配置只由本机管理员修改，不作为资源管理 Agent 的可写资源。
 
@@ -103,7 +103,7 @@ SIGKILL 无法执行析构清理，不能保证宿主机命令已停止，仍须
 依赖顺序仍用 `task_defer/task_await`，现有环检测保留；不是让两个模型先并行修改后再决定是否冲突。
 Harness 会话的独立执行租约、工作 revision 与停止/重置围栏均保留。
 
-调度库升级为 v16；请统一升级 CLI、Web 和 scheduler，不要让旧二进制继续访问新库。
+升级后请统一重启 CLI、Web 和 scheduler，不要让旧二进制继续访问新库。
 
 ## Web 入口
 

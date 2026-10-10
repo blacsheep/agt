@@ -40,7 +40,7 @@ CLI 可投影结果以保持既有 info/read 输出形状。
 - 删除复用依赖图、显式计划确认及绑定检查。文件与 IM/绑定数据库不构成全局事务。
 - 保存配置不自动连接 MCP、安装依赖或启用 Agent。MCP 探测是独立操作。
 
-完整字段契约见[共享资源管理](../resource-management.md)。
+完整字段契约见[共享资源管理](resources.md)。
 
 ## Native 自身能力刷新
 
@@ -106,8 +106,8 @@ MCP 使用范围由 Agent 装配决定，未装配的工具不可调用；具体
 - [删除依赖与执行](../../crates/agt-service/src/deletion.rs)。
 - [批次执行](../../crates/agt-runtime/src/engine/native/tools.rs)与[能力刷新](../../crates/agt-runtime/src/engine/native/refresh.rs)。
 - [配置解析](../../crates/agt-inference/src/resolve.rs)与[MCP 快照](../../crates/agt-runtime/src/engine/native/mcp.rs)。
-- [资源回归](../../crates/agt-service/tests/assembly/mod.rs)：七类版本冲突、集合并发与失败原子性。
-- [运行时回归](../../crates/agt-runtime/tests/tool_contract/mod.rs)：自装配、失败保留、授权与工具别名。
+- [资源回归](../../crates/agt-service/tests/service/assembly.rs)：七类版本冲突、集合并发与失败原子性。
+- [运行时回归](../../crates/agt-runtime/tests/runtime/tool_contract.rs)：自装配、失败保留、授权与工具别名。
 - [挂起恢复回归](../../crates/agt-runtime/src/scheduler/tests/wait_tests.rs)：刷新后恢复且不重放配置写入。
 
 回归使用本地模型和 MCP 夹具，不调用真实模型。

@@ -1,53 +1,58 @@
 # 文档导航
 
-现行说明同步于 2026-09-08，以当前工作区代码为准。
+最近整理：2026-10-10。文档以中文为主；与代码冲突时以代码为准，并在同一变更中修正文档。
 
-## 使用与开发
+## 目录约定
 
-- [架构图与执行流程](architecture/README.md)：当前模块边界、资源管理与能力刷新、消息调度、Run 执行、异步协作及图表更新约定。
-- [项目 README](../README.md)：模块、资源目录、CLI 和显式执行。
-- [Web 使用指南](../web/README.md)：前后端一起启动、角色托管、会话与调试界面。
-- [框架验收指南](framework-acceptance.md)：模型接入、CLI/MCP、调度控制和排错。
-- [持久化调度设计](scheduler-plan.md)：并发、参与决策、提醒、预算与恢复边界。
-- [共享资源管理](resource-management.md)：七类资源的统一入口、更新契约、版本检查与并发边界。
-- [MCP 工具契约](mcp-tool-contracts.md)：注册探测、参数校验及 Native 能力刷新。
-- [Native Agent 执行循环](native-agent-loop.md)：运行宿主、回合循环和工具阶段契约。
-- [上下文管理](context-management.md)：模块边界、自动压缩、持久化摘要与重置语义。
-- [Web 架构](web-console-plan.md)：Node 与 Rust 分工、身份和 UI 状态。
+| 目录 | 放什么 | 状态 |
+| --- | --- | --- |
+| `guide/` | 怎么用：上手、命令、功能使用方法 | 现行 |
+| `architecture/` | 怎么实现：架构图、模块边界、协议与不变量 | 现行 |
+| `proposals/` | 尚未实施或暂缓的方案、评审结论 | 待定 |
+| `history/` | 已完成或被取代的方案、阶段计划、实测记录 | 仅供追溯 |
 
-- [异步任务使用指南](async-task-guide.md)：挂载任务协作能力、跨会话委派、结果查询和当前边界。
-- [外部 Harness 接入](harness-integration.md)：执行引擎、运行环境、Codex 会话与取消边界。
+另外两份文档放在代码旁：[项目 README](../README.md)（简介、快速开始、模块）和 [Web 指南](../web/README.md)。
 
-## 实施中设计
+## 使用指南（guide/）
 
-- [异步工作任务与事件驱动协作](async-work-orchestration.md)：任务队列、双边等待、优先级、可靠回报、SSE 和 Codex 进度；2026-09-17 已接入任务账本、统一执行与定向回报，已支持排队优先级和延后屏障；运行中挂起/事件推送等仍在后续阶段。
+| 文档 | 内容 |
+| --- | --- |
+| [快速上手与验收](guide/getting-started.md) | 自动化验收、手动接入模型、MCP 客户端配置、响应策略、排错与已知限制 |
+| [CLI 参考](guide/cli.md) | 资源管理、分类、递归删除、IM、显式 Agent 执行、Harness |
+| [Agent 内置工具](guide/builtin-tools.md) | `resource_management` 的权限与工具契约、创建并启用 Agent、Harness 管理工具 |
+| [异步任务协作](guide/tasks.md) | `task_collaboration`：委派、等待、排序延后、取消重试、汇报、事件订阅 |
+| [运行配置、记忆与本机执行](guide/config-and-memory.md) | `config.yaml`、Memory 工具、`local_execution`、并行工作与资源锁 |
 
-## 历史设计与实测
+## 架构与设计（architecture/）
 
-以下文档保留对应阶段的范围、提交号和验收事实；其中的“下一步”、测试数量及
-当时未支持的功能，不代表当前状态。
+先看[架构图与执行流程](architecture/README.md)，其中有整体架构、资源、消息、Run、任务五张流程图。专题设计：
 
-- [Runtime 基础阶段](runtime-plan.md)
-- [资源与消息框架阶段](messaging-tools-plan.md)
-- [工具契约与调用诊断](tool-contract-plan.md)
-- [2026-09-06 真实模型失败记录](live-acceptance-2026-09-06.md)
-- [2026-09-06 真实模型复验](live-model-retest-2026-09-06.md)
+| 文档 | 内容 |
+| --- | --- |
+| [调度器](architecture/scheduler.md) | 讨论、参与判断、回复准入、额度、恢复、重试 |
+| [Native 执行循环](architecture/native-loop.md) | 循环层次、steering/follow-up、工具阶段契约 |
+| [上下文管理](architecture/context.md) | token 预算、自动压缩、会话摘要、重置语义 |
+| [Harness：外部执行引擎](architecture/harness.md) | Codex 接入、会话与恢复、执行流程、状态与租约 |
+| [权限审批](architecture/permissions.md) | Native 权限策略、Harness 原生审批、人工入口、交互观察 |
+| [共享资源管理](architecture/resources.md) | 七类资源的统一入口、更新契约、版本检查 |
+| [MCP 工具](architecture/mcp-tools.md) | 开发契约、注册探测、schema 校验、Run 内能力刷新 |
+| [会话生命周期](architecture/conversations.md) | 隐藏、退群、解散、负责人、已删除身份 |
+| [Web 控制台](architecture/web-console.md) | Node 与 Rust 分工、HTTP 工作流、SSE、界面行为、安全边界 |
 
-最近实现验证：261 个 Rust 测试、7 个 Web 测试及浏览器模拟模型验收通过。
-这是 2026-09-07 实现轮次的记录，不是本次文档更新重新执行的测试；历史真实模型
-复验也不能替代新调度器在具体 Provider 上的真实验收。
+## 提案（proposals/）
 
-2026-09-08 调度优化：五秒滑动安静期、并行参与判断与持久化回复排队、
-100 次回复上限和新用户输入重置。完整 Rust 回归、Clippy、格式检查和 Web 集成测试通过；
-本轮未调用真实模型，未重新进行浏览器交互验收。
+| 文档 | 状态 |
+| --- | --- |
+| [架构评审 2026-10-10](proposals/architecture-review-2026-10-10.md) | 暂不实施，按触发条件推进 |
 
-自动消息深度限制已全局移除，三 Agent 调度测试覆盖从 0 报到 10。
+## 历史（history/）
 
-开发阶段清理：移除旧 worker、Gateway/Lead 占位配置、未实现的模型参数、
-非持久化技能来源、未接入的技能 catalog、旧 MCP stdio framing 和数据库升级链。
-绑定只接受当前字段；现有旧绑定需重新保存，运行时不再忽略 max_depth。
-历史实测记录保留，供查阅当时的行为，不代表仍维护旧代码。
+见[历史文档索引](history/README.md)。
 
-本轮清理验证：244 个 Rust 测试、7 个 Web 测试通过，Clippy（禁止警告）、
-格式检查及 CLI 构建通过；新版 Runtime 路径保留 Agent 建群/联系同伴测试。
-只使用本地模型桩；未重启现有 Web 或重新触发真实模型讨论。
+## 维护约定
+
+1. 修改行为时，在同一变更中更新对应的现行文档；架构图的更新规则见 [architecture/README.md](architecture/README.md#更新约定)。
+2. 现行文档只描述当前行为，不写“本轮验收”“测试 N 项通过”这类按轮次的记录，这些放在提交说明里。
+3. 不在现行文档中写数据库版本号；结构版本由代码中的 `Schema` 定义。
+4. 方案落地后，把设计要点并入 `architecture/`，原方案移到 `history/` 并在开头标注。
+5. 新文档默认用中文；代码标识、命令和协议字段保持原文。

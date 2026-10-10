@@ -1,5 +1,7 @@
 # Native Agent 执行循环
 
+最近整理：2026-10-10。
+
 Native 执行采用明确的阶段函数。调度器仍负责输入投递、参与判断、租约和任务责任；
 执行循环负责已经认领的一次 Run，不接管其他会话的消息，也不共享全局 transcript。
 Harness 保留自己的执行引擎，不作为 Native 模型请求的一种实现。
@@ -34,7 +36,7 @@ Runtime 仍按 `claim → execute_claimed → finish` 执行。已保存的 Run 
 不会因引擎配置变化重新执行；新 Run 认领后才再次解析引擎。调度准入时的
 引擎选择不替代运行时配置检查。显式 Native 子 Run 继续使用原委派配置快照。
 Native 与 Harness 分别维护自己的执行阶段；Harness 的宿主、协议与取消确认边界见
-[Harness 执行流程](harness-execution.md)。
+[Harness 执行流程](harness.md#执行流程)。
 两种引擎返回原有执行结果，并由公共终态逻辑保留 completed / suspended /
 canceled / interrupted / outcome_unknown 等区别。
 
@@ -59,7 +61,7 @@ CLI `im message send --input-mode steering|follow_up` 指定。模式不授予�
 仅同 principal、同 conversation、同 discussion 的普通输入可进入当前 Native Run。
 群内未被点名的 Agent 消息仍须参与判断；silent/wait 不进入执行上下文。
 
-接纳先写 schema v17 的 `run_inputs` 收据，再进入模型或工具阶段，并计入回复额度。
+接纳先写 `run_inputs` 收据，再进入模型或工具阶段，并计入回复额度。
 暂停、额度、成员资格、删除和上下文重置仍生效。压缩保留已接纳输入原文。
 已接纳但未完成的输入在失败、取消或接管时随 Run 结算，不自动重放；尚未接纳的
 消息保留在队列，包含最后一次轮询之后到达的消息。已完成输入不被后续失败覆盖。

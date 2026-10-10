@@ -1,4 +1,4 @@
-# Agent 开发和装配 MCP 工具
+# MCP 工具开发与装配
 
 复用 MCP 资源仓库与 `Agent.mcps`；工具实现代码及依赖由开发任务准备，
 注册仅保存启动/连接配置，不安装依赖，不部署服务，也不启用 Agent。
@@ -25,7 +25,7 @@
    CLI 的 `agt agent update <agent> --add-mcp/--remove-mcp <mcp>` 则增删单项。
    工具增删可用 `add:{mcps:[...]}` / `remove:{mcps:[...]}`，与 CLI 共用资源服务。
    `resource_read` 返回 revision；更新携带 expected_revision 可拒绝过期表单覆盖。
-   参见[资源管理](resource-management.md)。
+   参见[资源管理](resources.md)。
 5. 检查 Agent 的身份、绑定启用状态与 MCP 装配，然后派发新任务。
 
 这些 Framework 工具只向 manager 或安装 `resource_management` 的 Agent 暴露，
@@ -41,9 +41,7 @@ Native Agent 只连接自身 `mcps` 装配中的服务，并只接受该快照�
 每个实际调用仍经过参数校验和权限策略（模型审核、人工或显式自动放行）。
 修改装配需要资源管理能力，与使用已装配 MCP 是两件事。
 
-升级会删除旧绑定 JSON 和调度数据库中的 `allow_mcp`，解除仅由旧 MCP 总开关
-造成的阻塞；已停用绑定和暂停/结束的讨论不会因此启用。CLI 的 `--allow-mcp`
-和 `agent_bind` 的同名参数已移除，脚本应停止传入。历史 Run 的旧 trigger 仍可读取。
+旧的 MCP 总开关已移除：CLI 的 `--allow-mcp` 和 `agent_bind` 的同名参数不再存在，脚本应停止传入。
 
 ## Run 内的工具契约
 
