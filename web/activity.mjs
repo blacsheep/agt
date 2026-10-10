@@ -42,6 +42,7 @@ export async function activitySnapshot({ run, tool, conversation, viewer }) {
     const items = progress?.activities || (scoped && r.state !== 'running' ? publicActivities(saved?.items, true) : []);
     return { id: r.id, agent: r.request.agent, conversation: r.request.trigger?.conversation_id, state: r.state,
       model_steps: r.model_steps, tool_failures: r.tool_failures,
+      started_at: finite(r.progress?.started_at ?? saved?.started_at), ended_at: finite(saved?.ended_at),
       error: r.error ? '执行失败，请查看消息投递了解原因。' : null, progress,
       tool_activity: scoped && (progress || items.length) ? {
         principal: r.request.trigger.principal, engine: r.execution?.engine === 'codex' ? 'codex' : 'native', items,

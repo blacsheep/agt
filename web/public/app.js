@@ -305,6 +305,12 @@ document.addEventListener('pointerdown', event => { if (!event.target.closest('#
 window.addEventListener('resize', () => closeConversationMenu());
 document.addEventListener('scroll', event => { if (!event.target.closest?.('#conversation-menu')) closeConversationMenu(); }, true);
 function clearConversation() { closeCommandPanel(); document.body.classList.remove('mobile-chat-open'); $('#latest-message').classList.add('hidden'); closeConversationMenu(); $('#group-drawer').close(); state.conversation = null; state.members = []; state.messages = []; state.contextResets = []; state.cursor = null; state.generation++; renderLiveReplies(); renderMessages(); renderChatHead(); setupReadOnly(); }
+// Read-only view of the conversations an Agent can see, optionally opening one of them.
+async function observeAs(principal, conversation) {
+  selectedObserver = principal; switchPage('observer');
+  if (!conversation || state.page !== 'observer') return;
+  try { await conversations(); await selectConversation(conversation); } catch (e) { notify(errorText(e), true); }
+}
 async function startDirect(principal) {
   try {
     const c = await tool('direct_create', { principal });
@@ -757,6 +763,7 @@ function renderLiveReplies() {
 function renderActivity() {
   document.body.classList.toggle('no-conversation', !state.conversation);
   if (state.page === 'agents') renderAgentPulse();
+  window.AgtAgentDetail?.refresh();
   if (!state.conversation && state.page === 'chat') $$('.welcome-agent').forEach(b => { const work = workingState(b.dataset.welcomeDirect); b.classList.toggle('working', !!work); });
   renderLiveReplies();
   $('#activity-title').textContent = debugMode ? '运行观察' : '成员状态';
@@ -910,7 +917,7 @@ function renderAgents() {
     const binding = bindings[0], enabled = bindings.some(b => b.enabled !== false);
     const status = enabled ? bindings.some(b=>b.enabled === false) ? '部分启用' : '已启用' : binding ? '已停用' : '未启用';
     const model = a.harness ? `Codex · ${ref(a.harness)}` : a.model ? `${a.model.category || 'default'}/${a.model.name}` : '未配置模型';
-    return `<article class="agent-card" data-tone="${toneOf(ref(a))}" data-principals="${esc(bindings.map(b => b.principal).join(' '))}"><label class="agent-select"><input type="checkbox" data-select-agent="${esc(ref(a))}" ${selectedAgents.has(ref(a)) ? 'checked' : ''} ${agentBatchBusy ? 'disabled' : ''}><span class="visually-hidden">选择 ${esc(a.name)}</span></label><div class="card-head"><div class="avatar" data-tone="${toneOf(ref(a))}" aria-hidden="true">${esc(initialOf(a.name))}</div><div><h3>${esc(a.name)}</h3><small>${esc(model)}</small></div><span class="binding-indicator ${enabled ? 'bound' : ''}" title="${status}">${status}</span></div><p class="agent-live" aria-live="polite"></p><p class="agent-description">${esc(a.description || '尚未填写角色说明。')}</p><div class="agent-capabilities"><span class="tag">${a.skills?.length || 0} Skills · ${a.mcps?.length || 0} MCP</span>${a.builtin_tools?.includes('resource_management') ? '<span class="tag good">内置资源管理</span>' : ''}</div><div class="card-actions"><button class="secondary" data-toggle-agent="${esc(ref(a))}" data-enable="${!enabled}" ${agentBatchBusy ? 'disabled' : ''}>${enabled ? '停用' : '启用'}</button><button class="secondary" data-edit-agent="${esc(ref(a))}">编辑角色</button>${binding ? `<button class="quiet" data-direct="${esc(binding.principal)}">发起私聊 ↗</button>` : ''}</div><details class="card-options"><summary>配置与管理</summary><div><button class="secondary" data-bind="${esc(ref(a))}">运行设置</button>${resourceActions('agent', a)}</div></details></article>`;
+    return `<article class="agent-card" data-tone="${toneOf(bindings[0]?.principal || ref(a))}" data-principals="${esc(bindings.map(b => b.principal).join(' '))}"><label class="agent-select"><input type="checkbox" data-select-agent="${esc(ref(a))}" ${selectedAgents.has(ref(a)) ? 'checked' : ''} ${agentBatchBusy ? 'disabled' : ''}><span class="visually-hidden">选择 ${esc(a.name)}</span></label><div class="card-head"><button type="button" class="agent-open" data-agent-detail="${esc(ref(a))}" aria-label="查看 ${esc(a.name)} 的详情"><span class="avatar" data-tone="${toneOf(bindings[0]?.principal || ref(a))}" aria-hidden="true">${esc(initialOf(a.name))}</span><span><h3>${esc(a.name)}</h3><small>${esc(model)}</small></span></button><span class="binding-indicator ${enabled ? 'bound' : ''}" title="${status}">${status}</span></div><p class="agent-live" aria-live="polite"></p><p class="agent-description">${esc(a.description || '尚未填写角色说明。')}</p><div class="agent-capabilities"><span class="tag">${a.skills?.length || 0} Skills · ${a.mcps?.length || 0} MCP</span>${a.builtin_tools?.includes('resource_management') ? '<span class="tag good">内置资源管理</span>' : ''}</div><div class="card-actions"><button class="secondary" data-toggle-agent="${esc(ref(a))}" data-enable="${!enabled}" ${agentBatchBusy ? 'disabled' : ''}>${enabled ? '停用' : '启用'}</button><button class="secondary" data-edit-agent="${esc(ref(a))}">编辑角色</button>${binding ? `<button class="quiet" data-direct="${esc(binding.principal)}">发起私聊 ↗</button>` : ''}</div><details class="card-options"><summary>配置与管理</summary><div><button class="secondary" data-bind="${esc(ref(a))}">运行设置</button>${resourceActions('agent', a)}</div></details></article>`;
   }).join('') || empty('创建你的第一位 Agent', '先在资源库配置模型，再为 Agent 指定角色与能力。');
   renderAgentSelection(); renderAgentPulse();
   $$('[data-select-agent]').forEach(b=>b.onchange=()=>{ b.checked ? selectedAgents.add(b.dataset.selectAgent) : selectedAgents.delete(b.dataset.selectAgent); renderAgentSelection(); });
@@ -919,6 +926,8 @@ function renderAgents() {
   $$('[data-edit-agent]').forEach(b => b.onclick = () => showAgentEdit(b.dataset.editAgent));
   $$('[data-bind]').forEach(b => b.onclick = () => showBinding(b.dataset.bind));
   $$('[data-direct]').forEach(b => b.onclick = () => startDirect(b.dataset.direct));
+  $$('[data-agent-detail]').forEach(b => b.onclick = () => AgtAgentDetail.open(b.dataset.agentDetail));
+  window.AgtAgentDetail?.refresh();
 }
 function builtinFields(selected = []) {
   const groups=[['resource_management','资源管理','创建和修改资源、绑定 Agent 并启用或停用。不自动获得本机命令权限。'],['task_collaboration','任务协作','委派可追踪任务、处理结果、安排依赖和并行策略。显式任务支持检查点等待。'],['local_execution','本机命令 · 原生 Agent','允许执行 Bash，另需在运行设置开启本机执行。命令具有服务账号权限，工作目录不是沙箱；Codex 使用自己的执行权限。']];

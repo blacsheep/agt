@@ -22,6 +22,9 @@ window.AgtPalette = (() => {
     if (human) for (const p of state.boot.principals.filter(p => p.id !== state.boot.principal && canContact(p))) {
       add('联系人', 'direct', `与 ${p.name || p.id} 私聊`, p.kind === 'agent' ? `Agent · ${p.id}` : p.id, () => startDirect(p.id), { tone: toneOf(p.id), initial: initialOf(p.name || p.id) });
     }
+    for (const a of items('agent')) {
+      add('Agent', 'agent', `${a.name} 的详情`, a.description || ref(a), () => { switchPage('agents'); AgtAgentDetail.open(ref(a)); }, { tone: toneOf(state.boot.bindings.find(b => b.agent === ref(a))?.principal || ref(a)), initial: initialOf(a.name) });
+    }
     for (const [page, label, hint] of pages) add('页面', 'page', label, hint, () => switchPage(page));
     if (human) {
       add('操作', 'action', '新建会话', '群聊或私聊', () => { switchPage('chat'); $('#new-chat').click(); });
@@ -51,10 +54,10 @@ window.AgtPalette = (() => {
 
   function render() {
     const query = input.value.trim().toLowerCase();
-    const groups = ['当前会话', '会话', '联系人', '页面', '操作'];
+    const groups = ['当前会话', '会话', '联系人', 'Agent', '页面', '操作'];
     entries = collect().map(e => ({ ...e, score: score(e, query) })).filter(e => e.score > 0);
     entries.sort((a, b) => query ? b.score - a.score : groups.indexOf(a.group) - groups.indexOf(b.group));
-    if (!query) entries = groups.flatMap(g => entries.filter(e => e.group === g).slice(0, g === '会话' ? 6 : 8));
+    if (!query) entries = groups.flatMap(g => entries.filter(e => e.group === g).slice(0, g === '会话' ? 6 : g === 'Agent' ? 4 : 8));
     else entries = entries.slice(0, 30);
     index = Math.min(index, Math.max(0, entries.length - 1));
     let last = '';
