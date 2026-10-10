@@ -50,6 +50,7 @@ const ref = item => `${item.category || 'default'}/${item.skill || item.name || 
 const principalOf = id => state.boot?.principals.find(p => p.id === id);
 const nameOf = id => { const p = principalOf(id); return `${p?.name || id}${p?.deleted ? '（已删除）' : ''}`; };
 const canContact = p => !p.deleted && (p.kind !== 'agent' || state.boot.bindings.some(b => b.principal === p.id && items('agent').some(a => ref(a) === b.agent)));
+const listTime = value => { if (!value) return ''; const d = new Date(value), now = new Date(); return d.toDateString() === now.toDateString() ? d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : d.getFullYear() === now.getFullYear() ? `${d.getMonth() + 1}/${d.getDate()}` : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`; };
 const dateTime = value => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 // Avatar tint index; the page CSP forbids inline styles, so tones are CSS classes.
 const toneOf = value => [...String(value)].reduce((hash, c) => (hash * 31 + c.codePointAt(0)) % 9973, 7) % 8;
@@ -200,6 +201,8 @@ function recentConversationEntries(entries) {
 }
 function renderConversations() {
   const focusedEntry = document.activeElement?.dataset.entry;
+  // Background refreshes rebuild the list; keep keyboard focus on the same row or menu button.
+  const focusedRow = document.activeElement?.closest?.('#conversations') ? (document.activeElement.dataset.conv ? ['conv', document.activeElement.dataset.conv] : document.activeElement.dataset.menu ? ['menu', document.activeElement.dataset.menu] : null) : null;
   $('#clear-search').classList.toggle('hidden', !$('#search').value);
   const query = $('#search').value.trim().toLowerCase();
   const entries = recentConversationEntries(state.conversations);
@@ -224,10 +227,11 @@ function renderConversations() {
   $('#restore-entries').disabled = !entryOrganizer.selected.size;
   const people = query && !isObserver() ? state.boot.principals.filter(p => p.id !== state.boot.principal && canContact(p) && `${p.name || ''} ${p.id}`.toLowerCase().includes(query)) : [];
   const contacts = people.length ? `<div class="search-section">联系人 · ${people.length}</div>${people.map(p => `<button class="contact-result" data-contact="${esc(p.id)}" ${state.sending ? 'disabled' : ''}><span class="avatar contact-avatar">${esc([...(p.name || p.id)][0])}</span><span><strong>${esc(p.name || p.id)}</strong><small>${p.kind === 'agent' ? 'Agent' : '用户'} · ${esc(p.id)}</small></span><span class="contact-action">私聊 ↗</span></button>`).join('')}` : '';
-  $('#conversations').innerHTML = contacts + (query && list.length ? '<div class="search-section">当前列表的会话</div>' : '') + (list.map(({ conversation: c, member_count, left_message_seq, dissolved, hidden }) => `<div class="conversation-row">${organizing ? `<input class="entry-check" type="checkbox" data-entry="${esc(c.id)}" aria-label="选择 ${esc(conversationName(c))}" ${entryOrganizer.selected.has(c.id) ? 'checked' : ''}>` : ''}<button class="conversation-item ${state.conversation?.id === c.id ? 'selected' : ''}" data-conv="${esc(c.id)}"><span class="avatar ${c.kind === 'group' ? 'group' : ''}" data-tone="${toneOf(c.id)}" aria-hidden="true">${esc(initialOf(conversationName(c)))}</span><span><strong>${esc(conversationName(c))}</strong><small>${c.kind === 'group' ? '群聊' : '私聊'} · ${member_count} 位参与者${dissolved ? ' · 已解散' : left_message_seq != null ? ' · 已退出' : c.state !== 'active' ? ' · 已归档' : hidden ? ' · 已移除入口' : ''}</small></span></button><button class="conversation-menu-button" data-menu="${esc(c.id)}" aria-label="${esc(conversationName(c))} 的会话操作" aria-haspopup="menu" ${state.sending ? 'disabled' : ''}>⋯</button></div>`).join('') || (contacts ? '' : empty(query ? '没有匹配结果' : '暂无会话', query ? '搜索用户、Agent 名称或会话名称' : '搜索联系人，开始一次对话')));
+  $('#conversations').innerHTML = contacts + (query && list.length ? '<div class="search-section">当前列表的会话</div>' : '') + (list.map(({ conversation: c, member_count, left_message_seq, dissolved, hidden, unread_count }) => `<div class="conversation-row">${organizing ? `<input class="entry-check" type="checkbox" data-entry="${esc(c.id)}" aria-label="选择 ${esc(conversationName(c))}" ${entryOrganizer.selected.has(c.id) ? 'checked' : ''}>` : ''}<button class="conversation-item ${state.conversation?.id === c.id ? 'selected' : ''}" data-conv="${esc(c.id)}"><span class="avatar ${c.kind === 'group' ? 'group' : ''}" data-tone="${toneOf(c.id)}" aria-hidden="true">${esc(initialOf(conversationName(c)))}</span><span><strong>${esc(conversationName(c))}</strong><small>${c.kind === 'group' ? '群聊' : '私聊'} · ${member_count} 位参与者${dissolved ? ' · 已解散' : left_message_seq != null ? ' · 已退出' : c.state !== 'active' ? ' · 已归档' : hidden ? ' · 已移除入口' : ''}</small></span><span class="conversation-side"><time>${esc(listTime(c.updated_at))}</time>${unread_count > 0 && state.conversation?.id !== c.id && !isObserver() ? `<span class="unread-badge" aria-label="${unread_count} 条未读">${unread_count > 99 ? '99+' : unread_count}</span>` : ''}</span></button><button class="conversation-menu-button" data-menu="${esc(c.id)}" aria-label="${esc(conversationName(c))} 的会话操作" aria-haspopup="menu" ${state.sending ? 'disabled' : ''}>⋯</button></div>`).join('') || (contacts ? '' : empty(query ? '没有匹配结果' : '暂无会话', query ? '搜索用户、Agent 名称或会话名称' : '搜索联系人，开始一次对话')));
   $$('[data-conv]').forEach(button => button.onclick = () => selectConversation(button.dataset.conv).catch(e => notify(errorText(e), true)));
   $$('#conversations [data-entry]').forEach(input => input.onchange = () => { if(input.checked && entryOrganizer.selected.size < 100) entryOrganizer.selected.add(input.dataset.entry); else entryOrganizer.selected.delete(input.dataset.entry); renderConversations(); });
   if (focusedEntry) $$('#conversations [data-entry]').find(input=>input.dataset.entry === focusedEntry)?.focus({preventScroll:true});
+  if (focusedRow) $$(`#conversations [data-${focusedRow[0]}]`).find(el => el.dataset[focusedRow[0]] === focusedRow[1])?.focus({preventScroll:true});
   $$('[data-contact]').forEach(button => button.onclick = () => openContact(button.dataset.contact));
   $$('#conversations [data-menu]').forEach(button => button.onclick = event => { const rect = button.getBoundingClientRect(); showConversationMenu(button.dataset.menu, rect.left, rect.bottom + 4, event.currentTarget); });
   $$('#conversations [data-conv]').forEach(button => {
@@ -582,6 +586,20 @@ function insertMention(index) {
   input.setRangeText(`${option.all ? '@all' : mentionToken(option.id)} `, query.start, query.end, 'end');
   input.focus(); renderMentions();
 }
+// Mark the operator's own view as read so list badges reflect what was actually seen.
+const readThrough = new Map();
+function markRead() {
+  const c = state.conversation;
+  if (!c || isObserver() || document.hidden) return;
+  const last = Math.max(0, ...state.messages.map(m => m.seq || 0));
+  if (!last || last <= (readThrough.get(c.id) || 0)) return;
+  readThrough.set(c.id, last);
+  api('conversation', {action: 'read', conversation: c.id, through_seq: last}).then(() => {
+    const entry = state.conversations.find(e => e.conversation.id === c.id);
+    if (entry && entry.unread_count) { entry.unread_count = 0; renderConversations(); }
+  }).catch(() => readThrough.delete(c.id));
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) markRead(); });
 async function messages(force = false, older = false) {
   const c = state.conversation; if (!c) return;
   const request = ++messageRequest;
@@ -607,6 +625,7 @@ async function messages(force = false, older = false) {
   }
   $('#older').classList.toggle('hidden', !state.cursor);
   updateLatestMessage();
+  if (!older) markRead();
 }
 function renderMessages() {
   if (!state.conversation) {
@@ -622,7 +641,7 @@ function renderMessages() {
     const own = m.sender_id === state.boot.principal;
     const previous = timeline[timeline.indexOf(entry) - 1]?.message;
     const grouped = previous && previous.sender_id === m.sender_id && m.created_at - previous.created_at < 5 * 60 * 1000;
-    return `<article class="message ${own ? 'own' : ''} ${grouped ? 'grouped' : ''}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${esc(own ? '你' : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time>${dateTime(m.created_at)}</time></div><div class="bubble">${esc(m.deleted_at ? '此消息已删除' : m.body)}</div><div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? '查看投递 ↗' : '回复情况'}</button></div></div></article>`;
+    return `<article class="message ${own ? 'own' : ''} ${grouped ? 'grouped' : ''}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${esc(own ? '你' : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time>${dateTime(m.created_at)}</time></div>${m.deleted_at ? '<div class="bubble deleted">此消息已删除</div>' : `<div class="bubble md">${AgtMarkdown.render(m.body)}</div>`}<div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? '查看投递 ↗' : '回复情况'}</button></div></div></article>`;
   }).join('') || empty('会话已就绪', '发送第一条消息，邀请 Agent 回应。');
   $$('[data-status]').forEach(button => button.onclick = () => showStatus(button.dataset.status));
 }

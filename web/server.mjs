@@ -13,7 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const readTools = new Set(['conversation_list', 'member_list', 'message_history', 'message_status', 'message_inbox', 'task_get', 'task_list', 'task_attention']);
 const writeTools = new Set(['direct_create', 'group_create', 'message_send', 'member_add', 'member_remove', 'resource_write', 'principal_create', 'agent_bind', 'agent_unbind', 'agent_set_enabled', 'task_cancel', 'task_reply', 'task_reprioritize', 'task_defer', 'task_resolve', 'task_retry', 'task_report']);
 const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent', 'harness'];
-const assets = new Map([['/permission-mode.js',['permission-mode.js','text/javascript']],['/tool-details.js',['tool-details.js','text/javascript']],['/execution-view.css',['execution-view.css','text/css']],['/tool-renderers.js',['tool-renderers.js','text/javascript']],['/tool-activity.js',['tool-activity.js','text/javascript']],['/execution-view.js',['execution-view.js','text/javascript']],['/approvals.js', ['approvals.js', 'text/javascript']], ['/interaction-graph.js', ['interaction-graph.js', 'text/javascript']], ['/interactions.js', ['interactions.js', 'text/javascript']], ['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/settings.js', ['settings.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
+const assets = new Map([['/markdown.js',['markdown.js','text/javascript']],['/permission-mode.js',['permission-mode.js','text/javascript']],['/tool-details.js',['tool-details.js','text/javascript']],['/execution-view.css',['execution-view.css','text/css']],['/tool-renderers.js',['tool-renderers.js','text/javascript']],['/tool-activity.js',['tool-activity.js','text/javascript']],['/execution-view.js',['execution-view.js','text/javascript']],['/approvals.js', ['approvals.js', 'text/javascript']], ['/interaction-graph.js', ['interaction-graph.js', 'text/javascript']], ['/interactions.js', ['interactions.js', 'text/javascript']], ['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/settings.js', ['settings.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
 
 export class ApiError extends Error {
   constructor(status, code, message, field) { super(message); Object.assign(this, { status, code, field }); }
@@ -286,7 +286,8 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         send(200,{results});
       } else if (req.method === 'POST' && url.pathname === '/api/conversation') {
         const data = await body(req); const conversation = str(data.conversation);
-        if (!['hide', 'show', 'visit', 'leave', 'dissolve', 'delete', 'reactivate', 'reset'].includes(data.action)) throw new ApiError(400, 'invalid_arguments', '未知会话操作。');
+        if (!['hide', 'show', 'visit', 'read', 'leave', 'dissolve', 'delete', 'reactivate', 'reset'].includes(data.action)) throw new ApiError(400, 'invalid_arguments', '未知会话操作。');
+        if (data.action === 'read' && !(Number.isSafeInteger(data.through_seq) && data.through_seq > 0)) throw new ApiError(400, 'invalid_arguments', '已读位置必须是正整数。');
         if (['delete', 'leave', 'dissolve', 'reset'].includes(data.action) && data.confirm !== true) throw new ApiError(400, 'confirmation_required', '请确认会话操作。');
         if (changingConversations.has(conversation)) throw new ApiError(409, 'conversation_busy', '会话操作进行中，请稍后重试。');
         changingConversations.add(conversation);
@@ -298,6 +299,7 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
             hide: ['im', 'conversation', 'hide', conversation, '--actor', principal],
             show: ['im', 'conversation', 'unhide', conversation, '--actor', principal],
             visit: ['im', 'conversation', 'visit', conversation, '--actor', principal],
+            read: ['im', 'message', 'read', conversation, '--principal', principal, '--through-seq', String(data.through_seq)],
             leave: ['im', 'group', 'members', 'leave', conversation, principal],
             dissolve: ['schedule', 'dissolve', conversation, '--actor', principal],
             delete: ['schedule', 'delete', conversation, '--actor', principal],

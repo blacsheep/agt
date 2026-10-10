@@ -459,6 +459,25 @@ test('explicit history visits persist via CLI without changing messages or anoth
   assert.equal(history.messages[0].body,'keep me');
 });
 
+test('reading a conversation clears only the operator unread count', async t => {
+  const home = await mkdtemp(resolve(tmpdir(),'agt-read-cursor-'));
+  const run = cliRunner(resolve(import.meta.dirname,'../../target/debug/agt'), home);
+  t.after(async()=>{await run.close();await rm(home,{recursive:true,force:true});});
+  await run(['init',home]); await run(['im','principal','create','operator']); await run(['im','principal','create','other']);
+  const {request} = await fixture(t,run);
+  const call = async(name,args)=> (await (await request('/api/tool',{name,args})).json());
+  const chat = await call('group_create',{title:'unread',members:['other']});
+  await run(['im','message','send',chat.id,'--sender','other','first']);
+  await run(['im','message','send',chat.id,'--sender','other','second']);
+  const unread = async viewer => (await (await request('/api/read',{name:'conversation_list',viewer,args:{}})).json()).find(e=>e.conversation.id===chat.id).unread_count;
+  assert.equal(await unread('operator'),2);
+  assert.equal((await request('/api/conversation',{action:'read',conversation:chat.id,through_seq:0})).status,400);
+  assert.equal((await request('/api/conversation',{action:'read',conversation:chat.id,through_seq:'2'})).status,400);
+  assert.equal((await request('/api/conversation',{action:'read',conversation:chat.id,through_seq:2,viewer:'other'})).status,403);
+  assert.equal((await request('/api/conversation',{action:'read',conversation:chat.id,through_seq:2})).status,200);
+  assert.equal(await unread('operator'),0);
+});
+
 test('Agent entry organization only permits explicit hide/show for Agent identities', async t => {
   const seen=[];
   const {request}=await fixture(t,async args=>{
