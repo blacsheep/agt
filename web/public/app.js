@@ -51,6 +51,9 @@ const principalOf = id => state.boot?.principals.find(p => p.id === id);
 const nameOf = id => { const p = principalOf(id); return `${p?.name || id}${p?.deleted ? '（已删除）' : ''}`; };
 const canContact = p => !p.deleted && (p.kind !== 'agent' || state.boot.bindings.some(b => b.principal === p.id && items('agent').some(a => ref(a) === b.agent)));
 const dateTime = value => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+// Avatar tint index; the page CSP forbids inline styles, so tones are CSS classes.
+const toneOf = value => [...String(value)].reduce((hash, c) => (hash * 31 + c.codePointAt(0)) % 9973, 7) % 8;
+const initialOf = name => ([...String(name || '?').trim()][0] || '?').toUpperCase();
 const empty = (title, description) => `<div class="empty compact"><h2>${esc(title)}</h2><p>${esc(description)}</p></div>`;
 function showNotice(id, message, { error = false, action = null } = {}) {
   const notice = $(id);
@@ -131,6 +134,7 @@ function renderIdentities() {
   $('#observer-workspace').classList.toggle('hidden', choosingIdentity);
   $('#change-identity').classList.toggle('hidden', !observing || choosingIdentity);
   $('#new-chat').classList.toggle('hidden', observing);
+  $('#topbar-tools').classList.toggle('hidden', observing && choosingIdentity);
   $('#observer-caption').textContent = choosingIdentity ? '选择 Agent，只读查看它有权访问的对话。' : `当前身份：${nameOf(state.viewer)} · 只读，不代替 Agent 发言`;
   const query = $('#agent-search').value.toLowerCase();
   $('#identities').innerHTML = state.boot.principals.filter(p => !p.deleted && p.kind === 'agent' && `${p.name} ${p.id}`.toLowerCase().includes(query)).map(p => `<button class="identity-button" data-identity="${esc(p.id)}" ${state.sending ? 'disabled' : ''}><span class="avatar">${esc((p.name || p.id).slice(0, 1))}</span><span><strong>${esc(p.name || p.id)}</strong><small>${esc(p.id)} · ${canContact(p) ? '查看会话 ↗' : '未绑定 · 查看历史 ↗'}</small></span></button>`).join('') || empty('暂无匹配的 Agent', '在 Agent 团队中创建角色并配置聊天身份。');
@@ -157,6 +161,7 @@ async function conversations() {
   state.conversations = list;
   if (state.conversation && !list.some(x => x.conversation.id === state.conversation.id)) clearConversation();
   else if (state.conversation) { state.conversation = list.find(x => x.conversation.id === state.conversation.id).conversation; renderChatHead(); setupReadOnly(); }
+  else renderMessages();
   renderConversations();
 }
 function conversationName(c) {
@@ -219,7 +224,7 @@ function renderConversations() {
   $('#restore-entries').disabled = !entryOrganizer.selected.size;
   const people = query && !isObserver() ? state.boot.principals.filter(p => p.id !== state.boot.principal && canContact(p) && `${p.name || ''} ${p.id}`.toLowerCase().includes(query)) : [];
   const contacts = people.length ? `<div class="search-section">联系人 · ${people.length}</div>${people.map(p => `<button class="contact-result" data-contact="${esc(p.id)}" ${state.sending ? 'disabled' : ''}><span class="avatar contact-avatar">${esc([...(p.name || p.id)][0])}</span><span><strong>${esc(p.name || p.id)}</strong><small>${p.kind === 'agent' ? 'Agent' : '用户'} · ${esc(p.id)}</small></span><span class="contact-action">私聊 ↗</span></button>`).join('')}` : '';
-  $('#conversations').innerHTML = contacts + (query && list.length ? '<div class="search-section">当前列表的会话</div>' : '') + (list.map(({ conversation: c, member_count, left_message_seq, dissolved, hidden }) => `<div class="conversation-row">${organizing ? `<input class="entry-check" type="checkbox" data-entry="${esc(c.id)}" aria-label="选择 ${esc(conversationName(c))}" ${entryOrganizer.selected.has(c.id) ? 'checked' : ''}>` : ''}<button class="conversation-item ${state.conversation?.id === c.id ? 'selected' : ''}" data-conv="${esc(c.id)}"><span class="avatar">${c.kind === 'group' ? '▧' : '↗'}</span><span><strong>${esc(conversationName(c))}</strong><small>${c.kind === 'group' ? '群聊' : '私聊'} · ${member_count} 位参与者${dissolved ? ' · 已解散' : left_message_seq != null ? ' · 已退出' : c.state !== 'active' ? ' · 已归档' : hidden ? ' · 已移除入口' : ''}</small></span></button><button class="conversation-menu-button" data-menu="${esc(c.id)}" aria-label="${esc(conversationName(c))} 的会话操作" aria-haspopup="menu" ${state.sending ? 'disabled' : ''}>⋯</button></div>`).join('') || (contacts ? '' : empty(query ? '没有匹配结果' : '暂无会话', query ? '搜索用户、Agent 名称或会话名称' : '搜索联系人，开始一次对话')));
+  $('#conversations').innerHTML = contacts + (query && list.length ? '<div class="search-section">当前列表的会话</div>' : '') + (list.map(({ conversation: c, member_count, left_message_seq, dissolved, hidden }) => `<div class="conversation-row">${organizing ? `<input class="entry-check" type="checkbox" data-entry="${esc(c.id)}" aria-label="选择 ${esc(conversationName(c))}" ${entryOrganizer.selected.has(c.id) ? 'checked' : ''}>` : ''}<button class="conversation-item ${state.conversation?.id === c.id ? 'selected' : ''}" data-conv="${esc(c.id)}"><span class="avatar ${c.kind === 'group' ? 'group' : ''}" data-tone="${toneOf(c.id)}" aria-hidden="true">${esc(initialOf(conversationName(c)))}</span><span><strong>${esc(conversationName(c))}</strong><small>${c.kind === 'group' ? '群聊' : '私聊'} · ${member_count} 位参与者${dissolved ? ' · 已解散' : left_message_seq != null ? ' · 已退出' : c.state !== 'active' ? ' · 已归档' : hidden ? ' · 已移除入口' : ''}</small></span></button><button class="conversation-menu-button" data-menu="${esc(c.id)}" aria-label="${esc(conversationName(c))} 的会话操作" aria-haspopup="menu" ${state.sending ? 'disabled' : ''}>⋯</button></div>`).join('') || (contacts ? '' : empty(query ? '没有匹配结果' : '暂无会话', query ? '搜索用户、Agent 名称或会话名称' : '搜索联系人，开始一次对话')));
   $$('[data-conv]').forEach(button => button.onclick = () => selectConversation(button.dataset.conv).catch(e => notify(errorText(e), true)));
   $$('#conversations [data-entry]').forEach(input => input.onchange = () => { if(input.checked && entryOrganizer.selected.size < 100) entryOrganizer.selected.add(input.dataset.entry); else entryOrganizer.selected.delete(input.dataset.entry); renderConversations(); });
   if (focusedEntry) $$('#conversations [data-entry]').find(input=>input.dataset.entry === focusedEntry)?.focus({preventScroll:true});
@@ -324,6 +329,8 @@ async function selectConversation(id) {
 }
 function renderChatHead() {
   const c = state.conversation;
+  $('.chat-actions').classList.toggle('hidden', !c);
+  document.body.classList.toggle('no-conversation', !c);
   if (!c) { $('#chat-head').innerHTML = '<strong>选择一个会话</strong>'; $('#group-info').disabled = true; renderReplyStatus(); return; }
   const title = c.kind === 'direct' && state.members.length ? state.members.map(m => nameOf(m.principal_id)).join(' ↔ ') : conversationName(c);
   const entry = currentEntry();
@@ -358,8 +365,9 @@ function showResetContext(c, fromComposer = false) {
   dialog('从新的上下文开始？', '<form id="modal-form"><p>停止涉及本会话的 Agent 工作，清除本会话所有 Agent 的会话摘要。下一条新消息将作为新的上下文起点。</p><p class="form-note">聊天记录保留，Agent 仍可通过历史查询工具主动查阅旧消息。已经发出的外部工具操作不会撤销。</p><div class="form-actions"><button class="primary" type="submit">停止并重置上下文</button></div></form>');
   formHandler(async () => {
     await api('conversation', {action:'reset', conversation:c.id, confirm:true});
-    if(state.conversation?.id===c.id) await messages(true);
+    // The reset is committed; a failed refresh must not leave the confirmation open for a second reset.
     $('#modal').close();
+    if(state.conversation?.id===c.id) await messages(true).catch(() => notify('上下文已重置，但消息刷新失败，请刷新页面。', true));
     if (state.conversation?.id === c.id) {
       state.generation++;
       state.runs = state.runs.map(r => r.conversation === c.id ? {...r, progress:null,tool_activity:null} : r); renderLiveReplies();
@@ -601,13 +609,20 @@ async function messages(force = false, older = false) {
   updateLatestMessage();
 }
 function renderMessages() {
-  if (!state.conversation) { $('#messages').innerHTML = empty('给协作一个起点', '新建私聊或群聊，邀请你的 Agent 团队。'); return; }
+  if (!state.conversation) {
+    const first = !state.conversations.length && !isObserver();
+    $('#messages').innerHTML = `<div class="empty"><h2>${first ? '还没有会话' : '选择一个会话'}</h2><p>${first ? '新建私聊或群聊，邀请 Agent 加入。消息和执行记录都保存在本机。' : isObserver() ? '从左侧列表选择会话，只读查看。' : '从左侧列表打开会话，或新建一个会话。'}</p>${isObserver() ? '' : `<button class="primary" type="button" data-empty-new-chat>${first ? '创建第一个会话' : '新建会话'}</button>`}</div>`;
+    $('[data-empty-new-chat]')?.addEventListener('click', showNewChat);
+    return;
+  }
   const timeline=[...state.messages.map(m=>({seq:m.seq, message:m})), ...(state.contextResets || []).map(r=>({seq:r.through_seq,reset:r}))].sort((a,b)=>a.seq-b.seq || (a.reset?1:0)-(b.reset?1:0) || (a.reset?.id||0)-(b.reset?.id||0));
   $('#messages').innerHTML = timeline.map(entry => {
     if(entry.reset) return `<div class="context-divider" role="separator" aria-label="上下文已重置"><span><strong>新上下文</strong><time>${esc(new Date(entry.reset.created_at).toLocaleString())}</time><small>从这里重新开始 · 聊天记录保留</small></span></div>`;
     const m=entry.message;
     const own = m.sender_id === state.boot.principal;
-    return `<article class="message ${own ? 'own' : ''}"><div class="avatar ${own ? 'user' : ''}">${esc(own ? '你' : nameOf(m.sender_id).slice(0, 1).toUpperCase())}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time>${dateTime(m.created_at)}</time></div><div class="bubble">${esc(m.deleted_at ? '此消息已删除' : m.body)}</div><div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? '查看投递 ↗' : '回复情况'}</button></div></div></article>`;
+    const previous = timeline[timeline.indexOf(entry) - 1]?.message;
+    const grouped = previous && previous.sender_id === m.sender_id && m.created_at - previous.created_at < 5 * 60 * 1000;
+    return `<article class="message ${own ? 'own' : ''} ${grouped ? 'grouped' : ''}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${esc(own ? '你' : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time>${dateTime(m.created_at)}</time></div><div class="bubble">${esc(m.deleted_at ? '此消息已删除' : m.body)}</div><div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? '查看投递 ↗' : '回复情况'}</button></div></div></article>`;
   }).join('') || empty('会话已就绪', '发送第一条消息，邀请 Agent 回应。');
   $$('[data-status]').forEach(button => button.onclick = () => showStatus(button.dataset.status));
 }
@@ -794,7 +809,7 @@ function renderAgents() {
     const binding = bindings[0], enabled = bindings.some(b => b.enabled !== false);
     const status = enabled ? bindings.some(b=>b.enabled === false) ? '部分启用' : '已启用' : binding ? '已停用' : '未启用';
     const model = a.harness ? `Codex · ${ref(a.harness)}` : a.model ? `${a.model.category || 'default'}/${a.model.name}` : '未配置模型';
-    return `<article class="agent-card"><label class="agent-select"><input type="checkbox" data-select-agent="${esc(ref(a))}" ${selectedAgents.has(ref(a)) ? 'checked' : ''} ${agentBatchBusy ? 'disabled' : ''}> 选择 ${esc(a.name)}</label><div class="card-head"><div class="avatar">${esc(a.name.slice(0, 1).toUpperCase())}</div><div><h3>${esc(a.name)}</h3><small>${esc(model)}</small></div><span class="binding-indicator ${enabled ? 'bound' : ''}" title="${status}">${status}</span></div><p class="agent-description">${esc(a.description || '尚未填写角色说明。')}</p><div class="agent-capabilities"><span class="tag">${a.skills?.length || 0} Skills · ${a.mcps?.length || 0} MCP</span>${a.builtin_tools?.includes('resource_management') ? '<span class="tag good">内置资源管理</span>' : ''}</div><div class="card-actions"><button class="secondary" data-toggle-agent="${esc(ref(a))}" data-enable="${!enabled}" ${agentBatchBusy ? 'disabled' : ''}>${enabled ? '停用' : '启用'}</button><button class="secondary" data-edit-agent="${esc(ref(a))}">编辑角色</button>${binding ? `<button class="quiet" data-direct="${esc(binding.principal)}">发起私聊 ↗</button>` : ''}</div><details class="card-options"><summary>配置与管理</summary><div><button class="secondary" data-bind="${esc(ref(a))}">运行设置</button>${resourceActions('agent', a)}</div></details></article>`;
+    return `<article class="agent-card"><label class="agent-select"><input type="checkbox" data-select-agent="${esc(ref(a))}" ${selectedAgents.has(ref(a)) ? 'checked' : ''} ${agentBatchBusy ? 'disabled' : ''}><span class="visually-hidden">选择 ${esc(a.name)}</span></label><div class="card-head"><div class="avatar" data-tone="${toneOf(ref(a))}" aria-hidden="true">${esc(initialOf(a.name))}</div><div><h3>${esc(a.name)}</h3><small>${esc(model)}</small></div><span class="binding-indicator ${enabled ? 'bound' : ''}" title="${status}">${status}</span></div><p class="agent-description">${esc(a.description || '尚未填写角色说明。')}</p><div class="agent-capabilities"><span class="tag">${a.skills?.length || 0} Skills · ${a.mcps?.length || 0} MCP</span>${a.builtin_tools?.includes('resource_management') ? '<span class="tag good">内置资源管理</span>' : ''}</div><div class="card-actions"><button class="secondary" data-toggle-agent="${esc(ref(a))}" data-enable="${!enabled}" ${agentBatchBusy ? 'disabled' : ''}>${enabled ? '停用' : '启用'}</button><button class="secondary" data-edit-agent="${esc(ref(a))}">编辑角色</button>${binding ? `<button class="quiet" data-direct="${esc(binding.principal)}">发起私聊 ↗</button>` : ''}</div><details class="card-options"><summary>配置与管理</summary><div><button class="secondary" data-bind="${esc(ref(a))}">运行设置</button>${resourceActions('agent', a)}</div></details></article>`;
   }).join('') || empty('创建你的第一位 Agent', '先在资源库配置模型，再为 Agent 指定角色与能力。');
   renderAgentSelection();
   $$('[data-select-agent]').forEach(b=>b.onchange=()=>{ b.checked ? selectedAgents.add(b.dataset.selectAgent) : selectedAgents.delete(b.dataset.selectAgent); renderAgentSelection(); });
@@ -1038,8 +1053,7 @@ function switchPage(page) {
     const changed = viewer !== state.viewer || (observer && previous !== 'observer');
     state.viewer = viewer; choosingIdentity = observer && !selectedObserver;
     $(observer ? '#observer-workspace' : '#chat-workspace').append($('.chat-layout'));
-    $(observer ? '#observer-tools' : '#page-chat .section-heading').append($('#workspace-tools'));
-    if (changed) { state.conversations = []; $('#search').value=''; $('#conversation-scope').value='recent'; clearConversation(); renderConversations(); }
+        if (changed) { state.conversations = []; $('#search').value=''; $('#conversation-scope').value='recent'; clearConversation(); renderConversations(); }
     renderIdentities(); setupReadOnly();
     if (!choosingIdentity) conversations().then(activity).catch(e => notify(errorText(e),true));
   }
@@ -1053,7 +1067,7 @@ $('#select-all-agents').onchange = e => { selectedAgents.clear(); if (e.target.c
 $('#enable-agents').onclick = () => changeAgentEnabled(selectedAgents,true);
 $('#disable-agents').onclick = () => changeAgentEnabled(selectedAgents,false);
 $('#help').onclick = help; $('#new-agent').onclick = showAgent; $('#new-resource').onclick = showResource;
-$('#new-chat').onclick = showNewChat; $('#empty-new-chat').onclick = showNewChat; $('#execute').onclick = showReplyControls;
+$('#new-chat').onclick = showNewChat; $('#execute').onclick = showReplyControls;
 $('#auto-reply').onchange = () => { $('#compose-hint').textContent = $('#auto-reply').checked ? '会调用模型 · Ctrl / ⌘ + Enter 发送' : '仅保存消息 · 可稍后点击「继续回复」'; };
 $('#pause-reply').onclick = async () => {
   const conversation = state.conversation?.id; if (!conversation) return;
@@ -1338,8 +1352,8 @@ function showCommandAction(kind) {
       if(reset) await api('conversation',{action:'reset',conversation:c.id,confirm:true});
       else await api('reply',{action:'end',conversation:c.id});
       if(generation!==commandGeneration)return;
-      if(reset) await messages(true);
       $('#command-action-feedback').textContent=reset?'上下文已重置，可以发送新消息。':'已结束本轮讨论。';
+      if(reset) await messages(true).catch(()=>notify('上下文已重置，但消息刷新失败，请刷新页面。',true));
       if(reset){
         state.generation++;
         state.runs=state.runs.map(r=>r.conversation===c.id?{...r,progress:null,tool_activity:null}:r);renderLiveReplies();

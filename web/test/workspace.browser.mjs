@@ -227,7 +227,7 @@ try {
   assert.deepEqual(await evaluate('Object.keys(window.createdDirect.args)'),['principal']);
   await evaluate(`showBinding('default/tech-lead');`);
   assert.equal(await evaluate('document.querySelector("#modal-form [name=steps]")'),null);
-  assert.equal(await evaluate('document.querySelector("#modal-body").textContent.includes("模型调用轮数不限")'),true);
+  assert.equal(await evaluate('document.querySelector("#modal-body").textContent.includes("模型步数默认不限")'),true);
   await evaluate(`closeModal(); showAgent();`);
   assert.equal(await evaluate('document.querySelector("#modal-form [name=steps]")'),null);
   await evaluate(`closeModal(); switchPage('chat');`);
@@ -237,7 +237,7 @@ try {
   await click('#reset-context');
   assert.equal(await evaluate('document.querySelector("#modal-body").textContent.includes("聊天记录保留")'), true);
   assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'), true);
-  await evaluate(`window.contextReset=null; api=async(path,data)=>{window.contextReset={path,data}; return {};};`);
+  await evaluate(`window.contextReset=null; api=async(path,data)=>{if(path==='conversation') window.contextReset={path,data}; return data?.name==='message_history'?{messages:state.messages,next_cursor:null,context_resets:[]}:{};};`);
   await click('#modal-form button[type=submit]');
   await wait('!document.querySelector("#modal").open');
   assert.deepEqual(await evaluate('window.contextReset'), {path:'conversation',data:{action:'reset',conversation:'sample-chat',confirm:true}});
@@ -258,10 +258,11 @@ try {
   assert.equal(await evaluate('!document.querySelector("#command-panel").classList.contains("hidden")'), true);
   assert.equal(await evaluate('document.querySelector("#message-body").value'), ' /new ');
   assert.match(await evaluate('document.querySelector("#command-panel-error").textContent'), /reset failed/);
-  await evaluate('api=async(path,data)=>{commandCalls.push({path,data});return {};};');
+  await evaluate('api=async(path,data)=>{commandCalls.push({path,data});return data?.name==="message_history"?{messages:state.messages,next_cursor:null,context_resets:[]}:{};};');
   await click('#command-confirm');
   await wait('document.querySelector("#command-action-feedback").textContent.includes("已重置")');
-  assert.deepEqual(await evaluate('commandCalls'), [{path:'conversation',data:{action:'reset',conversation:'sample-chat',confirm:true}}]);
+  // A successful reset also refreshes history to show the divider; only the reset itself is asserted.
+  assert.deepEqual(await evaluate('commandCalls.filter(c=>c.path==="conversation")'), [{path:'conversation',data:{action:'reset',conversation:'sample-chat',confirm:true}}]);
   assert.equal(await evaluate('document.querySelector("#message-body").value'), '');
   assert.equal(await evaluate('state.messages.length'), 3);
   await evaluate(`state.members[0].role='member'; commandCalls=[]; document.querySelector('#message-body').value='/new';`);

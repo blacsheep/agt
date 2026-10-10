@@ -8,7 +8,7 @@ window.AgtSettings = (() => {
     'scheduler.model_steps':'单次原生运行的模型步数','memory.enabled':'历史记忆检索',
     'execution.enabled':'允许本机命令','execution.timeout_seconds':'本机命令时限（秒）','execution.output_bytes':'命令输出上限（字节）'
   };
-  const sections=[['permissions','Native 工具权限','仅管理 AGT 自身工具；Codex 使用引擎原生审批。'],['scheduler','调度与容量','控制同时运行多少工作，以及一轮授权可以持续多久。'],['memory','跨会话记忆','按固定身份检索可见历史；主题摘要始终保留原消息依据。'],['execution','本机执行','与 Agent 的 local_execution 能力共同生效。宿主机权限不是项目目录沙箱。']];
+  const sections=[['permissions','工具权限审批','Native Agent 调用工具前的审核策略，以及 Codex 原生审批请求的处理方式。'],['scheduler','调度与容量','控制同时运行多少工作，以及一轮授权可以持续多久。'],['memory','跨会话记忆','按固定身份检索可见历史；主题摘要始终保留原消息依据。'],['execution','本机执行','与 Agent 的 local_execution 能力共同生效。宿主机权限不是项目目录沙箱。']];
   const valueAt=(config,key)=>{const [group,name]=key.split('.');return config[group][name];};
   function reviewerOptions(value) {
     const current=value && (value.includes('/')?value:'default/'+value);

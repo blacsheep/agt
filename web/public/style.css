@@ -795,15 +795,6 @@ body:not(.debug-mode) .debug-only { display: none !important; }
   padding-top: 17px;
   margin-top: 20px;
 }
-footer {
-  display: flex;
-  justify-content: space-between;
-  padding: 16px 24px;
-  font-size: 9px;
-  letter-spacing: 0.2px;
-  color: #a1aab8;
-  gap: 20px;
-}
 .footer-dot {
   padding: 0 8px;
 }
@@ -1443,7 +1434,6 @@ body { font-size: 14px; -webkit-font-smoothing: antialiased; }
 .workspace-page .section-heading h1 { font-size: 17px; }
 .workspace-page .section-heading > div:first-child > p { display: none; }
 .workspace-page .page { padding: 0; max-width: none; }
-.workspace-page footer { display: none; }
 .workspace-tools { gap: 10px; }
 .panel-switches { border: 0; background: #f1f3f8; }
 .panel-switches button { font-size: 11px; padding: 6px 10px; }
@@ -1680,7 +1670,7 @@ input:disabled, select:disabled, textarea:disabled { background: #edf0f4; color:
 .composer:focus-within { box-shadow: inset 0 2px 0 var(--accent); }
 .composer textarea { background: #f7f9fc; border: 1px solid #7c8ea5; padding: 10px 12px; margin: 6px 0 10px; }
 .compose-bottom small, .mention-hint { font-size: 11px; }
-.activity-heading, .command-panel-head { border-top: 3px solid var(--accent); padding-top: 14px; }
+.activity-heading, .command-panel-head { padding-top: 14px; }
 .activity-heading h2 { color: var(--ink); font-weight: 700; }
 .tiny-label, .eyebrow { color: #526580; }
 .card, .resource-list { border-color: #c3cfdf; box-shadow: 0 2px 5px #172b4708; }
@@ -1708,7 +1698,6 @@ input:disabled, select:disabled, textarea:disabled { background: #edf0f4; color:
 .status-pill, .binding-indicator.bound { color: #17694f; }
 .tag.good { color: #17694f; background: #e4f2eb; }
 .tag.warn { color: #80500d; background: #fff0d7; }
-footer { color: var(--muted); }
 
 /* Public execution facts use the same quiet, compact hierarchy as task details. */
 .progress-clocks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 11px; color: var(--muted); }
@@ -1934,3 +1923,109 @@ footer { color: var(--muted); }
 .permission-mode-form label { display: grid; gap: 6px; }
 .permission-mode-form select { width: 100%; min-width: 0; }
 .permission-mode-feedback { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* Studio refresh (2026-10): one page header, tools in the top bar, calmer chat.
+   This layer is the final word for the shell; component sections above stay as-is. */
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Top bar: page name on the left, page tools and status on the right. */
+.topbar { min-height: 52px; gap: 12px; background: var(--paper); }
+.breadcrumb { font-size: 13px; }
+.breadcrumb span { margin: 0 8px; }
+.top-actions { gap: 12px; min-width: 0; }
+.topbar-tools { display: none; }
+.workspace-page .topbar-tools { display: flex; align-items: center; }
+.workspace-tools { display: flex; align-items: center; gap: 8px; }
+.panel-switches { display: flex; gap: 2px; padding: 2px; border-radius: 7px; }
+.panel-switches button { display: grid; place-items: center; width: 32px; height: 28px; padding: 0; border-radius: 5px; }
+.panel-switches svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.panel-switches .switch-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.workspace-tools .primary { padding: 7px 12px; font-size: 13px; }
+.debug-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.debug-toggle input { width: 14px; height: 14px; margin: 0; }
+.status-pill { font-size: 12px; white-space: nowrap; }
+.refresh-button { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+.rail-bottom small { display: block; }
+#home-path { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* One page header pattern for every non-chat page. */
+.page { padding: 28px 32px 32px; }
+.page > .section-heading, .ix-heading.section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 0 0 20px; padding: 0; min-height: 0; background: transparent; }
+.page > .section-heading h1, .ix-heading.section-heading h1 { margin: 0; font-size: 22px; line-height: 1.3; font-weight: 700; letter-spacing: -.3px; }
+.page > .section-heading p, .ix-heading.section-heading p { display: block; margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); max-width: 640px; }
+.heading-actions { display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+.section-heading .primary, .heading-actions button { padding: 8px 14px; font-size: 13px; }
+.workspace-page #page-observer { padding: 0; }
+.workspace-page #page-observer > .section-heading { padding: 16px 24px; margin: 0; border-bottom: 1px solid var(--line); background: var(--paper); align-items: center; }
+.workspace-page #page-observer > .section-heading h1 { font-size: 17px; }
+.workspace-page #page-observer > .section-heading p { display: block; margin-top: 2px; font-size: 12px; }
+#identity-directory { padding: 20px 24px; }
+#identity-directory .search { max-width: 360px; margin: 0 0 16px; }
+.observer-agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+
+/* Avatars: initials on a tint derived from the identity, so people are easy to tell apart. */
+.avatar[data-tone="0"] { background: #e3ecff; color: #1f4fb4; }
+.avatar[data-tone="1"] { background: #e2f4ec; color: #17694f; }
+.avatar[data-tone="2"] { background: #fdebdc; color: #94461a; }
+.avatar[data-tone="3"] { background: #f1e6fb; color: #6b3aa0; }
+.avatar[data-tone="4"] { background: #fbe4ea; color: #a12b4a; }
+.avatar[data-tone="5"] { background: #e0f2f7; color: #14627a; }
+.avatar[data-tone="6"] { background: #fff2cc; color: #7a5600; }
+.avatar[data-tone="7"] { background: #eceff3; color: #3d4b5c; }
+.conversation-item .avatar[data-tone] { border-radius: 50%; font-size: 14px; }
+.conversation-item .avatar.group[data-tone] { border-radius: 10px; }
+.conversation-item.selected .avatar[data-tone] { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3px currentColor; }
+
+/* Chat: actions only when a conversation is open, quieter per-message tools, grouped runs. */
+.chat-head { min-height: 60px; padding: 10px 20px; }
+.chat-actions.hidden { display: none !important; }
+.message.grouped { margin-top: -14px; }
+.message.grouped > .avatar { visibility: hidden; height: 0; }
+.message.grouped .message-meta { display: none; }
+.message .avatar { width: 32px; height: 32px; min-width: 32px; border-radius: 50%; font-size: 13px; }
+.message.own .avatar { display: none; }
+.message-tools { min-height: 20px; }
+@media (hover: hover) {
+  .message-tools button { opacity: 0; transition: opacity .15s; }
+  .message:hover .message-tools button, .message:focus-within .message-tools button, .message-tools button:focus-visible { opacity: 1; }
+}
+.empty { padding: 48px 24px; }
+.empty h2 { font-size: 16px; color: var(--ink); }
+.empty p { max-width: 360px; margin-left: auto; margin-right: auto; line-height: 1.7; }
+.composer textarea { min-height: 48px; }
+.mention-hint { margin-bottom: 2px; }
+.activity-heading { padding-top: 0; }
+
+/* Agent cards: selection is a small control in the corner, not a labelled row. */
+.agent-card { position: relative; }
+.agent-select { position: absolute; top: 18px; right: 18px; margin: 0; }
+.agent-select input { width: 16px; height: 16px; margin: 0; }
+.agent-card .card-head { padding-right: 28px; }
+.agent-batch-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 8px; }
+.agent-batch-bar button { padding: 6px 12px; font-size: 12px; }
+#page-agents > .form-note { margin: 0 0 16px; padding: 0; background: transparent; border: 0; font-size: 12px; }
+
+@media (max-width: 1100px) {
+  .page { padding: 24px 20px 28px; }
+}
+@media (max-width: 760px) {
+  .topbar { padding: 8px 12px; flex-wrap: wrap; min-height: 0; }
+  .top-actions { flex: 1; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+  .debug-toggle { font-size: 11px; }
+  .page { padding: 18px 14px 24px; }
+  .page > .section-heading, .ix-heading.section-heading { flex-direction: column; align-items: stretch; }
+  .page > .section-heading h1 { font-size: 19px; }
+  .workspace-page #page-observer > .section-heading { padding: 12px 14px; }
+  #identity-directory { padding: 14px; }
+  .chat-head { padding: 8px 12px; gap: 8px; }
+  .chat-actions { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; margin-left: 0; }
+  .panel-switches { display: none; }
+  body.workspace-page.no-conversation:not(.mobile-chat-open) .message-pane { display: none; }
+  .chat-actions::-webkit-scrollbar { display: none; }
+  .chat-actions button { flex: 0 0 auto; }
+  .message-pane { height: calc(100dvh - 150px); min-height: 460px; }
+}
+
+/* Settings: content aligns with the page header instead of a centred column. */
+#page-settings .runtime-settings { margin-left: 0; margin-right: 0; max-width: 1040px; }
+.agent-card .binding-indicator { margin-right: 4px; }
