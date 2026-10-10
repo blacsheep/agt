@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AGT Studio · 多 Agent 工作台</title>
+    <script src="/theme.js"></script>
     <link rel="stylesheet" href="/style.css" />
     <link rel="stylesheet" href="/execution-view.css" />
     <script src="/markdown.js" defer></script>
@@ -60,9 +61,10 @@
             </div>
             <button id="new-chat" class="primary"><span aria-hidden="true">＋</span> 新建会话</button>
           </div></div>
+          <select id="theme-select" class="theme-select" aria-label="外观" title="外观"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
           <label class="debug-toggle"><input id="debug-mode" type="checkbox" />调试模式</label>
           <span id="connection" class="status-pill">连接中</span
-          ><button id="refresh" class="quiet refresh-button" title="重新读取本地状态"><span aria-hidden="true">↻</span> 刷新</button>
+          ><button id="refresh" class="quiet refresh-button" title="重新读取本地状态" aria-label="刷新"><span aria-hidden="true">↻</span><span class="refresh-label"> 刷新</span></button>
 
         </div>
       </header>

@@ -1087,6 +1087,8 @@ $('#select-all-agents').onchange = e => { selectedAgents.clear(); if (e.target.c
 $('#enable-agents').onclick = () => changeAgentEnabled(selectedAgents,true);
 $('#disable-agents').onclick = () => changeAgentEnabled(selectedAgents,false);
 $('#help').onclick = help; $('#new-agent').onclick = showAgent; $('#new-resource').onclick = showResource;
+$('#theme-select').value = AgtTheme.get();
+$('#theme-select').onchange = event => AgtTheme.set(event.target.value);
 $('#new-chat').onclick = showNewChat; $('#execute').onclick = showReplyControls;
 $('#auto-reply').onchange = () => { $('#compose-hint').textContent = $('#auto-reply').checked ? '会调用模型 · Ctrl / ⌘ + Enter 发送' : '仅保存消息 · 可稍后点击「继续回复」'; };
 $('#pause-reply').onclick = async () => {
