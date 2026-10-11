@@ -174,7 +174,7 @@ agt run info <run-id>
 agt run children <run-id>
 ```
 
-`--home` 和输出参数仍是全局选项。`--cwd` 指定 MCP 工作目录，默认当前目录。
+`--home` 和输出参数仍是全局选项。`--cwd` 指定本次执行的工作目录，默认当前目录；stdio MCP 始终在自己配置的绝对 `cwd` 中启动，不受它影响。
 附加到 Agent 的 MCP 会被连接，模型可以调用其工具；持久化 Skill 正文会在执行
 开始时加入系统提示词。`--delegate` 是本次执行的允许名单，不保证模型一定委派。
 子 Agent 不可继续委派；父子 Run 共享步数统计，上限由 `config.yaml` 的 `scheduler.model_steps` 控制（默认不限），`--max-steps` 仅为兼容保留、不再生效。

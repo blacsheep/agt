@@ -391,7 +391,7 @@ fn mcp_probe_is_explicit_and_checks_tool_schemas() {
         .join("../agt-runtime/tests/fixtures/contract_mcp.py");
     let log = temp.path().join("calls");
     let file = temp.path().join("mcp.json");
-    let config = serde_json::json!({"mcpServers":{"counter":{"command":"python3","args":[fixture,"valid",log]}}});
+    let config = serde_json::json!({"mcpServers":{"counter":{"cwd":"/tmp","command":"python3","args":[fixture,"valid",log]}}});
     fs::write(&file, config.to_string()).unwrap();
     assert!(
         run(
@@ -403,18 +403,7 @@ fn mcp_probe_is_explicit_and_checks_tool_schemas() {
     );
     assert!(run(&home, &["mcp", "test", "counter"]).status.success());
     assert!(!temp.path().join("calls.starts").exists());
-    let output = run(
-        &home,
-        &[
-            "--output",
-            "json",
-            "mcp",
-            "probe",
-            "counter",
-            "--working-directory",
-            home.to_str().unwrap(),
-        ],
-    );
+    let output = run(&home, &["--output", "json", "mcp", "probe", "counter"]);
     assert!(
         output.status.success(),
         "{}",

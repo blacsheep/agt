@@ -252,7 +252,6 @@ impl McpStore {
         &self,
         category: &CategoryName,
         name: &str,
-        cwd: &Path,
         expected: Option<McpTransportExpectation>,
     ) -> crate::Result<McpTestSummary> {
         let stored = self.read_in(category, name)?;
@@ -271,13 +270,13 @@ impl McpStore {
                 ),
             });
         }
-        let result = stored.document.smoke_test(cwd)?;
+        let result = stored.document.smoke_test()?;
         Ok(McpTestSummary {
             category: category.to_string(),
             name: result.name,
             transport: result.transport,
             target: result.target,
-            cwd: cwd.display().to_string(),
+            cwd: stored.document.stdio_cwd(),
             tool_count: result.tool_count,
             tool_names: result.tool_names,
             status: result.smoke,
@@ -490,11 +489,14 @@ mod tests {
         let home = test_home("import");
         let store = McpStore::new(&home);
         store
-            .add(McpDocument::stdio("existing", "old", Vec::new(), []).unwrap())
+            .add(
+                McpDocument::stdio("existing", "old", Vec::new(), [], &std::env::temp_dir())
+                    .unwrap(),
+            )
             .unwrap();
         let candidates = parse_codex_config(
             Path::new("config.toml"),
-            "[mcp_servers.existing]\ncommand='new'\n[mcp_servers.fresh]\ncommand='fresh'\n",
+            "[mcp_servers.existing]\ncommand='new'\ncwd='/srv/new'\n[mcp_servers.fresh]\ncommand='fresh'\ncwd='/srv/fresh'\n",
         )
         .unwrap();
 

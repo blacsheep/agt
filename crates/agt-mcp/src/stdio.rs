@@ -1,6 +1,5 @@
 use std::collections::{HashSet, VecDeque};
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::path::Path;
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -32,16 +31,12 @@ pub struct MinimalStdioMcpClient {
 
 impl MinimalStdioMcpClient {
     #[cfg(test)]
-    fn start(document: &McpDocument, cwd: &Path) -> Result<Self> {
-        Self::start_with_limits(document, cwd, McpLimits::default())
+    fn start(document: &McpDocument) -> Result<Self> {
+        Self::start_with_limits(document, McpLimits::default())
     }
 
-    pub fn start_with_limits(
-        document: &McpDocument,
-        cwd: &Path,
-        limits: McpLimits,
-    ) -> Result<Self> {
-        let config = document.resolve_stdio_server(cwd)?;
+    pub fn start_with_limits(document: &McpDocument, limits: McpLimits) -> Result<Self> {
+        let config = document.resolve_stdio_server()?;
         let mut command = Command::new(&config.command);
         command
             .args(&config.args)
@@ -805,7 +800,7 @@ fn terminate_spawned_child(child: &mut Child) {
 mod tests {
     use std::fs;
     use std::io::Cursor;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::thread;
 
     use serde_json::json;
@@ -827,6 +822,7 @@ mod tests {
                 "helper": {
                     "command": "python3",
                     "args": [helper.display().to_string()],
+                    "cwd": workspace.display().to_string(),
                     "env": {
                         "AGT_MCP_TEST_MODE": mode,
                         "AGT_MCP_PID_FILE": "${workspace}/server.pid"
@@ -842,7 +838,7 @@ mod tests {
         let workspace = test_home("roundtrip");
         fs::create_dir_all(&workspace).expect("workspace");
         let document = helper_document(&workspace, "normal");
-        let mut client = MinimalStdioMcpClient::start(&document, &workspace).expect("start");
+        let mut client = MinimalStdioMcpClient::start(&document).expect("start");
         assert_eq!(
             client.initialize_info().protocol_version,
             MCP_PROTOCOL_VERSION
@@ -913,12 +909,13 @@ for raw_line in sys.stdin:
             "mcpServers": {
                 "helper": {
                     "command": "python3",
-                    "args": [helper.display().to_string()]
+                    "args": [helper.display().to_string()],
+                    "cwd": workspace.display().to_string()
                 }
             }
         }))
         .expect("document");
-        let mut client = MinimalStdioMcpClient::start(&document, &workspace).expect("start");
+        let mut client = MinimalStdioMcpClient::start(&document).expect("start");
         let cancellation = CancellationToken::new();
         let cancel = cancellation.clone();
         let canceler = thread::spawn(move || {
@@ -938,7 +935,7 @@ for raw_line in sys.stdin:
     }
 
     #[test]
-    fn starts_process_from_resolved_relative_server_cwd() {
+    fn starts_process_in_configured_absolute_cwd() {
         let workspace = test_home("cwd");
         let server_cwd = workspace.join("nested/server");
         fs::create_dir_all(&server_cwd).expect("server cwd");
@@ -949,7 +946,7 @@ for raw_line in sys.stdin:
                 "helper": {
                     "command": "python3",
                     "args": [helper.display().to_string()],
-                    "cwd": "nested/server",
+                    "cwd": server_cwd.display().to_string(),
                     "env": {
                         "AGT_MCP_TEST_MODE": "normal",
                         "AGT_MCP_PID_FILE": "${workspace}/server.pid"
@@ -959,7 +956,7 @@ for raw_line in sys.stdin:
         }))
         .expect("document");
 
-        let mut client = MinimalStdioMcpClient::start(&document, &workspace).expect("start");
+        let mut client = MinimalStdioMcpClient::start(&document).expect("start");
         assert!(server_cwd.join("server.pid").is_file());
         client.close().expect("close");
         let _ = fs::remove_dir_all(workspace);
@@ -975,12 +972,11 @@ for raw_line in sys.stdin:
             fs::create_dir_all(&workspace).expect("workspace");
             let document = helper_document(&workspace, mode);
             if mode == "bad-version" {
-                let error = MinimalStdioMcpClient::start(&document, &workspace)
-                    .expect_err("version should fail");
+                let error =
+                    MinimalStdioMcpClient::start(&document).expect_err("version should fail");
                 assert!(error.to_string().contains(expected));
             } else {
-                let mut client =
-                    MinimalStdioMcpClient::start(&document, &workspace).expect("start");
+                let mut client = MinimalStdioMcpClient::start(&document).expect("start");
                 let error = client.list_tools().expect_err("capability should fail");
                 assert!(error.to_string().contains(expected));
             }
@@ -1035,8 +1031,7 @@ for raw_line in sys.stdin:
                 limits.max_queued_events = 1;
             }
             let mut client =
-                MinimalStdioMcpClient::start_with_limits(&document, &workspace, limits)
-                    .expect("start");
+                MinimalStdioMcpClient::start_with_limits(&document, limits).expect("start");
             let error = client.list_tools().expect_err("limit should fail");
             assert!(error.to_string().contains(expected), "{mode}: {error}");
             let _ = fs::remove_dir_all(workspace);
@@ -1050,7 +1045,7 @@ for raw_line in sys.stdin:
             ..McpLimits::default()
         };
         let mut client =
-            MinimalStdioMcpClient::start_with_limits(&document, &workspace, limits).expect("start");
+            MinimalStdioMcpClient::start_with_limits(&document, limits).expect("start");
         let error = client
             .call_tool("lookup", json!({}))
             .expect_err("result limit");
@@ -1087,8 +1082,8 @@ for raw_line in sys.stdin:
             max_stderr_bytes: 8,
             ..McpLimits::default()
         };
-        let error = MinimalStdioMcpClient::start_with_limits(&document, &workspace, limits)
-            .expect_err("bad version");
+        let error =
+            MinimalStdioMcpClient::start_with_limits(&document, limits).expect_err("bad version");
         let message = error.to_string();
         assert!(message.contains("had_output=true"), "{message}");
         assert!(message.contains("truncated=true"), "{message}");
@@ -1112,12 +1107,10 @@ for raw_line in sys.stdin:
             let document = helper_document(&workspace, mode);
             match phase {
                 "initialize" => {
-                    MinimalStdioMcpClient::start(&document, &workspace)
-                        .expect_err("initialize failure");
+                    MinimalStdioMcpClient::start(&document).expect_err("initialize failure");
                 }
                 "list" => {
-                    let mut client =
-                        MinimalStdioMcpClient::start(&document, &workspace).expect("start");
+                    let mut client = MinimalStdioMcpClient::start(&document).expect("start");
                     client.list_tools().expect_err("list failure");
                 }
                 "call" => {
@@ -1126,8 +1119,7 @@ for raw_line in sys.stdin:
                         ..McpLimits::default()
                     };
                     let mut client =
-                        MinimalStdioMcpClient::start_with_limits(&document, &workspace, limits)
-                            .expect("start");
+                        MinimalStdioMcpClient::start_with_limits(&document, limits).expect("start");
                     client
                         .call_tool("lookup", json!({}))
                         .expect_err("call failure");

@@ -585,6 +585,7 @@ fn mcp_tool_loop_preserves_call_id_and_excludes_client_only_metadata() {
         "python3",
         vec![fixture.to_string_lossy().into_owned()],
         Vec::<(String, String)>::new(),
+        fixture.parent().unwrap(),
     )
     .unwrap();
     McpStore::new(home.path()).add(document).unwrap();
@@ -643,6 +644,7 @@ fn mcp_business_and_transport_failures_are_audited_without_raw_results() {
                     "python3",
                     vec![fixture.to_string_lossy().into_owned()],
                     [("AGT_AUDIT_TEST_MODE".into(), mode.into())],
+                    fixture.parent().unwrap(),
                 )
                 .unwrap(),
             )

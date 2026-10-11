@@ -6,7 +6,7 @@ fn register(home: &Path, mode: &str) -> agt_service::ToolService {
     let manager = hosted(home, agt_service::ResponsePolicy::Mentioned);
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/contract_mcp.py");
     manager.call("resource_write", json!({"kind":"mcp","reference":"counter","create":true,
-        "data":{"mcpServers":{"counter":{"command":"python3","args":[fixture,mode,home.join("calls")]}}}})).unwrap();
+        "data":{"mcpServers":{"counter":{"cwd":"/tmp","command":"python3","args":[fixture,mode,home.join("calls")]}}}})).unwrap();
     manager
 }
 
@@ -33,10 +33,7 @@ fn registration_probe_validation_repair_and_batch_boundary_unmount() {
         .unwrap();
     assert!(!home.path().join("calls.starts").exists());
     let probe = manager
-        .call(
-            "mcp_probe",
-            json!({"reference":"counter","working_directory":home.path()}),
-        )
+        .call("mcp_probe", json!({"reference":"counter"}))
         .unwrap();
     assert_eq!(probe["schemas_valid"], true);
     assert_eq!(probe["probe"]["tool_names"], json!(["count"]));
@@ -131,10 +128,7 @@ fn invalid_schema_fails_probe_and_run_before_model_request() {
     let home = home();
     let manager = register(home.path(), "bad-schema");
     let error = manager
-        .call(
-            "mcp_probe",
-            json!({"reference":"counter","working_directory":home.path()}),
-        )
+        .call("mcp_probe", json!({"reference":"counter"}))
         .unwrap_err();
     assert_eq!(error.code, "invalid_tool_schema");
     assert_eq!(error.field.as_deref(), Some("tools/count/inputSchema"));
@@ -317,7 +311,7 @@ fn failed_refresh_retains_previous_session_and_reports_saved_but_unapplied() {
                 "break",
                 "framework_resource_write",
                 json!({"kind":"mcp","reference":"counter","create":false,
-                "data":{"mcpServers":{"counter":{"command":"python3","args":[fixture,"bad-schema",home.path().join("broken")]}}}}),
+                "data":{"mcpServers":{"counter":{"cwd":"/tmp","command":"python3","args":[fixture,"bad-schema",home.path().join("broken")]}}}}),
             )]),
         ),
         (
@@ -508,7 +502,7 @@ fn mount_reordering_keeps_tool_identity_bound_to_the_same_server() {
     let manager = register(home.path(), "valid");
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/contract_mcp.py");
     manager.call("resource_write", json!({"kind":"mcp","reference":"other","create":true,
-        "data":{"mcpServers":{"other":{"command":"python3","args":[fixture,"valid",home.path().join("other-calls")]}}}})).unwrap();
+        "data":{"mcpServers":{"other":{"cwd":"/tmp","command":"python3","args":[fixture,"valid",home.path().join("other-calls")]}}}})).unwrap();
     manager.call("resource_write", json!({"kind":"agent","reference":"a","create":false,"data":{"mcps":["counter","other"]}})).unwrap();
     let alias = mcp_alias("default/counter", "count");
     let mut script = Script::new(vec![

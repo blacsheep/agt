@@ -737,7 +737,7 @@ mod tests {
         let store = McpStore::new(home);
         store
             .add_from_str(
-                r#"{"mcpServers":{"filesystem":{"type":"stdio","command":"npx","args":["-y","pkg"]}}}"#,
+                r#"{"mcpServers":{"filesystem":{"type":"stdio","cwd":"/tmp","command":"npx","args":["-y","pkg"]}}}"#,
             )
             .expect("create mcp");
     }

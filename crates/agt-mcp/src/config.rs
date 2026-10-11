@@ -33,6 +33,7 @@ impl McpDocument {
         command: impl Into<String>,
         args: Vec<String>,
         env: impl IntoIterator<Item = (String, String)>,
+        cwd: &Path,
     ) -> Result<Self> {
         let server = serde_json::json!({
             "type": "stdio",
@@ -42,12 +43,13 @@ impl McpDocument {
                 .into_iter()
                 .map(|(key, value)| (key, Value::String(value)))
                 .collect::<Map<String, Value>>(),
+            "cwd": cwd.display().to_string(),
         });
         let document = Self {
             name: McpId::new(name.into()),
             server,
         };
-        document.validate()?;
+        document.validate_for_write()?;
         Ok(document)
     }
 
@@ -109,6 +111,16 @@ impl McpDocument {
         }
     }
 
+    /// Stricter than `validate`, which also accepts older stored documents: a stdio server
+    /// written now must not depend on the directory of whichever Run starts it.
+    pub fn validate_for_write(&self) -> Result<()> {
+        self.validate()?;
+        if self.transport_projection()? == "stdio" {
+            self.stdio_paths()?;
+        }
+        Ok(())
+    }
+
     pub fn validate_document_shape(&self) -> Result<()> {
         validate_mcp_name(self.name.as_str())?;
         if !self.server.is_object() {
@@ -143,11 +155,11 @@ impl McpDocument {
         })
     }
 
-    pub fn smoke_test(&self, cwd: &Path) -> Result<McpTestResult> {
+    pub fn smoke_test(&self) -> Result<McpTestResult> {
         self.validate()?;
         let summary = self.summary();
         let factory = DefaultMcpClientFactory;
-        let mut client = factory.connect(self, cwd, McpLimits::default())?;
+        let mut client = factory.connect(self, McpLimits::default())?;
         let result: Result<Vec<String>> = (|| {
             let tools = client.list_tools()?;
             let mut names = Vec::with_capacity(tools.len());
@@ -189,36 +201,67 @@ impl McpDocument {
         self.stdio_config_fields()
     }
 
-    pub fn resolve_stdio_server(&self, cwd: &Path) -> Result<ResolvedMcpStdioServerConfig> {
-        let config = self.stdio_config()?;
-        let configured_cwd = config.cwd.as_deref().unwrap_or(".");
-        let configured_cwd = resolve_workspace_placeholders(configured_cwd, cwd);
-        if configured_cwd.trim().is_empty() {
+    /// The server process always starts in its configured absolute `cwd`, independent of
+    /// the Run or probe that connects to it.
+    pub fn resolve_stdio_server(&self) -> Result<ResolvedMcpStdioServerConfig> {
+        let config = self.stdio_paths()?;
+        if !config.cwd.is_dir() {
             return Err(McpError::InvalidConfig {
-                message: "stdio MCP cwd 不能为空".to_string(),
+                message: format!(
+                    "{} 的 cwd 不存在或不是目录：{}",
+                    self.name,
+                    config.cwd.display()
+                ),
             });
         }
-        let configured_cwd = PathBuf::from(configured_cwd);
-        let server_cwd = if configured_cwd.is_absolute() {
-            configured_cwd
-        } else {
-            cwd.join(configured_cwd)
+        Ok(config)
+    }
+
+    /// Configured server directory for display; `-` for HTTP or older documents without one.
+    pub fn stdio_cwd(&self) -> String {
+        self.stdio_config()
+            .ok()
+            .and_then(|config| config.cwd)
+            .unwrap_or_else(|| "-".to_string())
+    }
+
+    fn stdio_paths(&self) -> Result<ResolvedMcpStdioServerConfig> {
+        let config = self.stdio_config()?;
+        let invalid = |message: String| McpError::InvalidConfig {
+            message: format!(
+                "{}{message}；请使用绝对路径，MCP 不继承 Agent 的执行目录",
+                self.name
+            ),
         };
-        let server_cwd = lexically_normalize(&server_cwd);
+        let cwd = config
+            .cwd
+            .as_deref()
+            .ok_or_else(|| invalid(" 缺少 cwd".to_string()))?;
+        if !Path::new(cwd).is_absolute() {
+            return Err(invalid(format!(" 的 cwd 不是绝对路径：{cwd}")));
+        }
+        let cwd = lexically_normalize(Path::new(cwd));
+        let command = resolve_workspace_placeholders(&config.command, &cwd);
+        // A bare program name is looked up in PATH; anything with a separator is a path.
+        if command.contains(['/', '\\']) && !Path::new(&command).is_absolute() {
+            return Err(invalid(format!(
+                " 的 command 应为命令名（从 PATH 查找）或绝对路径：{command}"
+            )));
+        }
         Ok(ResolvedMcpStdioServerConfig {
             transport: config.transport,
-            command: resolve_workspace_placeholders(&config.command, &server_cwd),
+            command,
             args: config
                 .args
                 .into_iter()
-                .map(|value| resolve_workspace_placeholders(&value, &server_cwd))
+                .map(|value| resolve_workspace_placeholders(&value, &cwd))
                 .collect(),
             env: config
                 .env
                 .into_iter()
-                .map(|(key, value)| (key, resolve_workspace_placeholders(&value, &server_cwd)))
+                .map(|(key, value)| (key, resolve_workspace_placeholders(&value, &cwd)))
                 .collect(),
-            cwd: server_cwd,
+            cwd,
         })
     }
 
@@ -625,54 +668,75 @@ mod tests {
     }
 
     #[test]
-    fn resolves_workspace_placeholders_only_for_runtime_projection() {
-        let document = McpDocument::from_value(json!({
-            "mcpServers": {
-                "filesystem": {
-                    "command": "runner-${cwd}",
-                    "args": ["${workspace}"],
-                    "env": {"ROOT": "${workspace}"}
-                }
-            }
-        }))
-        .expect("document");
-        let resolved = document
-            .resolve_stdio_server(Path::new("/tmp/project"))
-            .expect("resolve");
-        assert_eq!(resolved.command, "runner-/tmp/project");
-        assert_eq!(resolved.args, vec!["/tmp/project"]);
-        assert_eq!(
-            resolved.env,
-            vec![("ROOT".to_string(), "/tmp/project".to_string())]
-        );
-        assert_eq!(resolved.cwd, Path::new("/tmp/project"));
-        assert_eq!(document.server["command"], "runner-${cwd}");
-    }
-
-    #[test]
-    fn resolves_relative_stdio_cwd_before_other_placeholders() {
+    fn resolves_placeholders_to_the_configured_absolute_cwd() {
+        let root = std::env::temp_dir();
+        let cwd = root.display().to_string();
         let document = McpDocument::from_value(json!({
             "mcpServers": {
                 "filesystem": {
                     "command": "${cwd}/runner",
                     "args": ["${workspace}"],
-                    "env": {"ROOT": "${cwd}"},
-                    "cwd": "tools/server"
+                    "env": {"ROOT": "${workspace}"},
+                    "cwd": cwd
                 }
             }
         }))
         .expect("document");
-
-        let resolved = document
-            .resolve_stdio_server(Path::new("/tmp/project"))
-            .expect("resolve");
-
-        assert_eq!(resolved.cwd, Path::new("/tmp/project/tools/server"));
-        assert_eq!(resolved.command, "/tmp/project/tools/server/runner");
-        assert_eq!(resolved.args, ["/tmp/project/tools/server"]);
+        document.validate_for_write().expect("absolute paths");
+        let resolved = document.resolve_stdio_server().expect("resolve");
+        let root = lexically_normalize(&root);
+        assert_eq!(resolved.cwd, root);
+        assert_eq!(resolved.command, format!("{}/runner", root.display()));
+        assert_eq!(resolved.args, [root.display().to_string()]);
         assert_eq!(
             resolved.env,
-            [("ROOT".to_string(), "/tmp/project/tools/server".to_string())]
+            [("ROOT".to_string(), root.display().to_string())]
+        );
+        assert_eq!(document.server["command"], "${cwd}/runner");
+    }
+
+    #[test]
+    fn stdio_paths_never_depend_on_the_connecting_run() {
+        for (server, expected) in [
+            (
+                json!({"command": "python3", "args": ["server.py"]}),
+                "缺少 cwd",
+            ),
+            (
+                json!({"command": "python3", "cwd": "tools/server"}),
+                "不是绝对路径",
+            ),
+            (
+                json!({"command": "./server", "cwd": "/srv/tools"}),
+                "命令名（从 PATH 查找）或绝对路径",
+            ),
+        ] {
+            // Older stored documents still load so they can be inspected and fixed.
+            let document = McpDocument::from_value(json!({"mcpServers": {"tools": server}}))
+                .expect("stored document loads");
+            for error in [
+                document.validate_for_write().expect_err("write rejects"),
+                document.resolve_stdio_server().expect_err("start rejects"),
+            ] {
+                let message = error.to_string();
+                assert!(message.contains(expected), "{message}");
+                assert!(message.contains("不继承 Agent 的执行目录"), "{message}");
+            }
+        }
+        let missing = McpDocument::stdio(
+            "tools",
+            "python3",
+            Vec::new(),
+            [],
+            Path::new("/nonexistent/agt-mcp-cwd"),
+        )
+        .expect("absolute cwd is valid to write");
+        assert!(
+            missing
+                .resolve_stdio_server()
+                .expect_err("missing directory")
+                .to_string()
+                .contains("不存在")
         );
     }
 
@@ -723,6 +787,7 @@ mod tests {
             "npx",
             vec!["-y".to_string(), "pkg".to_string()],
             [("TOKEN".to_string(), "secret".to_string())],
+            Path::new("/srv/fs"),
         )
         .unwrap();
 
@@ -730,6 +795,6 @@ mod tests {
         assert_eq!(config.command, "npx");
         assert_eq!(config.args, ["-y", "pkg"]);
         assert_eq!(config.env, [("TOKEN".to_string(), "secret".to_string())]);
-        assert_eq!(config.cwd, None);
+        assert_eq!(config.cwd.as_deref(), Some("/srv/fs"));
     }
 }

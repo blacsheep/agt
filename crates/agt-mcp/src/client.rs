@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use std::path::Path;
 
 use agt_core::CancellationToken;
 use serde_json::Value;
@@ -33,26 +32,16 @@ pub trait McpClient: Debug + Send {
 }
 
 pub trait McpClientFactory: Send + Sync {
-    fn connect(
-        &self,
-        document: &McpDocument,
-        cwd: &Path,
-        limits: McpLimits,
-    ) -> Result<Box<dyn McpClient>>;
+    fn connect(&self, document: &McpDocument, limits: McpLimits) -> Result<Box<dyn McpClient>>;
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct StdioMcpClientFactory;
 
 impl McpClientFactory for StdioMcpClientFactory {
-    fn connect(
-        &self,
-        document: &McpDocument,
-        cwd: &Path,
-        limits: McpLimits,
-    ) -> Result<Box<dyn McpClient>> {
+    fn connect(&self, document: &McpDocument, limits: McpLimits) -> Result<Box<dyn McpClient>> {
         Ok(Box::new(MinimalStdioMcpClient::start_with_limits(
-            document, cwd, limits,
+            document, limits,
         )?))
     }
 }
@@ -61,15 +50,10 @@ impl McpClientFactory for StdioMcpClientFactory {
 pub struct DefaultMcpClientFactory;
 
 impl McpClientFactory for DefaultMcpClientFactory {
-    fn connect(
-        &self,
-        document: &McpDocument,
-        cwd: &Path,
-        limits: McpLimits,
-    ) -> Result<Box<dyn McpClient>> {
+    fn connect(&self, document: &McpDocument, limits: McpLimits) -> Result<Box<dyn McpClient>> {
         document.validate()?;
         match document.summary().transport.as_deref() {
-            Some("stdio") => StdioMcpClientFactory.connect(document, cwd, limits),
+            Some("stdio") => StdioMcpClientFactory.connect(document, limits),
             Some("http") => Ok(Box::new(HttpMcpClient::start_with_limits(
                 document, limits,
             )?)),

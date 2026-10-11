@@ -522,10 +522,11 @@ fn group_scheduler_replies(format: &str) {
             "--manager".into(),
         ],
         vec![("AGT_ACCEPTANCE_SECRET".into(), "mock-secret".into())],
+        home.path(),
     )
     .unwrap();
     let mut client = DefaultMcpClientFactory
-        .connect(&document, home.path(), McpLimits::default())
+        .connect(&document, McpLimits::default())
         .unwrap();
     let schemas = client.list_tools().unwrap();
     assert!(schemas.iter().any(|t| t.name == "resource_write"));
@@ -616,10 +617,11 @@ fn group_scheduler_replies(format: &str) {
             "a".into(),
         ],
         Vec::<(String, String)>::new(),
+        home.path(),
     )
     .unwrap();
     let mut client = DefaultMcpClientFactory
-        .connect(&participant, home.path(), McpLimits::default())
+        .connect(&participant, McpLimits::default())
         .unwrap();
     assert!(
         !client
@@ -977,10 +979,11 @@ fn cli_and_stdio_mcp_share_durable_task_queries_and_authorization() {
             "a".into(),
         ],
         vec![],
+        home.path(),
     )
     .unwrap();
     let mut client = DefaultMcpClientFactory
-        .connect(&document, home.path(), McpLimits::default())
+        .connect(&document, McpLimits::default())
         .unwrap();
     assert!(
         client

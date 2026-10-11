@@ -297,7 +297,7 @@ impl McpStore {
     where
         F: FnOnce(&Path, &McpDocument) -> Result<()>,
     {
-        document.validate()?;
+        document.validate_for_write()?;
         let category_dir = self.require_write_category(category)?;
         let name = document.name.to_string();
         let final_dir = self.mcp_dir_in(category, &name)?;
@@ -352,7 +352,7 @@ impl McpStore {
         }
         let mut names = BTreeSet::new();
         for plan in &plans {
-            plan.document.validate()?;
+            plan.document.validate_for_write()?;
             let name = plan.document.name.as_str();
             if !names.insert(name.to_string()) {
                 return Err(McpError::InvalidConfig {
@@ -637,7 +637,7 @@ mod tests {
 
     fn sample_json(name: &str) -> String {
         format!(
-            r#"{{"mcpServers":{{"{name}":{{"type":"stdio","command":"npx","args":["-y","pkg"],"env":{{"API_KEY":"secret"}}}}}}}}"#
+            r#"{{"mcpServers":{{"{name}":{{"type":"stdio","command":"npx","args":["-y","pkg"],"env":{{"API_KEY":"secret"}},"cwd":"/srv/tools"}}}}}}"#
         )
     }
 
@@ -743,9 +743,11 @@ mod tests {
             "replacement",
             vec!["--new".to_string()],
             [("TOKEN".to_string(), "secret".to_string())],
+            &std::env::temp_dir(),
         )
         .unwrap();
-        let beta = McpDocument::stdio("beta", "beta-cmd", Vec::new(), []).unwrap();
+        let beta =
+            McpDocument::stdio("beta", "beta-cmd", Vec::new(), [], &std::env::temp_dir()).unwrap();
 
         let stored = store
             .apply_batch(vec![
@@ -782,7 +784,8 @@ mod tests {
     fn batch_invalid_preflight_writes_nothing() {
         let home = test_home("batch-invalid");
         let store = McpStore::new(&home);
-        let valid = McpDocument::stdio("valid", "cmd", Vec::new(), []).unwrap();
+        let valid =
+            McpDocument::stdio("valid", "cmd", Vec::new(), [], &std::env::temp_dir()).unwrap();
         let invalid = McpDocument {
             name: agt_core::McpId::new("invalid"),
             server: serde_json::json!({"type":"stdio"}),
@@ -806,8 +809,16 @@ mod tests {
         let home = test_home("batch-rollback");
         let store = McpStore::new(&home);
         store.add_from_str(&sample_json("alpha")).unwrap();
-        let replacement = McpDocument::stdio("alpha", "replacement", Vec::new(), []).unwrap();
-        let beta = McpDocument::stdio("beta", "beta-cmd", Vec::new(), []).unwrap();
+        let replacement = McpDocument::stdio(
+            "alpha",
+            "replacement",
+            Vec::new(),
+            [],
+            &std::env::temp_dir(),
+        )
+        .unwrap();
+        let beta =
+            McpDocument::stdio("beta", "beta-cmd", Vec::new(), [], &std::env::temp_dir()).unwrap();
         let mut rename_calls = 0usize;
 
         let error = store

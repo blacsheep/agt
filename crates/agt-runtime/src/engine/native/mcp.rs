@@ -26,7 +26,7 @@ impl ToolSession {
         for (server_index, document) in agent.mcps.iter().enumerate() {
             check_canceled(cancellation)?;
             let client = factory
-                .connect(document, &request.working_directory, McpLimits::default())
+                .connect(document, McpLimits::default())
                 .map_err(|e| {
                     RuntimeError::Tool(crate::Reason::because("MCP connection failed", e))
                 })?;

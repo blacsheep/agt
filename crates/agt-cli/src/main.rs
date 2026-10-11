@@ -337,8 +337,6 @@ struct McpProbeArgs {
     name: String,
     #[arg(long)]
     category: Option<String>,
-    #[arg(long)]
-    working_directory: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -1361,8 +1359,8 @@ fn dispatch_mcp(command: McpCommand, home: &Path, output: OutputMode, yes: bool)
         }
         McpCommand::Probe(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let result = agt_service::Resources::new(home)
-                .mcp_probe(&format!("{category}/{name}"), &args.working_directory)?;
+            let result =
+                agt_service::Resources::new(home).mcp_probe(&format!("{category}/{name}"))?;
             emit_value(result, output)
         }
         McpCommand::Delete(args) => delete_resource(

@@ -14,11 +14,15 @@
 ## 注册、探测与装配
 
 1. `resource_write(kind="mcp", reference=..., create=true, data={mcpServers:{...}})`
-   注册单个服务；亦可使用 `agt mcp create`。
+   注册单个服务；亦可使用 `agt mcp create`。stdio 服务必须提供绝对路径 `cwd`，
+   `command` 只能是 PATH 中的命令名或绝对路径；`args` 中的相对路径按该 `cwd` 解析，
+   `${cwd}` / `${workspace}` 占位符也展开为它。服务进程从不继承 Agent、Run 或探测方
+   的工作目录，因此同一配置无论挂到哪个 Agent 都以相同方式启动。更早保存的、缺少
+   绝对 `cwd` 的配置仍可读取和修改，但在启动或探测时会报错并说明如何修正。
 2. `resource_test(kind="mcp", reference=...)` 只验证连接配置，不启动服务。
-3. `mcp_probe(reference=..., working_directory=...)` 显式启动/连接服务，执行
+3. `mcp_probe(reference=...)` 按与 Run 完全相同的方式显式启动/连接服务，执行
    initialize、tools/list 并编译每个 inputSchema，随后关闭连接；不调用任何业务工具。
-   CLI 对应 `agt mcp probe <reference> --working-directory <directory>`。
+   CLI 对应 `agt mcp probe <reference>`。
 4. 使用既有 `resource_write(kind="agent", reference=..., create=false, data={mcps:[...]})`
    设置 MCP 引用列表；提供 `mcps` 时替换整个列表，省略时保持原值，空列表清空挂载。
    `agent_mcp_list` 查看配置。引用支持 category/name，不新增挂载表。

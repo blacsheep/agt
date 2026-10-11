@@ -196,7 +196,7 @@ impl Resources {
             .document
             .test_config()?)
     }
-    pub fn mcp_probe(&self, reference: &str, cwd: &Path) -> Result<Value> {
+    pub fn mcp_probe(&self, reference: &str) -> Result<Value> {
         let (category, name) = resource_ref("mcp", reference)?;
         let document = {
             let _guard = lock(&self.home)?;
@@ -204,13 +204,13 @@ impl Resources {
                 .read_in(&category, &name)?
                 .document
         };
-        let result = document.smoke_test(cwd)?;
+        let result = document.smoke_test()?;
         let summary = agt_mcp::McpTestSummary {
             category: category.to_string(),
             name: result.name,
             transport: result.transport,
             target: result.target,
-            cwd: cwd.display().to_string(),
+            cwd: document.stdio_cwd(),
             tool_count: result.tool_count,
             tool_names: result.tool_names,
             status: result.smoke,
