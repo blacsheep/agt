@@ -141,3 +141,47 @@ pub fn hosted_tool(name: &str) -> Option<&'static ToolSpec> {
 pub fn hosted_name(name: &str) -> String {
     format!("{HOSTED_PREFIX}{name}")
 }
+
+/// Rewrite bare framework tool names in model-facing text to the names a hosted
+/// engine actually exposes, so descriptions never point at an uncallable tool.
+pub fn hosted_text(text: &str) -> String {
+    let word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find(word) {
+        let (before, tail) = rest.split_at(start);
+        out.push_str(before);
+        let end = tail.find(|c: char| !word(c)).unwrap_or(tail.len());
+        let (token, after) = tail.split_at(end);
+        if tool(token).is_some() {
+            out.push_str(HOSTED_PREFIX);
+        }
+        out.push_str(token);
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hosted_text_prefixes_only_whole_tool_names() {
+        assert_eq!(
+            hosted_text(
+                "Use task_get, then task_report. framework_task_get stays; task_getter and my_task_get do not change."
+            ),
+            "Use framework_task_get, then framework_task_report. framework_task_get stays; task_getter and my_task_get do not change."
+        );
+        assert_eq!(
+            hosted_text("agent_bind(principal)"),
+            "framework_agent_bind(principal)"
+        );
+        assert_eq!(
+            hosted_text("任务用 task_get 查询"),
+            "任务用 framework_task_get 查询"
+        );
+    }
+}

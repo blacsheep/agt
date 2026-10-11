@@ -226,7 +226,7 @@ impl Resources {
             .config;
         Ok(
             json!({"agent":format!("{category}/{name}"),"mcps":config.mcps,
-            "effective":"next_run", "native_self_update":"after_tool_batch_if_refresh_succeeds", "authorization":"Bindings and discussion must separately allow MCP execution."}),
+            "effective":"next_run", "native_self_update":"after_tool_batch_if_refresh_succeeds", "authorization":"Every MCP call goes through the workspace permission policy; there is no separate binding or discussion MCP switch."}),
         )
     }
 

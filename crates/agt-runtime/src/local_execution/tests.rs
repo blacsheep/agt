@@ -53,3 +53,21 @@ fn timeout_cancel_and_global_disable_stop_execution() {
             .contains("disabled")
     );
 }
+#[test]
+fn relative_directory_resolves_against_agent_working_directory() {
+    let (home, tool) = fixture();
+    std::fs::create_dir(home.path().join("sub")).unwrap();
+    let result = tool
+        .call(json!({"command":"pwd","directory":"sub"}))
+        .unwrap();
+    let printed = std::path::PathBuf::from(result["output"].as_str().unwrap().trim());
+    assert_eq!(
+        std::fs::canonicalize(printed).unwrap(),
+        std::fs::canonicalize(home.path().join("sub")).unwrap()
+    );
+    let absolute = home.path().join("sub");
+    let result = tool
+        .call(json!({"command":"pwd","directory":absolute}))
+        .unwrap();
+    assert!(result["output"].as_str().unwrap().trim().ends_with("sub"));
+}

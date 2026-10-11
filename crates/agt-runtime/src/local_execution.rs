@@ -82,9 +82,10 @@ impl agt_service::ExecutionControl for LocalExecution {
         if command.trim().is_empty() || command.len() > 65536 {
             bail!("command must contain 1..65536 bytes");
         }
+        // Relative paths belong to the Agent's working directory, not the host process cwd.
         let directory = args["directory"]
             .as_str()
-            .map(PathBuf::from)
+            .map(|d| self.directory.join(d))
             .unwrap_or(self.directory.clone());
         if !directory.is_dir() {
             bail!("working directory does not exist");

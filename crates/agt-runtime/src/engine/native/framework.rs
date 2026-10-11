@@ -46,7 +46,7 @@ impl NativeRun<'_, '_> {
                 .as_ref()
                 .is_some_and(|t| t.work_id.is_some())
         {
-            return Err(RuntimeError::Tool("Return your task result as the final answer; do not message_send to the current conversation".into()));
+            return Err(RuntimeError::Tool("Return your task result as the final answer; do not framework_message_send to the current conversation".into()));
         }
         let operation = || {
             Ok(self

@@ -18,7 +18,7 @@ impl NativeRun<'_, '_> {
         }
         if calls.len() > 1 && calls.iter().any(|c| suspends(&c.function.name)) {
             return Err(RuntimeError::Tool(
-                "task_await/task_yield/task_input must be the only tool call in its batch".into(),
+                "framework_task_await/framework_task_yield/framework_task_input must be the only tool call in its batch".into(),
             ));
         }
         // Validate the entire batch before allowing any side effect.

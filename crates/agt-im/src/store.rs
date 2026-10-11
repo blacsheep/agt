@@ -497,7 +497,8 @@ impl ImStore {
         let target_role = member_role_tx(&transaction, conversation_id, principal_id)?;
         if target_role == MemberRole::Owner {
             return Err(ImError::PermissionDenied(
-                "the group owner must transfer ownership before leaving".to_string(),
+                "the group owner cannot leave or be removed; dissolve the group instead"
+                    .to_string(),
             ));
         }
         if actor_id != principal_id && !matches!(actor_role, MemberRole::Owner | MemberRole::Admin)

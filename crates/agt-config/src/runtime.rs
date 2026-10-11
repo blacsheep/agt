@@ -216,8 +216,8 @@ impl RuntimeConfig {
             {"key":"scheduler.replies_per_agent","default":100,"description":"每个身份在同一讨论中允许进入回复执行的次数，不是工具调用次数。null 不限。","effective":"调度器重启；已用次数保留"},
             {"key":"scheduler.discussion_seconds","default":1800,"description":"一次讨论授权的有效秒数，子任务共享授权。到期只阻止新执行（包括子任务、挂起恢复及通知处理），已经运行的任务可完成并投递结果；长流程可设 null。","effective":"新授权或显式续期；不追改已有到期时间"},
             {"key":"scheduler.model_steps","default":null,"description":"原生执行器每个 Run 的模型步数上限；不限制 Codex 内部步骤。null 不限。","effective":"新 Run"},
-            {"key":"memory.enabled","default":true,"description":"允许按当前身份搜索可见历史和保存带来源的私有主题摘要；不自动共享他人私聊。","effective":"下次工具调用"},
-            {"key":"execution.enabled","default":false,"description":"允许挂载 local_execution 的原生 Agent 执行宿主机命令。工作目录不是沙箱，命令拥有服务账号的操作权限。","effective":"新 Run"},
+            {"key":"memory.enabled","default":true,"description":"允许按当前身份搜索可见历史和保存带来源的私有主题摘要；不自动共享他人私聊。","effective":"关闭：下次调用即拒绝；开启：新 Run 才提供记忆工具"},
+            {"key":"execution.enabled","default":false,"description":"允许挂载 local_execution 的原生 Agent 执行宿主机命令。工作目录不是沙箱，命令拥有服务账号的操作权限。","effective":"关闭：下一条命令即拒绝；开启：新 Run 才提供命令工具"},
             {"key":"execution.timeout_seconds","default":300,"description":"本机命令的总执行秒数，超时终止进程组；null 不限，仍可取消。","effective":"新命令"},
             {"key":"execution.output_bytes","default":65536,"description":"每个命令返回的 stdout/stderr 总字节上限；超出截断，不停止命令。","effective":"新命令"}
         ]})

@@ -50,7 +50,7 @@ impl ToolBridge<'_> {
                 .is_some_and(|chat| args["conversation"] == chat.as_str())
         {
             anyhow::bail!(
-                "Return your final answer to reply in the current chat; AGT publishes it automatically. message_send may contact other conversations only."
+                "Return your final answer to reply in the current chat; AGT publishes it automatically. framework_message_send may contact other conversations only."
             );
         }
         Ok((service, name))
