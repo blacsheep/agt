@@ -203,8 +203,18 @@ fn model_calls_overlap_and_replies_inherit_one_round() {
         .call("message_history", json!({"conversation":chat}))
         .unwrap();
     assert_eq!(history["messages"].as_array().unwrap().len(), 3);
+    let runs = crate::RunStore::open(home.path())
+        .unwrap()
+        .list_for_conversation(&chat, 50)
+        .unwrap();
+    assert_eq!(runs.len(), 2);
     for message in history["messages"].as_array().unwrap().iter().skip(1) {
         assert_eq!(message["metadata"]["discussion_id"], round);
+        // Final replies name the Run that produced them.
+        assert!(
+            runs.iter()
+                .any(|r| message["metadata"]["run_id"] == r.id.as_str())
+        );
     }
     assert_eq!(
         scheduler.store.discussion(&round).unwrap().unwrap().calls,
@@ -452,6 +462,15 @@ fn participation_continues_into_tools_without_duplicate_publication() {
     assert_eq!(
         history["messages"][2]["metadata"]["discussion_id"],
         task.discussion
+    );
+    // A tool-sent message carries the provenance of the Run that sent it.
+    let runs = crate::RunStore::open(home.path())
+        .unwrap()
+        .list_for_conversation(&chat, 50)
+        .unwrap();
+    assert_eq!(
+        history["messages"][2]["metadata"]["run_id"],
+        runs[0].id.as_str()
     );
 }
 

@@ -56,6 +56,7 @@ pub struct Messaging {
     pub im: ImStore,
     pub actor: Actor,
     discussion: Option<String>,
+    run: Option<String>,
 }
 impl Messaging {
     pub fn open(home: &Path, actor: Actor) -> Result<Self> {
@@ -65,11 +66,17 @@ impl Messaging {
             im,
             actor,
             discussion: None,
+            run: None,
         })
     }
     /// Runtime-only context, never accepted from model tool arguments.
     pub fn with_discussion(mut self, discussion: Option<String>) -> Self {
         self.discussion = discussion;
+        self
+    }
+    /// Runtime-only provenance: the Run whose execution sends these messages.
+    pub fn with_run(mut self, run: Option<String>) -> Self {
+        self.run = run;
         self
     }
     pub fn member(&self, conversation: &ConversationId) -> Result<()> {
@@ -140,6 +147,9 @@ impl Messaging {
         }
         if let Some(id) = &self.discussion {
             metadata["discussion_id"] = json!(id);
+        }
+        if let Some(id) = &self.run {
+            metadata["run_id"] = json!(id);
         }
         self.im
             .send_message(SendMessageRequest {

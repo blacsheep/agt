@@ -55,7 +55,8 @@ pub(super) fn settle(
                     automated_depth: Some(reply_depth),
                 },
             )?
-            .with_discussion(Some(task.discussion.clone()));
+            .with_discussion(Some(task.discussion.clone()))
+            .with_run(Some(record.id.clone()));
             if guarded(home, task, || {
                 publisher
                     .send(MessageInput {

@@ -304,7 +304,7 @@ $('#conversation-menu').onkeydown = event => {
 document.addEventListener('pointerdown', event => { if (!event.target.closest('#conversation-menu')) closeConversationMenu(); });
 window.addEventListener('resize', () => closeConversationMenu());
 document.addEventListener('scroll', event => { if (!event.target.closest?.('#conversation-menu')) closeConversationMenu(); }, true);
-function clearConversation() { closeCommandPanel(); document.body.classList.remove('mobile-chat-open'); $('#latest-message').classList.add('hidden'); closeConversationMenu(); $('#group-drawer').close(); state.conversation = null; state.members = []; state.messages = []; state.contextResets = []; state.cursor = null; state.generation++; renderLiveReplies(); renderMessages(); renderChatHead(); setupReadOnly(); }
+function clearConversation() { closeCommandPanel(); document.body.classList.remove('mobile-chat-open'); $('#latest-message').classList.add('hidden'); closeConversationMenu(); $('#group-drawer').close(); state.conversation = null; state.members = []; state.messages = []; state.contextResets = []; state.cursor = null; state.generation++; AgtRunThreads.reset(); threadSignature = ''; renderLiveReplies(); renderMessages(); renderChatHead(); setupReadOnly(); }
 // Read-only view of the conversations an Agent can see, optionally opening one of them.
 async function observeAs(principal, conversation) {
   selectedObserver = principal; switchPage('observer');
@@ -322,7 +322,9 @@ async function selectConversation(id) {
   closeCommandPanel();
   if (state.sending) { notify('消息正在发送，请稍后切换会话。'); return; }
   const viewer = state.viewer, page = state.page, generation = ++state.generation;
-  const entry = state.conversations.find(x => x.conversation.id === id);
+  let entry = state.conversations.find(x => x.conversation.id === id);
+  // A concurrent list refresh can discard the one this navigation awaited; look the conversation up directly.
+  if (!entry) entry = (await read('conversation_list', { include_hidden: true }, viewer)).find(x => x.conversation.id === id);
   if (entry?.hidden && !isObserver()) await api('conversation', {action:'show',conversation:id});
   if (generation !== state.generation || viewer !== state.viewer || page !== state.page) return;
   state.conversation = entry?.conversation;
@@ -714,9 +716,10 @@ function renderMessages() {
     lastDay = day;
     const previous = timeline[timeline.indexOf(entry) - 1]?.message;
     const grouped = previous && previous.sender_id === m.sender_id && m.created_at - previous.created_at < 5 * 60 * 1000;
-    return divider + `<article class="message ${own ? 'own' : ''} ${grouped && !divider ? 'grouped' : ''}" data-tone="${toneOf(m.sender_id)}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${esc(own ? '你' : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time title="${esc(new Date(m.created_at).toLocaleString('zh-CN'))}">${esc(new Date(m.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))}</time></div>${m.deleted_at ? '<div class="bubble deleted">此消息已删除</div>' : `<div class="bubble md">${AgtMarkdown.render(m.body)}</div>`}<div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? '查看投递 ↗' : '回复情况'}</button></div></div></article>`;
+    return divider + `<article class="message ${own ? 'own' : ''} ${grouped && !divider ? 'grouped' : ''}" data-tone="${toneOf(m.sender_id)}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${esc(own ? '你' : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time title="${esc(new Date(m.created_at).toLocaleString('zh-CN'))}">${esc(new Date(m.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))}</time></div>${m.deleted_at ? '<div class="bubble deleted">此消息已删除</div>' : `<div class="bubble md">${AgtMarkdown.render(m.body)}</div>`}<div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? '查看投递 ↗' : '回复情况'}</button></div><div class="run-threads" data-thread-anchor="${esc(m.id)}"></div></div></article>`;
   }).join('') || empty('会话已就绪', '发送第一条消息，邀请 Agent 回应。');
   $$('[data-status]').forEach(button => button.onclick = () => showStatus(button.dataset.status));
+  AgtRunThreads.render();
 }
 async function showStatus(id) {
   dialog(debugMode ? '消息投递' : '回复情况', '<p class="form-note">正在查看各位成员的回复情况…</p>');
@@ -736,12 +739,16 @@ function friendlyFailure(error, status) {
   if (/timeout|timed out|HTTP request/i.test(error || '')) return '暂时连接不到模型服务，请检查网络和服务地址，稍后发送新消息。';
   return '请检查模型与角色设置；也可开启调试模式查看详细原因。失败消息不会自动重跑。';
 }
+let threadSignature = '';
 async function activity() {
   const generation = state.generation;
   try {
     const query = state.conversation ? '?' + new URLSearchParams({conversation: state.conversation.id, viewer: state.viewer || state.boot.principal}) : '';
     const data = await api('activity' + query); if (generation !== state.generation) return;
-    state.runs = data.runs; state.scheduler = data.scheduler; window.AgtInteractions?.statusChanged(); renderReplyStatus(); renderActivity(); window.AgtTasks?.refresh();
+    state.runs = data.runs; state.scheduler = data.scheduler; window.AgtInteractions?.statusChanged();
+    // A Run settling (or a new conversation) moves its record into the message thread.
+    const threads = JSON.stringify([state.viewer, state.conversation?.id, state.runs.filter(r => r.conversation === state.conversation?.id).map(r => r.id + r.state)]);
+    if (threads !== threadSignature) { threadSignature = threads; AgtRunThreads.load(); } renderReplyStatus(); renderActivity(); window.AgtTasks?.refresh();
   } catch (error) {
     if (generation === state.generation) { state.runs=state.runs.map(r=>({...r,progress:null,tool_activity:null})); state.scheduler.online = false; window.AgtInteractions?.statusChanged(); renderReplyStatus(); renderActivity(); }
     throw error;
@@ -1421,7 +1428,8 @@ function closeCommandPanel(restoreFocus = false) {
   $('#chat-commands').setAttribute('aria-expanded','false');
   $('#chat-tasks').setAttribute('aria-expanded','false');
   $('#command-panel-body').innerHTML='';
-  if (restoreFocus) $($('#command-panel').dataset.mode === 'approvals' ? '#ix-approvals' : $('#command-panel').dataset.mode === 'tasks' ? '#chat-tasks' : '#chat-commands').focus();
+  const mode = $('#command-panel').dataset.mode;
+  if (restoreFocus) (mode === 'run' ? document.querySelector(`[data-thread-run="${CSS.escape($('#command-panel').dataset.run || '')}"] > summary`) || $('#message-body') : $(mode === 'approvals' ? '#ix-approvals' : mode === 'tasks' ? '#chat-tasks' : '#chat-commands')).focus();
   commandPanelHome.append($('#command-panel'));
 }
 function commandPanel(title, content, kind = 'help') {
@@ -1431,14 +1439,14 @@ function commandPanel(title, content, kind = 'help') {
   const opening = $('#command-panel').classList.contains('hidden');
   $('#command-panel').classList.remove('hidden');
   document.body.classList.add('command-panel-open');
-  $('#chat-commands').setAttribute('aria-expanded',String(!['tasks','approvals'].includes(kind)));
+  $('#chat-commands').setAttribute('aria-expanded',String(!['tasks','approvals','run'].includes(kind)));
   $('#chat-tasks').setAttribute('aria-expanded',String(kind==='tasks'));
-  $('#command-panel-kind').textContent={tasks:'任务',approvals:'权限审批'}[kind] || '会话控制';
+  $('#command-panel-kind').textContent={tasks:'任务',approvals:'权限审批',run:'执行记录'}[kind] || '会话控制';
   $('#command-panel-title').textContent=title;
   $('#command-panel-context').textContent=kind==='approvals' ? '当前观察身份可见的审批' : state.conversation ? conversationName(state.conversation) : '';
   $('#command-panel-body').innerHTML=content;
   $('#command-panel-error').classList.add('hidden');
-  $('#command-panel-nav').innerHTML=(kind==='approvals'?[]:availableChatCommands()).map(c=>`<button type="button" data-panel-command="${c.name}" aria-current="${kind===c.name?'page':'false'}" title="${esc(c.description)}">${esc(c.label)}</button>`).join('');
+  $('#command-panel-nav').innerHTML=(['approvals','run'].includes(kind)?[]:availableChatCommands()).map(c=>`<button type="button" data-panel-command="${c.name}" aria-current="${kind===c.name?'page':'false'}" title="${esc(c.description)}">${esc(c.label)}</button>`).join('');
   $$('#command-panel-nav button').forEach(b=>b.onclick=()=>showChatCommand({name:b.dataset.panelCommand,args:''}));
   if(opening) $('#close-command-panel').focus({preventScroll:true});
   else $('#command-panel-nav [aria-current=page]')?.focus({preventScroll:true});

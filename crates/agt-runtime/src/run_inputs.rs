@@ -284,7 +284,8 @@ pub(crate) fn complete_turn(
                 },
             )
             .map_err(unavailable)?
-            .with_discussion(Some(task.discussion.clone()));
+            .with_discussion(Some(task.discussion.clone()))
+            .with_run(Some(run.to_owned()));
             publisher
                 .send(MessageInput {
                     conversation: agt_im::ConversationId::new(&task.conversation),

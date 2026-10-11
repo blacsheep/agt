@@ -64,3 +64,19 @@ export async function activitySnapshot({ run, tool, conversation, viewer }) {
   }
   return { scheduler, runs };
 }
+
+// Settled runs of one conversation, anchored to messages by the Web client. Same visibility rule as live activity.
+export async function conversationRuns({ run, tool, conversation, viewer }) {
+  if (!conversation) return { runs: [] };
+  const members = await tool('member_list', { conversation }, viewer).catch(() => []);
+  if (!members.some(m => m.principal_id === viewer && m.left_message_seq == null)) return { runs: [] };
+  const records = await run(['run', 'list', '--conversation', conversation, '--limit', '200']);
+  return { runs: records.filter(r => r.state !== 'running').map(r => {
+    const saved = r.execution?.activity, trigger = r.request.trigger;
+    return { id: r.id, agent: r.request.agent, principal: trigger.principal, trigger_message: trigger.message_id,
+      state: r.state, silent: (r.output || '').trim() === '[[silent]]', tool_failures: r.tool_failures,
+      engine: r.execution?.engine === 'codex' ? 'codex' : 'native',
+      started_at: finite(saved?.started_at ?? r.progress?.started_at), ended_at: finite(saved?.ended_at),
+      items: publicActivities(saved?.items, true) };
+  }) };
+}

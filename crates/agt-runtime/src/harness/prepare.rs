@@ -108,6 +108,7 @@ impl PreparedHarness {
                     };
                     s.with_resource_management(resource_management)
                         .with_discussion(discussion.map(str::to_owned))
+                        .with_run(Some(record.id.clone()))
                 })
             })
             .transpose()

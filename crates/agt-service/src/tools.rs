@@ -101,6 +101,10 @@ impl ToolService {
         self.messaging = self.messaging.with_discussion(discussion);
         self
     }
+    pub fn with_run(mut self, run: Option<String>) -> Self {
+        self.messaging = self.messaging.with_run(run);
+        self
+    }
     pub fn call(&self, name: &str, args: Value) -> std::result::Result<Value, ToolError> {
         let schema = self
             .schemas()

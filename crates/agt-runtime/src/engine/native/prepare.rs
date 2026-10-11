@@ -155,6 +155,7 @@ fn framework_service(
     Ok(Some(
         service
             .with_discussion(runtime.discussion.clone())
+            .with_run(Some(record.id.clone()))
             .with_resource_management(resource_management)
             .with_mcp_probe(true),
     ))

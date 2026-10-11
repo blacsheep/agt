@@ -150,6 +150,23 @@ impl RunStore {
         rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect()
     }
 
+    /// Newest root runs triggered from one conversation.
+    pub fn list_for_conversation(&self, conversation: &str, limit: u32) -> Result<Vec<RunRecord>> {
+        if !(1..=200).contains(&limit) {
+            return Err(RuntimeError::Invalid(
+                "list limit must be in 1..=200".into(),
+            ));
+        }
+        let mut statement = self.connection.prepare(
+            "SELECT record_json FROM runs WHERE parent_run_id IS NULL
+             AND json_extract(record_json,'$.request.trigger.conversation_id')=?1
+             ORDER BY rowid DESC LIMIT ?2",
+        )?;
+        let rows =
+            statement.query_map(params![conversation, limit], |row| row.get::<_, String>(0))?;
+        rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect()
+    }
+
     /// The unique claim commits before any model or tool invocation.
     pub(crate) fn claim(
         &mut self,

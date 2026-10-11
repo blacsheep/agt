@@ -5249,7 +5249,7 @@ dialog.palette[open] {
 .ix-node.running .ix-node-halo {
   stroke: url(#ix-ring-gradient);
   stroke-width: 3;
-  stroke-dasharray: 60 20;
+  stroke-dasharray: 55 20;
   transform-box: fill-box;
   transform-origin: center;
   animation: agt-ring 2.4s linear infinite;
@@ -5410,6 +5410,7 @@ dialog.agent-sheet::backdrop {
   -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
   animation: agt-ring 2.4s linear infinite;
+  animation-delay: var(--spin-phase, 0s);
 }
 .agent-hero h2 {
   position: relative;

@@ -94,7 +94,9 @@ try {
     {id:'call:3',kind:'framework',tool_name:'framework_harness_session_configure',summary:'会话模型已更新',status:'completed',started_at:Date.now()-5000,updated_at:Date.now()-4000}
   ]; renderActivity();`);
   assert.match(await evaluate('document.querySelector(".live-phase").textContent'), /正在执行 2 项操作/);
-  assert.equal(await evaluate('document.querySelector(".live-reply").open'),true);
+  // Live work is one collapsed line per Agent until the user expands it.
+  assert.equal(await evaluate('document.querySelector(".live-reply").open'),false);
+  await click('.live-reply > summary');
   assert.match(await evaluate('document.querySelector(".harness-activity").textContent'), /framework_harness_models/);
   assert.match(await evaluate('document.querySelector(".harness-activity").textContent'), /会话模型已更新/);
   assert.match(await evaluate('activityTimeline([{kind:"framework",status:"unknown",started_at:1,updated_at:2}])'), /结果待确认/);
@@ -150,25 +152,18 @@ try {
   assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'), 0);
   await evaluate('state.runs[0].state = "running"; renderActivity(); state.conversation = {id:"elsewhere",state:"active"}; renderActivity();');
   assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'), 0);
-  // A fresh API snapshot restores finished tool cards without keeping live draft text.
+  // Settled runs leave the live area entirely; their records live in message threads (run-threads.js).
   await evaluate(`
     state.conversation={id:'sample-chat',state:'active'};
     const retainedToolItems=state.runs[0].progress.activities.map(a=>({...a,status:a.id==='call:1'?'completed':a.status}));
     state.runs=[{id:'live',agent:'default/a',conversation:'sample-chat',state:'completed',progress:null,tool_activity:{principal:'sample-0',engine:'native',items:retainedToolItems,started_at:Date.now()-10000,ended_at:Date.now(),approvals:[]}}];
     renderActivity();
   `);
-  assert.equal(await evaluate('document.querySelectorAll(".tool-card").length'),3);
-  assert.match(await evaluate('document.querySelector(".live-phase").textContent'),/执行已结束/);
-  assert.equal(await evaluate('document.querySelector(".live-preview").textContent'),'');
-  await evaluate('document.querySelector("#live-replies").replaceChildren();renderActivity();');
-  assert.equal(await evaluate('document.querySelectorAll(".tool-card").length'),3);
-  await click('.live-reply > summary');
-  await click('[data-activity="call:2"] > summary');
-  await wait(`document.querySelector('[data-activity="call:2"] .tool-payload pre')`);
-  await evaluate('state.scheduler.online=false;renderActivity()');
-  assert.equal(await evaluate('document.querySelectorAll(".tool-card").length'),3);
+  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),0);
   await evaluate(`state.scheduler.online=true;state.runs[0].state='running';state.runs[0].progress={phase:'tool_running',started_at:Date.now(),preview:''};state.runs[0].tool_activity.approvals=[{id:'permission',source:'native',state:'awaiting_human'}];renderActivity();`);
   assert.match(await evaluate('document.querySelector(".live-phase").textContent'),/等待人工审批/);
+  // A pending approval opens the line by itself: it needs the user.
+  assert.equal(await evaluate('document.querySelector(".live-reply").open'),true);
   assert.equal(await evaluate('document.querySelector(".run-approval-actions button").textContent'),'查看工具权限');
   await evaluate(`window.openedApproval=null;window.savedApprovals=AgtApprovals;window.AgtApprovals={open:id=>openedApproval=id};document.querySelector('.run-approval-actions button').click();window.AgtApprovals=savedApprovals;`);
   assert.equal(await evaluate('openedApproval'),'permission');
@@ -189,26 +184,15 @@ try {
   await evaluate(`state.conversation={id:'sample-chat',state:'active'};state.runs[0].state='completed';state.runs[0].progress=null;renderActivity();`);
   await evaluate('(async()=>{const original=api;api=async()=>{throw new Error("revoked")};try{await activity()}catch{}finally{api=original}})()');
   assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),0);
-  // Terminal notices can be dismissed without deleting records or hiding resumed work.
+  // Nothing to dismiss: terminal runs never appear here, resumed work always does.
   await evaluate(`state.viewer='operator';state.conversation={id:'sample-chat',state:'active'};state.scheduler.online=true;
-    state.runs=[{id:'dismiss-me',agent:'default/a',conversation:'sample-chat',state:'canceled',tool_activity:{principal:'a',items:[{id:'call:99',kind:'command',status:'unknown'}]}}];renderActivity();`);
-  assert.match(await evaluate('document.querySelector(".live-phase").textContent'),/执行已取消/);
-  await click('.run-dismiss');
-  await evaluate('renderActivity();renderActivity()');
-  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),0);
-  assert.equal(await evaluate('state.runs.length'),1);
-  await evaluate(`state.viewer='another-viewer';renderActivity()`);
-  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),1);
-  await evaluate(`state.viewer='operator';renderActivity()`);
-  assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),0);
-  // Reload the view module to check persisted dismissal, not just the in-memory set.
-  await evaluate(`(async()=>{const script=document.createElement('script');script.src='/execution-view.js?reload=1';await new Promise((ok,fail)=>{script.onload=ok;script.onerror=fail;document.head.append(script)});renderActivity()})()`);
+    state.runs=[{id:'resumed',agent:'default/a',conversation:'sample-chat',state:'canceled',tool_activity:{principal:'a',items:[{id:'call:99',kind:'command',status:'unknown'}]}}];renderActivity();`);
   assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),0);
   await evaluate(`state.runs[0].state='running';state.runs[0].progress={phase:'waiting',principal:'a'};renderActivity()`);
   assert.equal(await evaluate('document.querySelectorAll(".live-reply").length'),1);
-  assert.equal(await evaluate('document.querySelector(".run-dismiss").hidden'),true);
+  assert.equal(await evaluate('!document.querySelector(".run-dismiss")'),true);
   assert.deepEqual(errors, []);
-  console.log('Execution browser passed: keyed tool cards, retained results, approval actions, XSS, stable expansion/focus, identity cleanup and responsive widths.');
+  console.log('Execution browser passed: keyed tool cards, live-only bar, approval actions, XSS, stable expansion/focus, identity cleanup and responsive widths.');
 } finally {
   socket?.close(); chrome?.kill('SIGTERM'); run.close(); server?.closeAllConnections(); server?.close();
   await new Promise(ok => setTimeout(ok, 500));

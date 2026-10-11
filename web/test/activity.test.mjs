@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { activitySnapshot, publicActivities } from '../activity.mjs';
+import { activitySnapshot, conversationRuns, publicActivities } from '../activity.mjs';
 
 function fixture() {
   const scheduler={online:true,tasks:[{id:'task',version:2,state:'responding',principal:'agent',conversation:'chat',discussion:'round'}],discussions:[{id:'round',state:'active'}]};
@@ -57,4 +57,22 @@ test('activity projection bounds history, deduplicates IDs, strips raw engine id
   assert.equal(value.length,2);assert.equal(value[0].status,'unknown');assert.equal(value[1].status,'failed');
   assert.doesNotMatch(JSON.stringify(value),/SECRET|private/);
   assert.equal(publicActivities(Array.from({length:45},(_,i)=>({id:`call:${i}`,kind:'command',status:'completed'}))).length,40);
+});
+
+test('message threads list settled root runs of the conversation without private content', async()=>{
+  const f=fixture();f.record.state='completed';f.record.progress=null;f.record.request.trigger.message_id='m1';
+  const runs=[];
+  const read=async(conversation='chat',viewer='operator',revoked=false)=>conversationRuns({conversation,viewer,
+    run:async args=>{runs.push(args);return [f.record,{...f.record,id:'live',state:'running'}];},
+    tool:async(name,args,who)=>revoked?[]:[{principal_id:who,left_message_seq:null}]});
+  const {runs:[thread],runs:all}=await read();
+  assert.deepEqual(runs[0],['run','list','--conversation','chat','--limit','200']);
+  assert.equal(all.length,1);
+  assert.equal(thread.trigger_message,'m1');
+  assert.equal(thread.silent,false);
+  assert.equal(thread.items[0].status,'unknown'); // still 'running' when the run settled
+  assert.doesNotMatch(JSON.stringify(thread),/SECRET|draft/);
+  f.record.output=' [[silent]] ';assert.equal((await read()).runs[0].silent,true);
+  assert.deepEqual(await read('chat','operator',true),{runs:[]});
+  assert.deepEqual(await read(null),{runs:[]});
 });

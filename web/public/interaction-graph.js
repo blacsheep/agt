@@ -51,12 +51,14 @@ window.createInteractionGraph = (onSelect) => {
       ${[...nodes.values()].map(n => {
         const p=positions.get(n.id), lit=edges.some(e => e.until>now && (e.from===n.id || e.to===n.id));
         return `<g data-tone="${n.group?'':toneOf(n.id)}" class="ix-node ${n.group?'group':''} ${focus===n.id?'focused':''} ${focus&&!neighborhood.has(n.id)?'dim':''} ${n.running?'running':''} ${n.tone||''} ${lit?'fresh':''}" data-node="${esc(n.id)}" transform="translate(${p.x} ${p.y})" tabindex="0" role="button" aria-label="${esc(n.label+'，'+n.status)}">
-          <circle class="ix-node-halo" r="43"/>${n.group?'<rect class="ix-node-face" x="-27" y="-27" width="54" height="54" rx="12" transform="rotate(45)"/>':'<circle class="ix-node-face" r="31"/>'}
+          <circle class="ix-node-halo" r="43" pathLength="300"/>${n.group?'<rect class="ix-node-face" x="-27" y="-27" width="54" height="54" rx="12" transform="rotate(45)"/>':'<circle class="ix-node-face" r="31"/>'}
           <text class="ix-node-initial" text-anchor="middle" y="6">${esc(n.group?'#':n.label.slice(0,2))}</text>
           <circle class="ix-node-state" cx="25" cy="22" r="6"/>
           <text class="ix-node-label" text-anchor="middle" y="59">${esc(short(n.label))}</text><text class="ix-node-caption" text-anchor="middle" y="77">${esc((n.engine?n.engine+' · ':'')+n.status)}</text></g>`;
       }).join('')}</g>`;
     transform();
+    // Re-rendering restarts CSS animations; phase-lock running rings to the wall clock so they keep turning smoothly.
+    svg.querySelectorAll('.ix-node.running .ix-node-halo').forEach(halo => { halo.style.animationDelay = `-${now % 2400}ms`; });
     if (focusedKey) [...svg.querySelectorAll('[data-node]')].find(n=>n.dataset.node===focusedKey)?.focus({preventScroll:true});
     else if (focusedEdge != null) svg.querySelector(`[data-edge="${focusedEdge}"]`)?.focus({preventScroll:true});
     $('#ix-graph-count').textContent = `${nodes.size} 个节点 · ${edges.filter(e=>!e.membership).length} 条通信路径`;

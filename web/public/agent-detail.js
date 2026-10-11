@@ -124,6 +124,7 @@ window.AgtAgentDetail = (() => {
     const focused = sheet.contains(document.activeElement) ? [...document.activeElement.attributes].filter(x => x.name.startsWith('data-')).map(x => `[${x.name}="${CSS.escape(x.value)}"]`).join('') : '';
     sheet.dataset.tone = toneOf(principals()[0] || reference);
     sheet.classList.toggle('working', principals().some(workingState));
+    sheet.style.setProperty('--spin-phase', `-${Date.now() % 2400}ms`);
     sheet.innerHTML = `${hero(a)}<nav class="agent-tabs" role="tablist">${tabs.map(([key, label]) => `<button type="button" role="tab" aria-selected="${key === tab}" data-detail-tab="${key}">${label}${key === 'chats' && chats?.list.length ? `<small>${chats.list.length}</small>` : key === 'runs' && runs().length ? `<small>${runs().length}</small>` : ''}</button>`).join('')}</nav><div class="agent-sheet-body" role="tabpanel">${body}</div>`;
     sheet.querySelector('.agent-sheet-body').scrollTop = scroll; sheet.scrollTop = outer;
     bind();

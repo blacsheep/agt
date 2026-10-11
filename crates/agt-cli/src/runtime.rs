@@ -36,6 +36,9 @@ pub(crate) enum RunCommand {
     List {
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..=200))]
         limit: u32,
+        /// Only root runs triggered from this conversation
+        #[arg(long)]
+        conversation: Option<String>,
     },
     Info {
         id: String,
@@ -92,7 +95,14 @@ pub(crate) fn execute(args: AgentRunArgs, home: &Path, output: OutputMode) -> Re
 pub(crate) fn inspect(command: RunCommand, home: &Path, output: OutputMode) -> Result<()> {
     let store = RunStore::open(home)?;
     match command {
-        RunCommand::List { limit } => emit(&store.list(limit)?, output),
+        RunCommand::List {
+            limit,
+            conversation: None,
+        } => emit(&store.list(limit)?, output),
+        RunCommand::List {
+            limit,
+            conversation: Some(conversation),
+        } => emit(&store.list_for_conversation(&conversation, limit)?, output),
         RunCommand::Info { id } => emit(&store.get(&id)?, output),
         RunCommand::ToolDetail { id, activity } => {
             emit(&store.tool_detail(&id, &activity)?, output)

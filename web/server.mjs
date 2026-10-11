@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { activitySnapshot } from './activity.mjs';
+import { activitySnapshot, conversationRuns } from './activity.mjs';
 import { toolDetail } from './tool-details.mjs';
 import './public/commands.js';
 import { execFile, spawn } from 'node:child_process';
@@ -13,7 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const readTools = new Set(['conversation_list', 'member_list', 'message_history', 'message_status', 'message_inbox', 'task_get', 'task_list', 'task_attention']);
 const writeTools = new Set(['direct_create', 'group_create', 'message_send', 'member_add', 'member_remove', 'resource_write', 'principal_create', 'agent_bind', 'agent_unbind', 'agent_set_enabled', 'task_cancel', 'task_reply', 'task_reprioritize', 'task_defer', 'task_resolve', 'task_retry', 'task_report']);
 const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent', 'harness'];
-const assets = new Map([['/agent-detail.js',['agent-detail.js','text/javascript']],['/palette.js',['palette.js','text/javascript']],['/theme.js',['theme.js','text/javascript']],['/markdown.js',['markdown.js','text/javascript']],['/permission-mode.js',['permission-mode.js','text/javascript']],['/tool-details.js',['tool-details.js','text/javascript']],['/execution-view.css',['execution-view.css','text/css']],['/tool-renderers.js',['tool-renderers.js','text/javascript']],['/tool-activity.js',['tool-activity.js','text/javascript']],['/execution-view.js',['execution-view.js','text/javascript']],['/approvals.js', ['approvals.js', 'text/javascript']], ['/interaction-graph.js', ['interaction-graph.js', 'text/javascript']], ['/interactions.js', ['interactions.js', 'text/javascript']], ['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/settings.js', ['settings.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
+const assets = new Map([['/agent-detail.js',['agent-detail.js','text/javascript']],['/palette.js',['palette.js','text/javascript']],['/run-threads.js',['run-threads.js','text/javascript']],['/theme.js',['theme.js','text/javascript']],['/markdown.js',['markdown.js','text/javascript']],['/permission-mode.js',['permission-mode.js','text/javascript']],['/tool-details.js',['tool-details.js','text/javascript']],['/execution-view.css',['execution-view.css','text/css']],['/tool-renderers.js',['tool-renderers.js','text/javascript']],['/tool-activity.js',['tool-activity.js','text/javascript']],['/execution-view.js',['execution-view.js','text/javascript']],['/approvals.js', ['approvals.js', 'text/javascript']], ['/interaction-graph.js', ['interaction-graph.js', 'text/javascript']], ['/interactions.js', ['interactions.js', 'text/javascript']], ['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/settings.js', ['settings.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
 
 export class ApiError extends Error {
   constructor(status, code, message, field) { super(message); Object.assign(this, { status, code, field }); }
@@ -158,6 +158,10 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
         send(200, { home, principal, principals, bindings, resources: Object.fromEntries(kinds.map((k, i) => [k, resources[i]])) });
       } else if (req.method === 'GET' && url.pathname === '/api/activity') {
         send(200, await activitySnapshot({ run, tool,
+          conversation: url.searchParams.get('conversation'),
+          viewer: url.searchParams.get('viewer') || principal }));
+      } else if (req.method === 'GET' && url.pathname === '/api/message-runs') {
+        send(200, await conversationRuns({ run, tool,
           conversation: url.searchParams.get('conversation'),
           viewer: url.searchParams.get('viewer') || principal }));
       } else if (req.method === 'GET' && url.pathname === '/api/approvals') {

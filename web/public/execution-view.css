@@ -71,7 +71,42 @@
 .tool-payload pre { margin: 0; padding: 10px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--ground, var(--s-f3f5f7, #f3f5f7)); border: 1px solid var(--line); border-radius: 3px; color: var(--ink); font: 11px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .tool-payload pre:focus-visible { outline: 2px solid var(--accent-fill, var(--accent)); outline-offset: 1px; }
 
-.run-dismiss { flex: 0 0 auto; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
-.run-dismiss[hidden] { display: none; }
-.run-dismiss:hover { background: var(--line); color: var(--ink); }
-.run-dismiss:focus-visible { outline: 2px solid var(--accent-fill, var(--accent)); outline-offset: 2px; }
+/* Message threads: settled executions hang under the message they produced or answered. */
+.run-threads { display: grid; gap: 4px; max-width: 100%; }
+.run-threads:empty { display: none; }
+.message.own .run-threads { justify-items: end; }
+.message.own .run-thread { border-left: 0; border-right: 2px solid var(--line); padding: 0 10px 0 0; }
+.message.own .run-thread[data-state="failed"], .message.own .run-thread[data-state="interrupted"], .message.own .run-thread[data-state="outcome_unknown"] { border-right-color: var(--danger); }
+.run-thread { min-width: 0; max-width: 100%; border-left: 2px solid var(--line); padding-left: 10px; font-size: 12px; color: var(--text-3); }
+.run-thread[data-state="failed"], .run-thread[data-state="interrupted"], .run-thread[data-state="outcome_unknown"] { border-left-color: var(--danger); }
+.run-thread > summary { display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px 0; cursor: pointer; list-style: none; border-radius: 6px; }
+.run-thread > summary::-webkit-details-marker { display: none; }
+.run-thread > summary::after { content: '›'; color: var(--text-3); transition: transform .15s; }
+.run-thread[open] > summary::after { transform: rotate(90deg); }
+.run-thread > summary:hover { color: var(--text); }
+.run-thread > summary:focus-visible { outline: 2px solid var(--accent-fill, var(--accent)); outline-offset: 2px; }
+.run-thread-icon { flex: 0 0 auto; font-size: 11px; }
+.run-thread-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-thread-text strong { color: var(--text-2); font-weight: 600; }
+.run-thread-text em { font-style: normal; color: var(--danger); }
+.run-thread > summary small { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.run-thread-list { list-style: none; margin: 4px 0 2px; padding: 0; display: grid; gap: 1px; }
+.run-thread-list li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 6px; align-items: baseline; padding: 2px 0; }
+.run-thread-list li > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.run-thread-list li[data-status="completed"] > span:first-child { color: var(--status-done); }
+.run-thread-list li[data-status="failed"] > span:first-child, .run-thread-list li[data-status="unsupported"] > span:first-child { color: var(--danger); }
+.run-thread-list li[data-status="unknown"] > span:first-child { color: var(--status-attention); }
+.run-thread-list small { font-variant-numeric: tabular-nums; }
+.run-thread-skip { display: block !important; color: var(--text-3); }
+.run-thread-more { margin: 2px 0 4px; padding: 2px 0; border: 0; background: none; color: var(--accent-text, var(--accent)); font-size: 12px; cursor: pointer; }
+.run-thread-more:hover { text-decoration: underline; }
+.run-thread-more:focus-visible { outline: 2px solid var(--accent-fill, var(--accent)); outline-offset: 2px; border-radius: 4px; }
+.run-panel { display: grid; gap: 14px; }
+.run-panel > .secondary { justify-self: start; }
+.run-panel-facts { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 6px 10px; margin: 0; font-size: 12.5px; }
+.run-panel-facts dt { color: var(--text-3); }
+.run-panel-facts dd { margin: 0; }
+.command-panel-nav:empty { display: none; }
+.message.flash .bubble { animation: agt-thread-flash 1.6s ease-out; }
+@keyframes agt-thread-flash { 0%, 30% { box-shadow: 0 0 0 3px var(--accent-fill, var(--accent)); } 100% { box-shadow: var(--shadow-sm); } }
+.live-reply:not([open]) { padding-top: 7px; padding-bottom: 7px; }
