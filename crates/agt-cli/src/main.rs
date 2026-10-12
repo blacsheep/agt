@@ -29,7 +29,8 @@ mod signals;
 #[derive(Debug, Parser)]
 #[command(name = "agt", version, about = "CLI-first agent resource manager")]
 struct Cli {
-    /// agt data home (defaults to $AGT_HOME, then $HOME/.agt)
+    /// agt data home for this command only (defaults to $AGT_HOME, then $HOME/.agt);
+    /// set AGT_HOME in your shell profile to change the home permanently
     #[arg(long, global = true, value_name = "DIR")]
     home: Option<PathBuf>,
 
