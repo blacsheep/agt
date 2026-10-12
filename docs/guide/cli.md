@@ -1,6 +1,6 @@
 # CLI 参考
 
-最近整理：2026-10-10（从项目 README 拆分）。所有命令都支持全局参数 `--home <DIR>`、`--output human|json|jsonl`，删除命令另有 `--yes`。
+最近整理：2026-10-10（从项目 README 拆分）。所有命令都支持全局参数 `--home <DIR>`（默认 `$AGT_HOME`，未设置时为 `~/.agt`）、`--output human|json|jsonl`，删除命令另有 `--yes`。
 
 ## 资源管理
 

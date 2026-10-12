@@ -38,8 +38,28 @@ impl AgtPaths {
     }
 }
 
+/// Environment variable that overrides the default `~/.agt` home.
+pub const AGT_HOME_ENV: &str = "AGT_HOME";
+
+/// Returns `$AGT_HOME` when it is set and non-empty, otherwise `~/.agt`.
 pub fn default_agt_home() -> Result<PathBuf> {
-    let home = user_home_dir().ok_or(AgtError::HomeDirUnavailable)?;
+    resolve_default_home(
+        env::var_os(AGT_HOME_ENV).map(PathBuf::from),
+        user_home_dir(),
+    )
+}
+
+fn resolve_default_home(agt_home: Option<PathBuf>, user_home: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(home) = agt_home.filter(|home| !home.as_os_str().is_empty()) {
+        if !home.is_absolute() {
+            return Err(AgtError::invalid_input(format!(
+                "{AGT_HOME_ENV} 必须是绝对路径：{}",
+                home.display()
+            )));
+        }
+        return Ok(home);
+    }
+    let home = user_home.ok_or(AgtError::HomeDirUnavailable)?;
     Ok(home.join(".agt"))
 }
 
@@ -76,5 +96,24 @@ mod tests {
             paths.default_category_dir("agents"),
             PathBuf::from("/tmp/example-agt/agents/default")
         );
+    }
+
+    #[test]
+    fn agt_home_overrides_the_user_home_default() {
+        let user = Some(PathBuf::from("/home/someone"));
+
+        assert_eq!(
+            resolve_default_home(None, user.clone()).expect("default"),
+            PathBuf::from("/home/someone/.agt")
+        );
+        assert_eq!(
+            resolve_default_home(Some(PathBuf::new()), user.clone()).expect("empty is unset"),
+            PathBuf::from("/home/someone/.agt")
+        );
+        assert_eq!(
+            resolve_default_home(Some(PathBuf::from("/srv/agt")), None).expect("override"),
+            PathBuf::from("/srv/agt")
+        );
+        assert!(resolve_default_home(Some(PathBuf::from("agt")), user).is_err());
     }
 }

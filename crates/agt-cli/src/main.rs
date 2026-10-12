@@ -29,7 +29,7 @@ mod signals;
 #[derive(Debug, Parser)]
 #[command(name = "agt", version, about = "CLI-first agent resource manager")]
 struct Cli {
-    /// agt data home (defaults to $HOME/.agt)
+    /// agt data home (defaults to $AGT_HOME, then $HOME/.agt)
     #[arg(long, global = true, value_name = "DIR")]
     home: Option<PathBuf>,
 
@@ -715,7 +715,8 @@ fn run_cli() -> Result<()> {
 }
 
 fn ensure_default_home_ready() -> Result<PathBuf> {
-    let summary = initialize_default_home().context("初始化默认 agt home 失败")?;
+    let summary =
+        initialize_default_home().context("初始化默认 agt home（$AGT_HOME 或 ~/.agt）失败")?;
     let default_prompt = summary
         .home
         .join("prompts")

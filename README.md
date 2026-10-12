@@ -65,6 +65,17 @@ Agent 配置中不再包含知识库（KB）或 runtime 依赖。所有引用都
 ## 初始化
 
 安装后首次运行 CLI 时，默认 `~/.agt` 会自动准备好，日常使用不需要手动初始化。
+
+如果想把数据放在别的目录，可以设置环境变量 `AGT_HOME`（必须是绝对路径）。
+设置后 CLI 和 Web 都优先使用它，首次使用时同样会自动初始化：
+
+```bash
+# 写入 ~/.zshrc 或 ~/.bashrc 后长期生效
+export AGT_HOME=/data/agt
+```
+
+确定 home 的顺序是：`--home` > `AGT_HOME` > `~/.agt`。`AGT_HOME` 为空时视为未设置。
+
 只有在为另一个目录建立独立资源 home 时才需要调用 `init`，并且必须显式传入目标目录：
 
 ```bash
@@ -101,7 +112,7 @@ symlink；这样即使目录中出现指向 home 外部的链接，也不会被�
 所有命令都支持以下全局参数：
 
 ```text
---home <DIR>                 指定资源 home，默认 $HOME/.agt（`init` 使用位置参数）
+--home <DIR>                 指定资源 home，默认 $AGT_HOME，未设置时为 $HOME/.agt（`init` 使用位置参数）
 --output human|json|jsonl    选择输出格式
 --yes                        跳过删除确认（仅删除命令）
 ```

@@ -346,7 +346,7 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
 }
 
 export async function start(argv = process.argv.slice(2)) {
-  const options = { home: resolve(homedir(), '.agt'), binary: resolve(here, '../target/debug/agt'), principal: 'web-operator', port: 4317 };
+  const options = { home: process.env.AGT_HOME || resolve(homedir(), '.agt'), binary: resolve(here, '../target/debug/agt'), principal: 'web-operator', port: 4317 };
   for (let i = 0; i < argv.length; i += 2) {
     const key = { '--home': 'home', '--binary': 'binary', '--principal': 'principal', '--port': 'port' }[argv[i]];
     if (!key || !argv[i + 1]) throw new Error('用法：node web/server.mjs [--home DIR] [--binary PATH] [--principal ID] [--port 4317]');

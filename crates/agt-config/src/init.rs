@@ -34,7 +34,7 @@ pub struct InitSummary {
     pub data_dirs: Vec<PathBuf>,
 }
 
-/// Ensure the default `~/.agt` home has the base directory layout.
+/// Ensure the default home (`$AGT_HOME`, else `~/.agt`) has the base directory layout.
 ///
 /// This is intended for the installed CLI's normal startup path.  Explicit
 /// project homes should use [`initialize_home`] with their target directory.
