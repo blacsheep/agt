@@ -695,8 +695,8 @@ fn run_cli() -> Result<()> {
         let summary = initialize_home(Some(args.path.clone())).context("初始化 agt home 失败")?;
         let prompt_store = PromptStore::new(summary.home.clone());
         prompt_store
-            .ensure_default_prompt()
-            .context("初始化默认 Prompt 失败")?;
+            .ensure_builtin_prompts()
+            .context("初始化内置 Prompt 失败")?;
         return emit_value(
             serde_json::json!({
                 "home": summary.home,
@@ -727,8 +727,8 @@ fn ensure_default_home_ready() -> Result<PathBuf> {
         .unwrap_or(false);
     if !default_prompt_exists {
         PromptStore::new(summary.home.clone())
-            .ensure_default_prompt()
-            .context("初始化默认 Prompt 失败")?;
+            .ensure_builtin_prompts()
+            .context("初始化内置 Prompt 失败")?;
     }
     Ok(summary.home)
 }

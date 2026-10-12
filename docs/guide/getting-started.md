@@ -54,6 +54,10 @@ target/debug/agt --home /tmp/agt-framework-demo tool call --principal owner --ma
 ```
 
 按同样方法创建 `planner` Agent、principal 和 binding（可复用模型和 Prompt）。
+
+`init` 还会预置内置的 `lead` Prompt：它描述了组建团队、注册与验证 MCP、委派任务和汇报的完整流程。
+创建团队负责人时可直接引用 `"prompt":"lead"`，并挂载 `builtin_tools: ["resource_management","task_collaboration"]`。
+已有 home 可重新执行 `agt init <home>` 补上；已存在的同名 Prompt 不会被覆盖。
 资源定义与 IM 身份分离：仅创建 Agent 定义不会启动自动回复，必须显式绑定。
 
 ```bash

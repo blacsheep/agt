@@ -50,7 +50,7 @@ try {
   await evaluate('showAgent()');
   assert.equal(await evaluate('document.querySelector("[name=allow_mcp]") === null'),true);
   assert.equal(await evaluate('Object.hasOwn(bindingData(new FormData(document.querySelector("#modal-form")), "test", "test"), "allow_mcp")'),false);
-  await evaluate(`document.querySelector('[name=name]').value='external'; document.querySelector('[name=prompt]').value='You review code.';document.querySelector('[name=execution]').value='external';document.querySelector('[name=execution]').dispatchEvent(new Event('change'));document.querySelector('[name=harness]').value='default/local';document.querySelector('[name=harness]').dispatchEvent(new Event('change'));`);
+  await evaluate(`document.querySelector('[name=name]').value='external'; document.querySelector('[name=prompt_text]').value='You review code.';document.querySelector('[name=execution]').value='external';document.querySelector('[name=execution]').dispatchEvent(new Event('change'));document.querySelector('[name=harness]').value='default/local';document.querySelector('[name=harness]').dispatchEvent(new Event('change'));`);
   assert.equal(await evaluate('document.querySelector("[name=model]").disabled'),true);
   assert.equal(await evaluate('document.querySelector("[name=harness]").required'),true);
   assert.equal(await evaluate('document.querySelector("[name=cwd]").readOnly'),true);

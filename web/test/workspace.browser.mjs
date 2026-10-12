@@ -230,6 +230,23 @@ try {
   assert.equal(await evaluate('document.querySelector("#modal-body").textContent.includes("模型步数默认不限")'),true);
   await evaluate(`closeModal(); showAgent();`);
   assert.equal(await evaluate('document.querySelector("#modal-form [name=steps]")'),null);
+  // Reuse an existing Prompt: the seeded lead is offered and no new Prompt resource is written.
+  await evaluate(`const source=document.querySelector('#modal-form [name=prompt_source]'); source.value='existing'; source.dispatchEvent(new Event('change'));`);
+  assert.equal(await evaluate('document.querySelector("#modal-form [name=prompt_ref]").value'),'default/lead');
+  assert.equal(await evaluate('document.querySelector("#modal-form [name=prompt_text]").disabled'),true);
+  assert.equal(await evaluate('document.querySelector("#lead-prompt-hint").classList.contains("hidden")'),false);
+  await evaluate(`
+    window.savedApi=api; window.savedBootstrap=bootstrap; window.agentWrites=[];
+    api=async(path,data)=>{ if(data?.name==='resource_write') agentWrites.push(data.args); return {}; };
+    bootstrap=async()=>{};
+    const form=document.querySelector('#modal-form');
+    form.querySelector('[name=name]').value='helper';
+    const model=form.querySelector('[name=model]'); model.insertAdjacentHTML('beforeend','<option value="default/fixture">fixture</option>'); model.value='default/fixture';
+    form.dispatchEvent(new Event('submit',{cancelable:true}));
+  `);
+  await wait('!document.querySelector("#modal").open');
+  assert.deepEqual(await evaluate('agentWrites.map(w=>[w.kind,w.data.prompt||null])'),[['agent','default/lead']]);
+  await evaluate('api=savedApi; bootstrap=savedBootstrap;');
   await evaluate(`closeModal(); switchPage('chat');`);
   await seed();
   await evaluate(`showGroupInfo();`);

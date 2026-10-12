@@ -12,6 +12,6 @@ pub use safe::{
     PromptSummary,
 };
 pub use store::{
-    DEFAULT_PROMPT_BODY, DEFAULT_PROMPT_NAME, PROMPT_DOCUMENT_MAX_BYTES, PROMPT_FILE, PromptScan,
-    PromptStore, StoredPrompt,
+    DEFAULT_PROMPT_BODY, DEFAULT_PROMPT_NAME, LEAD_PROMPT_BODY, LEAD_PROMPT_NAME,
+    PROMPT_DOCUMENT_MAX_BYTES, PROMPT_FILE, PromptScan, PromptStore, StoredPrompt,
 };

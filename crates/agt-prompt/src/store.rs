@@ -14,6 +14,9 @@ use crate::name::validate_prompt_name;
 pub const PROMPT_FILE: &str = "PROMPT.md";
 pub const DEFAULT_PROMPT_NAME: &str = "default";
 pub const DEFAULT_PROMPT_BODY: &str = "You are a helpful assistant.";
+/// Seeded at init for a team lead that knows the framework workflow; editable and deletable.
+pub const LEAD_PROMPT_NAME: &str = "lead";
+pub const LEAD_PROMPT_BODY: &str = include_str!("lead.md");
 pub const PROMPT_DOCUMENT_MAX_BYTES: u64 = 256 * 1024;
 
 #[derive(Clone, Debug)]
@@ -74,6 +77,20 @@ impl PromptStore {
             }
             Err(source) => Err(PromptError::io(&dir, source)),
         }
+    }
+
+    /// Default plus the built-in lead prompt; existing prompts are never overwritten.
+    pub fn ensure_builtin_prompts(&self) -> Result<StoredPrompt> {
+        let default = self.ensure_default_prompt()?;
+        let dir = self.prompt_dir_in(&CategoryName::default(), LEAD_PROMPT_NAME)?;
+        match fs::symlink_metadata(&dir) {
+            Ok(_) => {}
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+                self.create(LEAD_PROMPT_NAME, LEAD_PROMPT_BODY)?;
+            }
+            Err(source) => return Err(PromptError::io(&dir, source)),
+        }
+        Ok(default)
     }
 
     pub fn create(&self, name: &str, content: &str) -> Result<StoredPrompt> {
@@ -448,6 +465,22 @@ mod tests {
             0o600
         );
         assert_eq!(store.read("private").unwrap().content, "updated");
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn seeds_lead_prompt_without_overwriting_edits() {
+        let home = test_home("lead-seed");
+        let store = PromptStore::new(&home);
+        store.ensure_builtin_prompts().unwrap();
+        assert_eq!(
+            store.read(LEAD_PROMPT_NAME).unwrap().content,
+            LEAD_PROMPT_BODY
+        );
+        store.update(LEAD_PROMPT_NAME, "my lead").unwrap();
+        store.ensure_builtin_prompts().unwrap();
+        assert_eq!(store.read(LEAD_PROMPT_NAME).unwrap().content, "my lead");
+        store.delete(LEAD_PROMPT_NAME).unwrap();
         let _ = fs::remove_dir_all(home);
     }
 

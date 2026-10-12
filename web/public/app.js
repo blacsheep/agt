@@ -324,7 +324,7 @@ async function selectConversation(id) {
   const viewer = state.viewer, page = state.page, generation = ++state.generation;
   let entry = state.conversations.find(x => x.conversation.id === id);
   // A concurrent list refresh can discard the one this navigation awaited; look the conversation up directly.
-  if (!entry) entry = (await read('conversation_list', { include_hidden: true }, viewer)).find(x => x.conversation.id === id);
+  if (!entry) { const listed = await read('conversation_list', { include_hidden: true }, viewer); entry = Array.isArray(listed) ? listed.find(x => x.conversation.id === id) : undefined; }
   if (entry?.hidden && !isObserver()) await api('conversation', {action:'show',conversation:id});
   if (generation !== state.generation || viewer !== state.viewer || page !== state.page) return;
   state.conversation = entry?.conversation;
@@ -985,17 +985,19 @@ async function ensurePrincipal(id, name) {
   if (!exists) { await tool('principal_create', { id, name, kind: 'agent' }); state.boot.principals.push({ id, name, kind: 'agent' }); }
 }
 function showAgent() {
-  dialog('创建一个新角色', `<form id="modal-form"><div class="form-note">只创建你命名的新资源。支持 Chat Completions 和 Responses，按模型配置调用对应接口。</div><div class="form-grid">${field('资源名称 / 身份 ID', '<input name="name" placeholder="如 researcher" pattern="[A-Za-z0-9][A-Za-z0-9_-]*" maxlength="60" required>')}${field('显示说明', '<input name="description" placeholder="如：负责事实核验与独立分析" maxlength="200">')}</div>${executionFields()}${field('角色 Prompt', '<textarea name="prompt" required placeholder="你负责什么？如何与同伴沟通？何时应当停止或保持沉默？"></textarea>')}${field('Skills（可选）', checks(items('skill').map(s => [ref(s), s.name || s.package]), 'skills'))}${field('MCP（可选）', checks(items('mcp').map(m => [ref(m), m.name]), 'mcps'))}${builtinFields()}${bindingFields()}<div id="setup-progress" class="progress"></div><div class="form-actions"><button class="primary" type="submit">创建并启用</button></div></form>`);
-  bindExecutionFields();
+  dialog('创建一个新角色', `<form id="modal-form"><div class="form-note">只创建你命名的新资源。支持 Chat Completions 和 Responses，按模型配置调用对应接口。</div><div class="form-grid">${field('资源名称 / 身份 ID', '<input name="name" placeholder="如 researcher" pattern="[A-Za-z0-9][A-Za-z0-9_-]*" maxlength="60" required>')}${field('显示说明', '<input name="description" placeholder="如：负责事实核验与独立分析" maxlength="200">')}</div>${executionFields()}<section class="prompt-source">${field('角色 Prompt', `<select name="prompt_source">${options([['new','新写一份'],['existing','使用已有 Prompt']],'new')}</select>`)}<div data-prompt-new>${field('Prompt 正文', '<textarea name="prompt_text" required placeholder="你负责什么？如何与同伴沟通？何时应当停止或保持沉默？"></textarea>', '保存为新的 Prompt 资源（名称-role），之后可在资源库中复用。')}</div><div data-prompt-existing class="hidden">${field('选择 Prompt', `<select name="prompt_ref" disabled>${options(items('prompt').map(p => [ref(p), ref(p) === 'default/lead' ? 'lead · 内置团队负责人' : ref(p)]), items('prompt').some(p => ref(p) === 'default/lead') ? 'default/lead' : '')}</select>`, '直接引用共享正文；之后修改该 Prompt 会影响所有引用它的角色。')}<p id="lead-prompt-hint" class="form-note hidden">内置 lead Prompt 熟悉框架的完整流程，通常配合下方的“资源管理”和“任务协作”一起使用。</p></div></section>${field('Skills（可选）', checks(items('skill').map(s => [ref(s), s.name || s.package]), 'skills'))}${field('MCP（可选）', checks(items('mcp').map(m => [ref(m), m.name]), 'mcps'))}${builtinFields()}${bindingFields()}<div id="setup-progress" class="progress"></div><div class="form-actions"><button class="primary" type="submit">创建并启用</button></div></form>`);
+  bindExecutionFields(); bindPromptSource();
   const done = new Set(); let lockedName = null;
   formHandler(async data => {
-    const name = data.get('name').trim(); const prompt = `${name}-role`;
+    const name = data.get('name').trim(), existing = data.get('prompt_source') === 'existing';
+    const prompt = existing ? data.get('prompt_ref') : `${name}-role`;
+    if (existing && !prompt) throw new Error('请选择一个已有 Prompt，或改为新写一份。');
     if (lockedName && name !== lockedName) throw new Error('已有部分创建步骤完成。请保持名称重试，或关闭后创建另一个角色。');
-    if (!lockedName && (items('agent').some(a => ref(a) === `default/${name}`) || items('prompt').some(p => ref(p) === `default/${prompt}`) || state.boot.principals.some(p => p.id === name))) throw new Error('资源或身份名称已存在。请换一个名称，原配置不会被覆盖。');
+    if (!lockedName && (items('agent').some(a => ref(a) === `default/${name}`) || (!existing && items('prompt').some(p => ref(p) === `default/${prompt}`)) || state.boot.principals.some(p => p.id === name))) throw new Error('资源或身份名称已存在。请换一个名称，原配置不会被覆盖。');
     lockedName = name;
     const step = async (key, action) => {
       if (!done.has(key)) { await action(); done.add(key); }
-      const locked = ['name', ...(done.has('Prompt') ? ['prompt'] : []), ...(done.has('Agent') ? ['description', 'execution', 'harness', 'model', 'skills', 'mcps', 'builtin_tools'] : [])];
+      const locked = ['name', ...(done.has('Prompt') ? ['prompt_source', 'prompt_text', 'prompt_ref'] : []), ...(done.has('Agent') ? ['description', 'execution', 'harness', 'model', 'skills', 'mcps', 'builtin_tools'] : [])];
       // Preserve fields in FormData while preventing edits to already-created resources.
       $$('#modal-form input, #modal-form textarea, #modal-form select').forEach(input => {
         if (locked.includes(input.name)) {
@@ -1009,12 +1011,23 @@ function showAgent() {
       });
       $('#setup-progress').textContent = [...done].join(' → ') + ' ✓ · 已创建的资源字段已锁定；可修正后续步骤后重试。';
     };
-    await step('Prompt', () => tool('resource_write', { kind: 'prompt', reference: prompt, create: true, data: { text: data.get('prompt') } }));
+    await step('Prompt', () => existing ? null : tool('resource_write', { kind: 'prompt', reference: prompt, create: true, data: { text: data.get('prompt_text') } }));
     await step('Agent', () => tool('resource_write', { kind: 'agent', reference: name, create: true, data: { ...executionData(data), prompt, description: data.get('description'), skills: data.getAll('skills'), mcps: data.getAll('mcps'), builtin_tools: data.getAll('builtin_tools') } }));
     await step('身份', () => ensurePrincipal(name, name));
     await step('启用', () => tool('agent_bind', bindingData(data, name, name)));
     $('#modal').close(); await bootstrap(); notify(`${name} 已就绪。新建会话邀请它，再发送任务。`);
   });
+}
+function bindPromptSource() {
+  const source = $('#modal-form [name=prompt_source]'), choice = $('#modal-form [name=prompt_ref]');
+  const update = () => {
+    const existing = source.value === 'existing';
+    $('[data-prompt-new]').classList.toggle('hidden', existing); $('[data-prompt-existing]').classList.toggle('hidden', !existing);
+    // Locked steps disable their inputs; leave those alone so FormData keeps the hidden copies.
+    if (!source.disabled) { $('#modal-form [name=prompt_text]').disabled = existing; $('#modal-form [name=prompt_text]').required = !existing; choice.disabled = !existing; choice.required = existing; }
+    $('#lead-prompt-hint').classList.toggle('hidden', !existing || choice.value !== 'default/lead');
+  };
+  source.onchange = update; choice.onchange = update; update();
 }
 function resourceActions(kind, resource) {
   const reference = esc(ref(resource));
