@@ -25,6 +25,7 @@ mod events;
 mod framework;
 mod runtime;
 mod signals;
+mod web;
 
 #[derive(Debug, Parser)]
 #[command(name = "agt", version, about = "CLI-first agent resource manager")]
@@ -102,6 +103,8 @@ enum Command {
     /// manage generic IM participants, conversations and messages
     #[command(subcommand, alias = "conversation")]
     Im(ImCommand),
+    /// start the Web console (needs Node.js 22+)
+    Web(web::WebArgs),
 }
 
 #[derive(Debug, Args)]
@@ -752,6 +755,7 @@ fn dispatch(command: Command, home: &Path, output: OutputMode, yes: bool) -> Res
         Command::Agent(command) => dispatch_agent(command, home, output, yes),
         Command::Run(command) => runtime::inspect(command, home, output),
         Command::Im(command) => dispatch_im(command, home, output),
+        Command::Web(args) => web::run(args, home),
         Command::Init(_) => unreachable!(),
     }
 }

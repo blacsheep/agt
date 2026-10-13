@@ -3,8 +3,9 @@
 | 概览 | |
 | --- | --- |
 | **是什么** | AGT Studio，agt 的本地浏览器界面 |
-| **启动** | `node web/server.mjs` |
-| **代码** | `web/`（Node.js 服务和原生 HTML/CSS/JavaScript，无 npm 依赖） |
+| **启动** | `agt web` |
+| **依赖** | Node.js 22 或更新 |
+| **代码** | `web/`（Node.js 服务和原生 HTML/CSS/JavaScript，无 npm 依赖），内置在 `agt` 中 |
 
 ## 作用
 
@@ -14,8 +15,7 @@ Web 控制台是 `agt` CLI 之上的轻量本地界面：每个操作都调用 C
 ## 怎么用
 
 ```bash
-cargo build -p agt-cli
-node web/server.mjs
+agt web
 ```
 
 打开终端打印的完整链接，包括 `#` 后面的令牌。在远程服务器上使用 SSH 隧道（`ssh -N -L 4317:127.0.0.1:4317 user@server`）；
@@ -25,21 +25,29 @@ node web/server.mjs
 
 | 参数 | 含义 |
 | --- | --- |
-| `--home <目录>` | 要打开的工作空间（默认 `$AGT_HOME`，否则 `~/.agt`） |
+| `agt --home <目录> web` | 要打开的工作空间（默认 `$AGT_HOME`，否则 `~/.agt`） |
 | `--port <n>` | `127.0.0.1` 上的端口（默认 4317） |
 
 ## 全部参数
 
-### 服务选项
+### `agt web`
 
 | 选项 | 默认值 | 含义 |
 | --- | --- | --- |
-| `--home <目录>` | `$AGT_HOME`，否则 `~/.agt` | home 目录 |
-| `--port <n>` | `4317` | 端口。服务只监听 `127.0.0.1`。 |
-| `--binary <路径>` | `target/debug/agt` | 要调用的 `agt` CLI |
+| `--port <n>` | `4317` | 端口。控制台只监听 `127.0.0.1`。 |
 | `--principal <id>` | `web-operator` | 你的身份。第一个在某个 home 上启动控制台的身份会成为工作空间负责人；之后启动必须使用同一身份。 |
+| `--node <路径>` | `node` | Node.js 程序（22 或更新） |
+| `--home <目录>`（全局） | `$AGT_HOME`，否则 `~/.agt` | home 目录；写在 `web` 前面 |
 
-首次启动时，服务会在需要时创建 home 和你的用户身份。启动时不会为旧消息调用模型。
+`agt web` 首次启动时把控制台文件写入 `<home>/.web/<版本哈希>/`，删除其他版本留下的副本，然后用 Node.js 运行，
+并传入自身路径，确保控制台和调度器使用同一个 `agt`。按 Ctrl+C 会同时停止控制台和调度器。
+
+首次启动时，控制台会创建你的用户身份。启动时不会为旧消息调用模型。
+
+### 从源码运行
+
+在克隆的仓库中，`node web/server.mjs` 直接从 `web/` 运行控制台。它接受 `--home`、`--port`、`--principal`，
+以及 `--binary <路径>`（要调用的 `agt`，默认 `target/debug/agt`）。
 
 ### 页面
 

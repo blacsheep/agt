@@ -25,32 +25,38 @@ agt 在本机管理 Agent 所需的资源（Provider、Model、Prompt、Skill、
 | 了解架构 | [架构图与执行流程](docs/zh/architecture/index.md) |
 | 全部文档 | [文档导航](docs/README.md) |
 
-## 快速开始
+## 安装
 
-需要 Rust 1.96.1+；Web 需要 Node.js 22+，无需安装前端依赖。
-使用 Codex 作为执行引擎时，还需要另外安装 [Codex CLI](https://github.com/openai/codex) 并确保它在 `PATH` 中。
+**macOS 和 Linux：**
 
 ```bash
-cargo build -p agt-cli
-node web/server.mjs
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.sh | sh
 ```
 
-Windows PowerShell 请显式指定可执行文件：
+**Windows（PowerShell）：**
 
 ```powershell
-cargo build -p agt-cli
-node web/server.mjs --binary .\target\debug\agt.exe
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.ps1 | iex"
 ```
 
-也可以把 `agt` 安装到 `PATH`：
+这会把预编译的 `agt` 安装到 `~/.local/bin`。已有 Rust 1.96.1+ 的话，也可以运行
+`cargo install --git https://github.com/blacsheep/agt agt-cli --locked`。其他方式、更新和卸载见[安装](docs/zh/guide/installation.md)。
+
+另外需要：
+
+- Node.js 22+，用于 Web 控制台（无需安装 npm 依赖）
+- OpenAI 兼容的模型接口，模型需支持工具调用
+- 可选：[Codex CLI](https://github.com/openai/codex)，用于以 Codex 为执行引擎的 Agent
+
+## 快速开始
 
 ```bash
-cargo install --path crates/agt-cli
-node web/server.mjs --binary "$(command -v agt)"
+agt web
 ```
 
-打开终端打印的完整带令牌链接。Node 提供页面与本机 HTTP 接口，并启动 Rust
-调度进程。升级代码后重新构建 CLI、重启 Web 并刷新页面。
+打开终端打印的完整链接，包括 `#` 后的令牌。控制台监听 `127.0.0.1:4317`，并在后台运行调度器。
+然后按[快速开始](docs/zh/guide/quick-start.md)接入模型，让 lead Agent 自己组建团队。
+
 远程服务器的访问方式见[安装](docs/zh/guide/installation.md#在远程服务器上运行)，安全边界见[安全模型](docs/zh/help/security.md)。
 
 ## 模块

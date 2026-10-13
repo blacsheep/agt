@@ -3,7 +3,7 @@
 本指南带你从全新安装走到一个会自己组建团队的 lead Agent。主要使用 Web 控制台；
 最后的 [CLI 部分](#用-cli-完成同样的事)展示在终端中的同样步骤。
 
-开始之前，先[安装 agt](./installation.md)，用 `node web/server.mjs` 启动控制台，并打开它打印的完整链接。
+开始之前，先[安装 agt](./installation.md)，用 `agt web` 启动控制台，并打开它打印的完整链接。
 
 ## 1. 接入模型
 

@@ -3,8 +3,9 @@
 | Overview | |
 | --- | --- |
 | **What it is** | AGT Studio, the local browser UI for agt |
-| **Start** | `node web/server.mjs` |
-| **Code** | `web/` (Node.js server and plain HTML/CSS/JavaScript, no npm dependencies) |
+| **Start** | `agt web` |
+| **Needs** | Node.js 22 or newer |
+| **Code** | `web/` (Node.js server and plain HTML/CSS/JavaScript, no npm dependencies), built into `agt` |
 
 ## What it does
 
@@ -15,8 +16,7 @@ as you send a message. The UI is in Chinese; this page gives each label with its
 ## How to use it
 
 ```bash
-cargo build -p agt-cli
-node web/server.mjs
+agt web
 ```
 
 Open the full link printed in the terminal, including the token after `#`. On a remote server,
@@ -27,22 +27,32 @@ use an SSH tunnel (`ssh -N -L 4317:127.0.0.1:4317 user@server`); see
 
 | Parameter | Meaning |
 | --- | --- |
-| `--home <dir>` | Workspace to open (default `$AGT_HOME`, then `~/.agt`) |
+| `agt --home <dir> web` | Workspace to open (default `$AGT_HOME`, then `~/.agt`) |
 | `--port <n>` | Port on `127.0.0.1` (default 4317) |
 
 ## All parameters
 
-### Server options
+### `agt web`
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--home <dir>` | `$AGT_HOME`, then `~/.agt` | Home directory |
-| `--port <n>` | `4317` | Port. The server only listens on `127.0.0.1`. |
-| `--binary <path>` | `target/debug/agt` | The `agt` CLI to call |
+| `--port <n>` | `4317` | Port. The console only listens on `127.0.0.1`. |
 | `--principal <id>` | `web-operator` | Your identity. The first identity to start the console on a home becomes the workspace owner; later starts must use the same identity. |
+| `--node <path>` | `node` | Node.js executable (22 or newer) |
+| `--home <dir>` (global) | `$AGT_HOME`, then `~/.agt` | Home directory; write it before `web` |
 
-On first start the server creates the home if needed and your user identity. It never calls a
-model for old messages on start.
+`agt web` writes the console's files to `<home>/.web/<version hash>/` on first start, removes
+copies from other versions, and runs them with Node.js, passing its own path so the console and
+the scheduler use the same `agt`. Ctrl+C stops the console and the scheduler.
+
+On first start the console creates your user identity. It never calls a model for old messages
+on start.
+
+### Running from source
+
+In a repository clone, `node web/server.mjs` runs the console from `web/` directly. It accepts
+`--home`, `--port`, `--principal`, and `--binary <path>` (the `agt` to call, default
+`target/debug/agt`).
 
 ### Pages
 

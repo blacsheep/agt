@@ -3,8 +3,8 @@
 The local Web console for agt. 本目录是 agt 的本机 Web 控制台。
 
 ```bash
-cargo build -p agt-cli
-node web/server.mjs
+agt web                      # installed agt
+node web/server.mjs          # from a clone, after cargo build -p agt-cli
 ```
 
 Open the full link printed in the terminal, including the token after `#`.

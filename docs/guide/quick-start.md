@@ -9,8 +9,8 @@ The console currently uses Chinese labels. This guide gives each label with its 
 example **资源库** (Resources).
 :::
 
-Before you start, [install agt](./installation.md) and start the console with
-`node web/server.mjs`. Open the full link it prints.
+Before you start, [install agt](./installation.md) and start the console with `agt web`.
+Open the full link it prints.
 
 ## 1. Connect a model
 

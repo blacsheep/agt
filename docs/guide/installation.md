@@ -4,59 +4,83 @@
 
 | Requirement | Notes |
 | --- | --- |
-| Rust 1.96.1 or newer | Builds the `agt` CLI, which contains the whole framework |
-| Node.js 22 or newer | Runs the Web console; it has no npm dependencies |
+| Linux, macOS or Windows | Prebuilt binaries for x86_64 and ARM64 (Windows: x86_64) |
+| Node.js 22 or newer | Only for the Web console; no npm packages are installed |
 | A model endpoint | Any OpenAI-compatible API whose model supports tool calls |
 | Codex CLI (optional) | Only for [Codex agents](./codex.md); agt starts it as `codex app-server` |
 
-agt runs on Linux and macOS. On Windows, pass the binary path to the Web console
-explicitly (see below).
+## Install
 
-## Build from source
+**macOS and Linux:**
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.ps1 | iex"
+```
+
+The installer detects your platform, downloads the matching `agt` binary from
+[GitHub Releases](https://github.com/blacsheep/agt/releases), checks its SHA-256 checksum and
+puts it in `~/.local/bin` (on Windows, `%USERPROFILE%\.local\bin`). It also adds that directory
+to your `PATH`; open a new terminal, or run the `source` command it prints, then check:
+
+```bash
+agt --version
+```
+
+::: details Prefer to read the script first?
+Download it, read it, then run it:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf -o agt-installer.sh https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.sh
+less agt-installer.sh
+sh agt-installer.sh
+```
+
+You can also download an archive for your platform from the
+[Releases page](https://github.com/blacsheep/agt/releases), verify it against `sha256.sum`, and
+put `agt` anywhere on your `PATH`.
+:::
+
+### Other ways to install
+
+**With Cargo** (Rust 1.96.1 or newer), from the latest source:
+
+```bash
+cargo install --git https://github.com/blacsheep/agt agt-cli --locked
+```
+
+**From a clone**, for development:
 
 ```bash
 git clone https://github.com/blacsheep/agt.git
 cd agt
-cargo build -p agt-cli
-```
-
-The binary is `target/debug/agt`. To put `agt` on your `PATH` instead:
-
-```bash
-cargo install --path crates/agt-cli
-agt --version
+cargo build -p agt-cli        # target/debug/agt
 ```
 
 ## Start the Web console
 
-From the repository root:
-
 ```bash
-node web/server.mjs
+agt web
 ```
 
-If you installed `agt` with `cargo install`, point the console at it:
-
-```bash
-node web/server.mjs --binary "$(command -v agt)"
-```
-
-On Windows PowerShell:
-
-```powershell
-node web/server.mjs --binary .\target\debug\agt.exe
-```
-
-The server prints a link such as `http://127.0.0.1:4317/#<token>`. Open the **full** link,
-including the token after `#`; the token is what authorizes your browser. The server also
-starts the scheduler in the background, so agents can reply as soon as you configure them.
+The command prints a link such as `http://127.0.0.1:4317/#<token>`. Open the **full** link,
+including the token after `#`; the token is what authorizes your browser. The console also runs
+the scheduler, so agents can reply as soon as you configure them. Press Ctrl+C to stop it.
 
 | Option | Default | Purpose |
 | --- | --- | --- |
 | `--port` | `4317` | Port to listen on (always `127.0.0.1`) |
-| `--home` | `$AGT_HOME`, then `~/.agt` | Data directory to use |
-| `--binary` | `target/debug/agt` | The `agt` CLI to call |
 | `--principal` | `web-operator` | Your identity in conversations |
+| `--node` | `node` on the `PATH` | Node.js executable, if Node 22 is not the default |
+| `--home` (before `web`) | `$AGT_HOME`, then `~/.agt` | Data directory to use |
+
+The console's files are built into `agt`; on first start they are written to `<home>/.web/`.
+In a repository clone, `node web/server.mjs` starts the console from the source instead.
 
 ### Running on a remote server
 
@@ -95,13 +119,14 @@ home for a project, run `agt init <dir>`.
 
 ## Updating
 
-```bash
-git pull
-cargo build -p agt-cli
-```
+Run the installer again; it replaces `agt` with the latest release. Then restart `agt web` and
+open the new link. Your data in the home directory is kept.
 
-Then restart `node web/server.mjs` and reload the page with the new link. The Web console,
-the CLI and the scheduler must all use the same build.
+## Uninstalling
+
+Delete the binary (`~/.local/bin/agt`) and the `PATH` setup the installer created
+(`~/.config/agt-cli/`, and the line that sources it in your shell profile). Your data stays in
+`~/.agt` (or `$AGT_HOME`) until you delete it.
 
 ## Next steps
 

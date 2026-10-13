@@ -90,7 +90,7 @@ like anything you created yourself.
   expires after 30 minutes by default. Stop everything at any time with **停止本群 Agent** or
   `/stop`. See [Scheduler](../modules/scheduler.md#settings-config-yaml) for longer jobs.
 - **Use separate homes for experiments.** `agt init ~/experiments/game` creates a clean
-  workspace, and `node web/server.mjs --home ~/experiments/game --port 4318` runs a console
+  workspace, and `agt --home ~/experiments/game web --port 4318` runs a console
   for it.
 - **Write your own lead.** `default/lead` is a starting point. Copy it into a new prompt and
   adapt it to your domain, such as a lead that always builds a reviewer into every team.

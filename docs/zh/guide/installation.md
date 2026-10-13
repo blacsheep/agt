@@ -4,57 +4,79 @@
 
 | 依赖 | 说明 |
 | --- | --- |
-| Rust 1.96.1 或更新 | 构建 `agt` CLI，整个框架都在其中 |
-| Node.js 22 或更新 | 运行 Web 控制台；不需要安装 npm 依赖 |
+| Linux、macOS 或 Windows | 提供 x86_64 和 ARM64 的预编译程序（Windows 为 x86_64） |
+| Node.js 22 或更新 | 仅 Web 控制台需要；不安装任何 npm 依赖 |
 | 模型接口 | 任意 OpenAI 兼容 API，模型需支持工具调用 |
 | Codex CLI（可选） | 仅 [Codex Agent](./codex.md) 需要；agt 以 `codex app-server` 方式启动它 |
 
-agt 可在 Linux 和 macOS 上运行。在 Windows 上需要显式告诉 Web 控制台 CLI 的路径（见下文）。
+## 安装
 
-## 从源码构建
+**macOS 和 Linux：**
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.sh | sh
+```
+
+**Windows（PowerShell）：**
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.ps1 | iex"
+```
+
+安装脚本会识别你的平台，从 [GitHub Releases](https://github.com/blacsheep/agt/releases) 下载对应的 `agt` 程序，
+校验 SHA-256，然后放到 `~/.local/bin`（Windows 为 `%USERPROFILE%\.local\bin`）。它还会把该目录加入 `PATH`；
+打开一个新终端，或运行它打印的 `source` 命令，然后检查：
+
+```bash
+agt --version
+```
+
+::: details 想先看看脚本内容？
+先下载、阅读，再运行：
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf -o agt-installer.sh https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.sh
+less agt-installer.sh
+sh agt-installer.sh
+```
+
+也可以从 [Releases 页面](https://github.com/blacsheep/agt/releases)下载对应平台的压缩包，用 `sha256.sum` 校验后，
+把 `agt` 放到 `PATH` 中的任意位置。
+:::
+
+### 其他安装方式
+
+**用 Cargo**（Rust 1.96.1 或更新），从最新源码安装：
+
+```bash
+cargo install --git https://github.com/blacsheep/agt agt-cli --locked
+```
+
+**从克隆的仓库构建**，用于开发：
 
 ```bash
 git clone https://github.com/blacsheep/agt.git
 cd agt
-cargo build -p agt-cli
-```
-
-生成的程序是 `target/debug/agt`。也可以把 `agt` 安装到 `PATH`：
-
-```bash
-cargo install --path crates/agt-cli
-agt --version
+cargo build -p agt-cli        # target/debug/agt
 ```
 
 ## 启动 Web 控制台
 
-在仓库根目录执行：
-
 ```bash
-node web/server.mjs
+agt web
 ```
 
-如果用 `cargo install` 安装了 `agt`，让控制台使用它：
+命令会打印一个链接，例如 `http://127.0.0.1:4317/#<令牌>`。请打开**完整**链接，包括 `#` 后面的令牌，浏览器靠它获得授权。
+控制台同时运行调度器，配置好的 Agent 可以立即回复。按 Ctrl+C 停止。
 
-```bash
-node web/server.mjs --binary "$(command -v agt)"
-```
-
-Windows PowerShell：
-
-```powershell
-node web/server.mjs --binary .\target\debug\agt.exe
-```
-
-服务会打印一个链接，例如 `http://127.0.0.1:4317/#<令牌>`。请打开**完整**链接，包括 `#` 后面的令牌，
-浏览器靠它获得授权。服务同时会在后台启动调度器，配置好的 Agent 可以立即回复。
-
-| 参数 | 默认值 | 用途 |
+| 选项 | 默认值 | 用途 |
 | --- | --- | --- |
 | `--port` | `4317` | 监听端口（始终只监听 `127.0.0.1`） |
-| `--home` | `$AGT_HOME`，否则 `~/.agt` | 使用的数据目录 |
-| `--binary` | `target/debug/agt` | 调用的 `agt` CLI |
 | `--principal` | `web-operator` | 你在会话中的身份 |
+| `--node` | `PATH` 中的 `node` | Node.js 程序路径，当默认的 node 不是 22 版时使用 |
+| `--home`（写在 `web` 前面） | `$AGT_HOME`，否则 `~/.agt` | 使用的数据目录 |
+
+控制台的文件已经内置在 `agt` 中，首次启动时会写入 `<home>/.web/`。在克隆的仓库中，也可以用 `node web/server.mjs` 从源码启动控制台。
 
 ### 在远程服务器上运行
 
@@ -89,12 +111,12 @@ home 的选择顺序是：`--home` > `AGT_HOME` > `~/.agt`。`--home` 只对传�
 
 ## 更新
 
-```bash
-git pull
-cargo build -p agt-cli
-```
+再运行一次安装脚本即可，它会用最新版本替换 `agt`。然后重启 `agt web` 并打开新链接。home 目录中的数据会保留。
 
-然后重启 `node web/server.mjs`，用新链接重新打开页面。Web 控制台、CLI 和调度器必须使用同一次构建。
+## 卸载
+
+删除程序（`~/.local/bin/agt`）以及安装脚本创建的 `PATH` 配置（`~/.config/agt-cli/`，以及 shell 配置文件中引用它的那一行）。
+数据会保留在 `~/.agt`（或 `$AGT_HOME`）中，直到你自己删除。
 
 ## 下一步
 

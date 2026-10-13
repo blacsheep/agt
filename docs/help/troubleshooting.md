@@ -24,8 +24,8 @@ Check these in order:
 6. **Did it decide to stay silent?** In a group, the member status panel shows the agent's
    decision and reason. `[[silent]]` means it had nothing to add.
 7. **Is the scheduler running?** If the console shows **回复服务未连接** (Reply service not
-   connected), restart `node web/server.mjs` and check that `--binary` points to the current
-   build.
+   connected), restart `agt web`. If you run the console from a clone with `node web/server.mjs`, check that
+   `--binary` points to the current build.
 
 ## The model call fails
 
@@ -65,12 +65,13 @@ and retry the task (see [Task collaboration](../guide/tasks.md#when-something-go
 ## The console says "此工作空间的负责人是 …" (The workspace owner is …)
 
 The first person to start the console on a home becomes its owner. Start the console with the
-same identity: `node web/server.mjs --principal <owner>`. `agt im owner get` shows the owner.
+same identity: `agt web --principal <owner>`. `agt im owner get` shows the owner.
 
 ## After updating agt
 
-Rebuild (`cargo build -p agt-cli`), restart `node web/server.mjs`, and open the new link. Mixing
-an old scheduler or `--binary` with new code causes errors such as missing commands.
+Stop `agt web`, run the installer again (or rebuild), start `agt web`, and open the new link. An
+old console or scheduler left running against a newer `agt` causes errors such as missing
+commands.
 
 ## Getting help
 
