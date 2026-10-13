@@ -85,6 +85,9 @@ export default withMermaid({
   srcExclude: ['README.md'],
   head: [['meta', { name: 'theme-color', content: '#3c8772' }]],
   markdown: { config: sourceLinks },
+  // The dev server serves mermaid's CommonJS dependencies (such as fastdom)
+  // unbundled, which breaks every page. Pre-bundling mermaid converts them.
+  vite: { optimizeDeps: { include: ['mermaid'] } },
   themeConfig: {
     socialLinks: [{ icon: 'github', link: repo }],
     search: {
