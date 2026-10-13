@@ -15,5 +15,7 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-da
 install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
 # Where to host releases
 hosting = "github"
+# Publish with the GH_RELEASES_TOKEN secret; the default token is refused for this repository
+github-releases-repo = "blacsheep/agt"
 # Whether to install an updater program
 install-updater = false
