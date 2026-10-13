@@ -135,6 +135,11 @@ cargo build -p agt-cli && node --test web/test/*.test.mjs
 None of the tests need a real API key. Browser tests (`web/test/*.browser.mjs`) need
 a local Chrome and are run separately; see the [Web guide](web/README.md).
 
+## Citation
+
+If you use agt in research, please cite it using [CITATION.cff](CITATION.cff)
+(GitHub shows a "Cite this repository" button for it).
+
 ## License
 
 [MIT](LICENSE)

@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use agt in your research, please cite it as below."
+title: "agt: a local framework for multi-agent teams"
+type: software
+authors:
+  - alias: blacsheep
+repository-code: "https://github.com/blacsheep/agt"
+license: MIT
+version: 0.1.0
+keywords:
+  - multi-agent
+  - llm
+  - agents
+  - mcp
+  - codex
+abstract: >-
+  agt runs a team of AI agents on a local machine. It manages agent resources
+  (providers, models, prompts, skills, MCP servers and harnesses), provides a
+  shared IM with direct and group chats, and drives agents with a persistent
+  scheduler so they can collaborate, delegate tasks and report back. A lead
+  agent can create teammates, have Codex build MCP tools and attach them to
+  the agents that need them.

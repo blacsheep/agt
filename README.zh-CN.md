@@ -150,6 +150,11 @@ cargo run -q -p agt-cli -- --help
 CLI 集成测试覆盖七类资源 CRUD、Provider secret 脱敏、Provider → Model →
 Agent 的递归删除，以及 IM 私聊、幂等消息和群成员生命周期。
 
+## 引用
+
+如果在研究中使用了 agt，请按 [CITATION.cff](CITATION.cff) 引用（GitHub 仓库页面会显示
+"Cite this repository" 按钮）。
+
 ## 许可证
 
 [MIT](LICENSE)
