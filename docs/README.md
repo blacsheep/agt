@@ -8,10 +8,8 @@
 | --- | --- | --- |
 | `guide/` | 怎么用：上手、命令、功能使用方法 | 现行 |
 | `architecture/` | 怎么实现：架构图、模块边界、协议与不变量 | 现行 |
-| `proposals/` | 尚未实施或暂缓的方案、评审结论 | 待定 |
-| `history/` | 已完成或被取代的方案、阶段计划、实测记录 | 仅供追溯 |
 
-另外两份文档放在代码旁：[项目 README](../README.md)（简介、快速开始、模块）和 [Web 指南](../web/README.md)。
+另外两份文档放在代码旁：[项目 README](../README.zh-CN.md)（简介、快速开始、模块）和 [Web 指南](../web/README.md)。
 
 ## 使用指南（guide/）
 
@@ -39,20 +37,10 @@
 | [会话生命周期](architecture/conversations.md) | 隐藏、退群、解散、负责人、已删除身份 |
 | [Web 控制台](architecture/web-console.md) | Node 与 Rust 分工、HTTP 工作流、SSE、界面行为、安全边界 |
 
-## 提案（proposals/）
-
-| 文档 | 状态 |
-| --- | --- |
-| [架构评审 2026-10-10](proposals/architecture-review-2026-10-10.md) | 暂不实施，按触发条件推进 |
-
-## 历史（history/）
-
-见[历史文档索引](history/README.md)。
-
 ## 维护约定
 
 1. 修改行为时，在同一变更中更新对应的现行文档；架构图的更新规则见 [architecture/README.md](architecture/README.md#更新约定)。
 2. 现行文档只描述当前行为，不写“本轮验收”“测试 N 项通过”这类按轮次的记录，这些放在提交说明里。
 3. 不在现行文档中写数据库版本号；结构版本由代码中的 `Schema` 定义。
-4. 方案落地后，把设计要点并入 `architecture/`，原方案移到 `history/` 并在开头标注。
+4. 方案落地后，把设计要点并入 `architecture/`；方案草稿和实测记录不进入仓库。
 5. 新文档默认用中文；代码标识、命令和协议字段保持原文。

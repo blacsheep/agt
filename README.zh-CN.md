@@ -1,0 +1,155 @@
+# agt：本地多 Agent 资源、通信与执行框架
+
+[English](README.md) | 简体中文
+
+agt 在本机管理 Agent 所需的资源（Provider、Model、Prompt、Skill、MCP、Harness、Agent），
+提供通用 IM（私聊/群聊），并由持久化调度器驱动多个 Agent 在会话中协作。
+执行引擎可以是内置的 Native 模型/工具循环，也可以是外部 Codex（Harness）。
+
+- IM 本身不会触发推理：Web 发送消息时默认授权自动回复，CLI 用 `agt schedule` 显式授权。
+- 资源、身份、权限和执行逻辑都在 Rust 中；Web 控制台只是本机 CLI 的界面适配。
+- 这是可信本机框架，不是公网多租户服务。
+
+## 文档
+
+| 想做什么 | 看哪里 |
+| --- | --- |
+| 用界面上手 | [Web 指南](web/README.md) |
+| 用 CLI 接入模型并验收 | [快速上手](docs/guide/getting-started.md) |
+| 查命令 | [CLI 参考](docs/guide/cli.md) |
+| 了解架构 | [整体架构](docs/architecture/overview.md) |
+| 全部文档 | [文档导航](docs/README.md) |
+
+## 快速开始
+
+需要 Rust 1.96.1+；Web 需要 Node.js 22+，无需安装前端依赖。
+使用 Codex 作为执行引擎时，还需要另外安装 [Codex CLI](https://github.com/openai/codex) 并确保它在 `PATH` 中。
+
+```bash
+cargo build -p agt-cli
+node web/server.mjs
+```
+
+Windows PowerShell 请显式指定可执行文件：
+
+```powershell
+cargo build -p agt-cli
+node web/server.mjs --binary .\target\debug\agt.exe
+```
+
+也可以把 `agt` 安装到 `PATH`：
+
+```bash
+cargo install --path crates/agt-cli
+node web/server.mjs --binary "$(command -v agt)"
+```
+
+打开终端打印的完整带令牌链接。Node 提供页面与本机 HTTP 接口，并启动 Rust
+调度进程。升级代码后重新构建 CLI、重启 Web 并刷新页面。
+远程部署的本机访问方式与安全限制见 [Web 指南](web/README.md)。
+
+## 模块
+
+```text
+agt-core       通用 ID、category、typed reference
+agt-storage    文件系统安全操作、共享 SQLite 连接与事务、本机唤醒通知
+agt-config     home、目录和 category 初始化
+agt-provider   OpenAI-compatible provider
+agt-model      model alias 及 provider 引用
+agt-prompt     PROMPT.md
+agt-skill      SKILL.md（支持 scoped package）
+agt-mcp        mcp.json（stdio/http 配置）
+agt-agent      agent.yaml 及 model/harness/prompt/skill/MCP 引用
+agt-harness    harness.yaml 资源、Codex 协议与执行控制
+agt-im         通用参与者、私聊/群聊、消息、已读和事件存储（SQLite）
+agt-service    资源工具、身份权限、Agent 绑定、响应策略和 stdio MCP 服务
+agt-inference  Agent 配置解析、模型协议与流式解析、上下文预算与压缩（无持久化）
+agt-runtime    模型/工具循环、持久化 Run、消息投递调度和显式委派
+agt-cli        agt 命令行
+```
+
+Agent 配置中不再包含知识库（KB）或 runtime 依赖。所有引用都保存为
+`category/name`（Skill 使用 `package` 或 `@scope/package`），资源在读取/运行
+时按引用加载。
+
+## 初始化
+
+安装后首次运行 CLI 时，默认 `~/.agt` 会自动准备好，日常使用不需要手动初始化。
+
+如果想把数据放在别的目录，可以设置环境变量 `AGT_HOME`（必须是绝对路径）。
+设置后 CLI 和 Web 都优先使用它，首次使用时同样会自动初始化：
+
+```bash
+# 写入 ~/.zshrc 或 ~/.bashrc 后长期生效
+export AGT_HOME=/data/agt
+```
+
+确定 home 的顺序是：`--home` > `AGT_HOME` > `~/.agt`。`AGT_HOME` 为空时视为未设置。
+`--home` 只对当前这一条命令生效，不会被记住；想长期使用别的目录，请设置 `AGT_HOME`。
+
+只有在为另一个目录建立独立资源 home 时才需要调用 `init`，并且必须显式传入目标目录：
+
+```bash
+agt init ~/my_agent_project
+# 在源码工作区中也可以这样运行：
+cargo run -q -p agt-cli -- init /tmp/agt-home
+```
+
+`agt init` 不带目标目录会失败；如果同时传入全局 `--home`，它必须与位置参数目录一致。
+
+初始化后的定义目录：
+
+```text
+<home>/
+  config.yaml
+  providers/default/
+  models/default/
+  prompts/default/default/PROMPT.md
+  skills/default/
+  mcps/default/
+  agents/default/
+  harnesses/default/
+  im/                         # 首次使用 agt im 时自动创建
+    im.db
+  runtime/                    # 按首次使用相应功能创建
+    runtime.db                # 托管绑定、讨论与任务、Run 与调用诊断、会话摘要、
+                              # Harness 会话、审批和事件投影（按模块分表）
+```
+
+资源 home 及其内部的 domain、category、resource 目录/配置文件不接受
+symlink；这样即使目录中出现指向 home 外部的链接，也不会被读取或写入。home
+上层的系统路径链接（例如 macOS 的 `/var`）不在检查范围内。
+
+所有命令都支持以下全局参数：
+
+```text
+--home <DIR>                 仅对本条命令指定资源 home，默认 $AGT_HOME，未设置时为 $HOME/.agt
+                             （`init` 使用位置参数；长期切换请设置 AGT_HOME）
+--output human|json|jsonl    选择输出格式
+--yes                        跳过删除确认（仅删除命令）
+```
+
+## 开发与验证
+
+```bash
+cargo fmt --all -- --check
+cargo check -p agt-cli
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo run -q -p agt-cli -- --help
+```
+
+测试布局约定：
+
+- 简短单元测试写在被测文件内的 `#[cfg(test)] mod tests {}`。
+- 需要私有项的较长单元测试放在被测模块目录下：`<module>/tests.rs`，按主题再拆为
+  `<module>/tests/<topic>.rs`；一律用普通 `mod` 声明，不使用 `#[path]` 或 `include!`。
+- 只经公共 API 的集成测试放在 `crates/<crate>/tests/`：单文件为 `<suite>.rs`，多文件为
+  `<suite>/main.rs` 加同目录子模块；集成测试不引用 `src/` 下的文件。
+
+CLI 集成测试覆盖七类资源 CRUD、Provider secret 脱敏、Provider → Model →
+Agent 的递归删除，以及 IM 私聊、幂等消息和群成员生命周期。
+
+## 许可证
+
+[MIT](LICENSE)

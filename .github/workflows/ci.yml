@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # rust-toolchain.toml selects stable with rustfmt and clippy.
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Web unit tests drive the CLI built at target/debug/agt.
+      - run: cargo build -p agt-cli
+      - run: node --test test/*.test.mjs
+        working-directory: web
