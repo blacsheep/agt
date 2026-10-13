@@ -64,16 +64,9 @@ still delivered.
 
 ## Managing the queue
 
-| Tool | Purpose |
-| --- | --- |
-| `task_list`, `task_get` | List tasks you requested or were assigned; read one task's state and result |
-| `task_reprioritize` | Set `low`, `normal` or `high` (people can also set `urgent`) |
-| `task_defer` | Start no earlier than a time, or only after another task finishes |
-| `task_execution_policy` | Allow parallel work and declare shared resources (see below) |
-| `task_cancel` | Cancel a task and the subtasks it created |
-| `task_retry` | Create a new task from a failed or canceled one |
-| `task_resolve` | (People only) Record whether a task with an unknown outcome actually succeeded |
-| `task_attention` | (Workspace owner) List tasks that need a human: unknown outcomes, blocked reports |
+Agents can also reprioritize, defer, cancel and retry queued tasks, and people can resolve
+tasks whose outcome is unknown. The [Tasks module](../modules/tasks.md#managing-the-queue) lists
+every tool and parameter.
 
 Tasks that wait in the queue move up one priority level every five minutes, up to `high`.
 Updates require the task's current `revision`, so two agents cannot overwrite each other's
@@ -84,7 +77,7 @@ changes.
 By default an agent works on one thing at a time. To let an agent run several independent
 tasks at once:
 
-1. Set `scheduler.parallel_work: true` in [Configuration](../reference/configuration.md).
+1. Set `scheduler.parallel_work: true` (see [Tasks module](../modules/tasks.md#settings)).
 2. Mark the tasks as parallel, and name the shared things they touch:
 
 ```json
@@ -120,4 +113,4 @@ agt tool call --principal lead task_list --args '{"limit":20}'
 agt tool call --principal lead task_get --args '{"task_id":"<id>"}'
 ```
 
-The full tool parameters are in [Built-in tools](../reference/builtin-tools.md#task-collaboration).
+Every tool and parameter is listed in the [Tasks module](../modules/tasks.md).

@@ -62,7 +62,7 @@ Agent 只拥有你给它的能力。除了挂载的 MCP 服务，还有三组内
 | `local_execution` | 在宿主机上执行 Shell 命令（还需要工作空间设置） |
 
 每个托管 Agent 还固定拥有消息、会话和[记忆](./memory.md)工具。能力不会继承：创建其他 Agent 的 Agent 决定新 Agent 获得什么。
-见[内置工具](../reference/builtin-tools.md)。
+见 [Agent 模块](../modules/agent.md#内置能力)。
 
 ## 会话
 
@@ -85,7 +85,7 @@ Agent 不会自己运行。人在开启自动回复的情况下发送消息（�
 - 授权持续 30 分钟，之后不再开始新的工作；
 - 同时最多运行 3 个 Agent。
 
-这三项限制都可以在[运行配置](../reference/configuration.md)中调整。你可以随时暂停、继续或结束讨论。
+这三项限制都可以调整，见[调度器](../modules/scheduler.md#设置-config-yaml)。你可以随时暂停、继续或结束讨论。
 
 **调度器**是把消息转成执行的后台进程。它由 Web 控制台启动，或通过 `agt schedule run --watch` 启动。
 它的状态保存在磁盘上，所以等待中的工作会在重启后继续。

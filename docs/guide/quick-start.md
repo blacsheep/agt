@@ -110,7 +110,7 @@ agt schedule run --watch
 
 In a second terminal, read the reply with
 `agt tool call --principal me message_history --args '{"conversation":"<conversation id>"}'`.
-The [CLI reference](../reference/cli.md) covers every command.
+The [module pages](../modules/workspace.md) list every command and parameter.
 
 ## Next steps
 

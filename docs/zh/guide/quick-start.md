@@ -89,7 +89,7 @@ agt schedule run --watch
 
 在另一个终端用
 `agt tool call --principal me message_history --args '{"conversation":"<会话 ID>"}'` 查看回复。
-所有命令见 [CLI 参考](../reference/cli.md)。
+所有命令和参数见[模块页](../modules/workspace.md)。
 
 ## 下一步
 

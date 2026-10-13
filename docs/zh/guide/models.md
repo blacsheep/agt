@@ -39,15 +39,14 @@ agt model update fast --temperature 0.2 --timeout 120
 agt model info fast
 ```
 
-| 选项 | 默认值 | 含义 |
-| --- | --- | --- |
-| `--api-format` | `chat-completions` | `chat-completions` 或 `responses`。必须与 Provider 对该模型实际支持的一致；agt 不会自动切换。 |
-| `--tool-call` | | 模型是否支持函数调用。Agent 使用任何工具都需要它。 |
-| `--temperature` | `0.7` | 采样温度。设置推理强度时不发送。 |
-| `--reasoning-effort` | 不发送 | 推理模型的思考强度，例如 `low`、`medium`、`high`。可填 Provider 接受的任何值。 |
-| `--max-tokens` | 不发送 | 输出 token 上限。 |
-| `--timeout` | `60` | 每次请求的秒数。 |
-| `--context-window` | `272000` | 模型接受的输入 token 数。用于判断何时压缩对话，不限制输出。请按 Provider 文档设置。 |
+最重要的几个选项：
+
+- `--api-format`：`chat-completions`（默认）或 `responses`。必须与 Provider 对该模型支持的一致；agt 不会自动切换。
+- `--tool-call true`：使用任何工具的 Agent 都需要。
+- `--reasoning-effort`：推理模型的思考档位。
+- `--context-window`：模型接受的输入 token 数（默认 272000）。请按 Provider 文档设置；agt 据此判断何时摘要旧的上下文。
+
+所有选项、默认值和文件格式见 [Model 模块](../modules/model.md)。
 
 多个 Model 资源可以指向 Provider 上的同一个模型、使用不同设置，例如 `fast` 和 `careful` 两个版本。
 

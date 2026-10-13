@@ -60,7 +60,7 @@ A discussion has limits that keep a group from talking forever:
 - at most 3 agents run at once across the workspace.
 
 All three are configurable under **运行设置** (Settings); see
-[Configuration](../reference/configuration.md). When an agent contacts another conversation
+[Scheduler](../modules/scheduler.md#settings-config-yaml). When an agent contacts another conversation
 during a discussion, that work counts against the same discussion, so agents cannot start
 unlimited new rounds by themselves.
 

@@ -26,15 +26,8 @@ Codex 自带文件编辑、Shell 命令和沙箱，因此 Codex Agent 适合编�
 }
 ```
 
-| 字段 | 必填 | 含义 |
-| --- | --- | --- |
-| `engine` | 是 | 目前只支持 `codex` |
-| `executable` | 是 | Codex 程序的绝对路径 |
-| `working_directory` | 是 | Codex 工作的项目目录的绝对路径 |
-| `sandbox` | 是 | `read_only` 或 `workspace_write` |
-| `model`、`reasoning_effort` | 否 | 新会话的默认值；省略则使用 Codex 的默认值 |
-| `timeout_seconds` | 否 | 单轮的时间上限，10–86400（默认 1800） |
-| `description` | 否 | 在控制台中显示的说明 |
+`working_directory` 必须是已存在的绝对路径目录，`sandbox` 决定 Codex 能否在其中写文件。`model` 和 `reasoning_effort`
+是新会话的可选默认值。所有字段见 [Harness 模块](../modules/harness.md#全部参数)。
 
 **Web 控制台：** **资源库** → **新建资源** → Harness。保存后，可用**读取可用模型**查看 Codex 报告的模型和推理档位，
 用**检查连接**测试配置，不会调用模型。

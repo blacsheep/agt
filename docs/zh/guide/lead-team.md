@@ -67,7 +67,7 @@ lead 创建的一切都是普通资源。你可以像对待自己创建的资源
 
 - **检查第一支团队。** 打开每个新 Agent，检查它的 Prompt 和能力。如果某个角色不对，告诉 lead 怎么改，它会自己修改资源。
 - **控制成本。** 默认每个 Agent 在一轮讨论中最多回复 100 次，讨论 30 分钟后过期。随时可以用**停止本群 Agent**或 `/stop`
-  停止一切。长时间任务的设置见[运行配置](../reference/configuration.md)。
+  停止一切。长时间任务的设置见[调度器](../modules/scheduler.md#设置-config-yaml)。
 - **用独立的 home 做实验。** `agt init ~/experiments/game` 会创建一个干净的工作空间，
   `node web/server.mjs --home ~/experiments/game --port 4318` 为它启动一个控制台。
 - **写你自己的 lead。** `default/lead` 只是起点。把它复制成新的 Prompt 并针对你的领域修改，例如让 lead 在每个团队中都配一个审查者。

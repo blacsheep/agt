@@ -100,7 +100,7 @@ in [`docs/`](docs/README.md).
 | From install to a lead that builds its own team | [Quick start](docs/guide/quick-start.md) |
 | Resources, identities, discussions and tasks | [Core concepts](docs/guide/concepts.md) |
 | Models, agents, MCP tools, Codex, tasks, memory, approvals | [Guides](docs/guide/models.md) |
-| Web console, CLI, built-in tools, configuration | [Reference](docs/reference/cli.md) |
+| Every module: what it does, how to use it, all parameters | [Modules](docs/modules/workspace.md) |
 | When an agent does not reply | [Troubleshooting](docs/help/troubleshooting.md) |
 | How it is built (Chinese) | [Architecture](docs/zh/architecture/index.md) |
 

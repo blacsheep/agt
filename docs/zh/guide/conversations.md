@@ -48,7 +48,7 @@ Codex Agent 支持 `mentioned` 和 `manual`。
 - 授权持续 30 分钟；已在运行的工作会完成，但不会开始新的工作；
 - 整个工作空间同时最多运行 3 个 Agent。
 
-三项都可以在**运行设置**中调整，见[运行配置](../reference/configuration.md)。Agent 在讨论期间联系其他会话时，
+三项都可以在**运行设置**中调整，见[调度器](../modules/scheduler.md#设置-config-yaml)。Agent 在讨论期间联系其他会话时，
 那部分工作也计入同一轮讨论，所以 Agent 无法自行开启无限的新轮次。
 
 ## 控制讨论

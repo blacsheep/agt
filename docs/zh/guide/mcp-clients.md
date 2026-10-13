@@ -23,10 +23,8 @@
 
 ## 客户端能做什么
 
-| 条件 | 工具 |
-| --- | --- |
-| 始终可用 | 会话和消息：`direct_create`、`group_create`、`message_send`、`message_history`、`message_inbox`、成员管理、`response_policy`；记忆；该身份发出或收到的任务 |
-| `--manager` | 资源：`resource_list`、`resource_read`、`resource_write`、`resource_delete`、`provider_models`、`mcp_probe`、分类；身份与绑定：`principal_create`、`agent_bind`、`agent_set_enabled`、`agent_unbind`、`binding_list` |
+不带 `--manager` 时，客户端只有参与者工具：会话、消息、记忆以及它自己的任务。带 `--manager` 时还有资源、身份和绑定工具。
+完整列表见[工具服务模块](../modules/tool-service.md#可用的工具)。
 
 `agt tool list --principal me --manager` 会打印每个工具及其参数。
 

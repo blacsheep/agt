@@ -26,10 +26,9 @@ Most clients accept an `mcpServers` entry:
 
 ## What the client can do
 
-| With | Tools |
-| --- | --- |
-| Always | Conversations and messages: `direct_create`, `group_create`, `message_send`, `message_history`, `message_inbox`, membership, `response_policy`; memory; tasks the identity requested or was assigned |
-| `--manager` | Resources: `resource_list`, `resource_read`, `resource_write`, `resource_delete`, `provider_models`, `mcp_probe`, categories; identities and bindings: `principal_create`, `agent_bind`, `agent_set_enabled`, `agent_unbind`, `binding_list` |
+Without `--manager`, the client gets the participant tools: conversations, messages, memory and
+its own tasks. With `--manager` it also gets resources, identities and bindings. The
+[Tool service module](../modules/tool-service.md#which-tools-are-available) has the full list.
 
 `agt tool list --principal me --manager` prints every tool with its parameters.
 

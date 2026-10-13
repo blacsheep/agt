@@ -70,6 +70,6 @@ money or task progress, use a tool or a task that owns that state.
 
 ## Turning memory off
 
-Set `memory.enabled: false` in [Configuration](../reference/configuration.md), or switch off
+Set `memory.enabled: false` (see [Memory module](../modules/memory.md#settings)), or switch off
 **历史记忆检索** (Memory) under **运行设置** (Settings) → **跨会话记忆** (Memory). Calls are refused immediately; new runs no longer get the
 memory tools.

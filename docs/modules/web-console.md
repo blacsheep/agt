@@ -1,11 +1,50 @@
 # Web console
 
-The Web console (AGT Studio) is a local UI over the `agt` CLI. Start it with
-`node web/server.mjs` and open the full link it prints; see
-[Installation](../guide/installation.md#start-the-web-console). The UI is in Chinese; this page
-gives each label with its meaning.
+| Overview | |
+| --- | --- |
+| **What it is** | AGT Studio, the local browser UI for agt |
+| **Start** | `node web/server.mjs` |
+| **Code** | `web/` (Node.js server and plain HTML/CSS/JavaScript, no npm dependencies) |
 
-## Pages
+## What it does
+
+The Web console is a thin local UI over the `agt` CLI: every action calls the CLI, so anything you
+do here you can also do in a terminal. The server also runs the scheduler, so agents reply as soon
+as you send a message. The UI is in Chinese; this page gives each label with its meaning.
+
+## How to use it
+
+```bash
+cargo build -p agt-cli
+node web/server.mjs
+```
+
+Open the full link printed in the terminal, including the token after `#`. On a remote server,
+use an SSH tunnel (`ssh -N -L 4317:127.0.0.1:4317 user@server`); see
+[Installation](../guide/installation.md#running-on-a-remote-server).
+
+## Common parameters
+
+| Parameter | Meaning |
+| --- | --- |
+| `--home <dir>` | Workspace to open (default `$AGT_HOME`, then `~/.agt`) |
+| `--port <n>` | Port on `127.0.0.1` (default 4317) |
+
+## All parameters
+
+### Server options
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--home <dir>` | `$AGT_HOME`, then `~/.agt` | Home directory |
+| `--port <n>` | `4317` | Port. The server only listens on `127.0.0.1`. |
+| `--binary <path>` | `target/debug/agt` | The `agt` CLI to call |
+| `--principal <id>` | `web-operator` | Your identity. The first identity to start the console on a home becomes the workspace owner; later starts must use the same identity. |
+
+On first start the server creates the home if needed and your user identity. It never calls a
+model for old messages on start.
+
+### Pages
 
 The left sidebar has six pages. Click the menu button at the top left to show their names.
 
@@ -22,7 +61,7 @@ At the top right: **外观** (Appearance: system, light or dark) and **调试模
 which shows run IDs, call counts and error codes). **Ctrl/⌘+K** opens a command palette to
 jump to conversations, agents and pages.
 
-## 会话空间 (Conversations)
+### 会话空间 (Conversations)
 
 Three columns: the conversation list, the messages, and **成员状态** (Member status). The two
 panel buttons at the top right collapse the side columns; **新建会话** (New conversation) is
@@ -38,7 +77,7 @@ conversation (or use **⋯**) to open it, view its info, or remove it from your 
 | --- | --- |
 | **继续回复** | Continue: let agents answer messages saved without auto-reply, or extend an expired discussion |
 | **停止本群 Agent** | Stop agents: end this round and stop the agents working here |
-| **任务** | Tasks: the [task panel](../guide/tasks.md#in-the-web-console) for this conversation |
+| **任务** | Tasks: the [task panel](./tasks.md) for this conversation |
 | **会话控制** | Conversation controls: the `/` commands |
 | **群信息** / 会话信息 | Group or conversation info: members, leave, dissolve, reset context |
 
@@ -54,7 +93,7 @@ calls, duration and failures, with a link to the full execution record.
 **成员状态 (Member status).** What each member is doing (deciding, waiting for a turn,
 replying, waiting) and why. Click a row for the reason and the time of its last decision.
 
-## Agent 团队 (Agent team)
+### Agent 团队 (Agent team)
 
 One card per agent. **创建角色** (Create role) opens the form described in
 [Create agents](../guide/agents.md#in-the-web-console). On each card:
@@ -68,19 +107,19 @@ One card per agent. **创建角色** (Create role) opens the form described in
 Click an agent's name or avatar for its detail view: current status, conversations, recent
 runs and capabilities. Select several cards to enable or disable them together.
 
-## Agent 会话 (Agent conversations)
+### Agent 会话 (Agent conversations)
 
 Pick a person or agent, then one of their conversations, to read it as they see it. This view
 is read-only: you cannot send messages as another identity. **整理会话** (Tidy up) hides or
 restores several of the agent's conversation entries at once.
 
-## 交互观察 (Interactions)
+### 交互观察 (Interactions)
 
 A graph of messages and task delegations between agents, with filters. Click a node or edge
 for details. **权限审批** (Approvals) opens the approvals queue for the whole workspace; see
-[Permissions](../guide/permissions.md).
+[Permissions](./permissions.md).
 
-## 资源库 (Resources)
+### 资源库 (Resources)
 
 Tabs for each resource type. **新建资源** (New resource) creates one; click a resource to view
 it. Providers take an API key directly; models offer **获取模型列表** (Fetch model list);
@@ -89,13 +128,30 @@ harnesses offer **读取可用模型** (Load models) and **检查连接** (Check
 Deleting asks you to confirm and is refused while other resources or enabled agents still use
 the resource. Deletions cannot be undone from the console.
 
-## 运行设置 (Settings)
+### 运行设置 (Settings)
 
 Sections **调度与容量** (Scheduling), **工具权限审批** (Tool approvals), **跨会话记忆**
 (Memory) and **本机执行** (Local execution). Each setting shows its default and when a change
-takes effect. See [Configuration](./configuration.md).
+takes effect. See [Configuration](./workspace.md#config-yaml).
 
-## Keyboard
+### Message box commands
+
+Type `/` in the message box for the commands available in this conversation. Commands are not
+sent as messages; type `//` to send text that starts with `/`.
+
+| Command | Meaning |
+| --- | --- |
+| `/help` | List the commands |
+| `/new`, `/clear` | Reset the agents' working context here; chat history is kept |
+| `/stop` | End this round and stop the agents working here |
+| `/status` | Each agent's state, engine and recent runs |
+| `/model` | Codex agents: choose model and reasoning level for this conversation |
+| `/compact` | Codex agents: compact the context |
+| `/rename` | Codex agents: name the session |
+| `/skills`, `/mcp` | Codex agents: skills and MCP servers configured in Codex |
+| `/permissions` | Codex agents: the session's file permissions |
+
+### Keyboard
 
 | Keys | Action |
 | --- | --- |
@@ -104,3 +160,9 @@ takes effect. See [Configuration](./configuration.md).
 | `@` | Mention a member |
 | `/` | Commands |
 | Shift+F10 | Context menu of the focused conversation |
+
+## Related modules
+
+- [Identities and conversations](./conversations.md): what the chat pages show
+- [Scheduler](./scheduler.md): the buttons that control discussions
+- [Workspace](./workspace.md): the **运行设置** page

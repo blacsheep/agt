@@ -71,7 +71,7 @@ built-in capability groups, all off by default:
 
 Every hosted agent also has messaging, conversation and [memory](./memory.md) tools.
 Capabilities are not inherited: an agent that creates another agent decides what the new one
-gets. See [Built-in tools](../reference/builtin-tools.md).
+gets. See [Agent](../modules/agent.md#built-in-capabilities).
 
 ## Conversations
 
@@ -97,7 +97,7 @@ calls on it, within limits:
 - the authorization lasts 30 minutes, after which no new work starts;
 - at most 3 agents run at the same time.
 
-All three limits are adjustable in [Configuration](../reference/configuration.md). You can
+All three limits are adjustable; see [Scheduler](../modules/scheduler.md#settings-config-yaml). You can
 pause, resume or end a discussion at any time.
 
 The **scheduler** is the background process that turns messages into runs. It is started by

@@ -9,5 +9,5 @@ They cover the overall architecture, how resources, messages, runs and tasks flo
 topics such as the scheduler, the native loop, context management, Codex integration,
 approvals and the Web console.
 
-The [Guide](/guide/what-is-agt) and [Reference](/reference/cli) sections cover how to use agt
+The [Guide](/guide/what-is-agt) and [Modules](/modules/workspace) sections cover how to use agt
 in English.

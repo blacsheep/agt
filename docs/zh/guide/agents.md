@@ -83,7 +83,7 @@ agt agent update reviewer --add-builtin-tool task_collaboration
 ```
 
 `resource_management` 权限很大：它覆盖 home 中的所有资源，包括其他 Agent 的定义。只把它交给你信任其管理工作空间的
-Agent，例如 lead。详见[内置工具](../reference/builtin-tools.md)。
+Agent，例如 lead。详见 [Agent 模块](../modules/agent.md#内置能力)。
 
 ## 在 CLI 中启用 Agent
 

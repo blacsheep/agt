@@ -30,15 +30,9 @@ A **harness** resource describes how to start Codex and where it works:
 }
 ```
 
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `engine` | yes | Currently only `codex` |
-| `executable` | yes | Absolute path to the Codex binary |
-| `working_directory` | yes | Absolute path of the project directory Codex works in |
-| `sandbox` | yes | `read_only` or `workspace_write` |
-| `model`, `reasoning_effort` | no | Defaults for new sessions; omit to use Codex's defaults |
-| `timeout_seconds` | no | Limit for one turn, 10–86400 (default 1800) |
-| `description` | no | Shown in the console |
+`working_directory` must be an existing absolute directory, and `sandbox` decides whether Codex
+may write files there. `model` and `reasoning_effort` are optional defaults for new sessions.
+All fields are listed in the [Harness module](../modules/harness.md#all-parameters).
 
 **Web console:** **资源库** → **新建资源** → Harness. After saving, use **读取可用模型**
 (Load models) to see the models and reasoning levels Codex reports, and **检查连接** (Check

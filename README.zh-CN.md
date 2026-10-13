@@ -20,7 +20,7 @@ agt 在本机管理 Agent 所需的资源（Provider、Model、Prompt、Skill、
 | 从安装到让 lead 自己组队 | [快速开始](docs/zh/guide/quick-start.md) |
 | 资源、身份、讨论与任务 | [核心概念](docs/zh/guide/concepts.md) |
 | 模型、Agent、MCP、Codex、任务、记忆、审批 | [使用指南](docs/zh/guide/models.md) |
-| Web 控制台、CLI、内置工具、运行配置 | [参考](docs/zh/reference/cli.md) |
+| 每个模块的作用、用法和全部参数 | [模块](docs/zh/modules/workspace.md) |
 | Agent 不回复怎么办 | [常见问题与排错](docs/zh/help/troubleshooting.md) |
 | 了解架构 | [架构图与执行流程](docs/zh/architecture/index.md) |
 | 全部文档 | [文档导航](docs/README.md) |

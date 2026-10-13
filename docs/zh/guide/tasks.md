@@ -56,16 +56,8 @@ sequenceDiagram
 
 ## 管理队列
 
-| 工具 | 用途 |
-| --- | --- |
-| `task_list`、`task_get` | 列出你发出或收到的任务；读取单个任务的状态和结果 |
-| `task_reprioritize` | 设为 `low`、`normal` 或 `high`（人还可以设为 `urgent`） |
-| `task_defer` | 不早于某个时间开始，或等另一个任务完成后再开始 |
-| `task_execution_policy` | 允许并行并声明共享资源（见下文） |
-| `task_cancel` | 取消任务及它创建的子任务 |
-| `task_retry` | 基于失败或取消的任务创建新任务 |
-| `task_resolve` | （仅限人）记录结果不明确的任务实际上是否成功 |
-| `task_attention` | （工作空间负责人）列出需要人处理的任务：结果不明确、汇报受阻等 |
+Agent 还可以调整优先级、延后、取消和重试排队中的任务，人还可以核对结果不明确的任务。
+所有工具和参数见[任务模块](../modules/tasks.md#管理队列)。
 
 排队中的任务每等待五分钟提升一个优先级，最高到 `high`。修改任务需要提供当前的 `revision`，
 两个 Agent 不会覆盖彼此的修改。
@@ -74,7 +66,7 @@ sequenceDiagram
 
 默认情况下，一个 Agent 同一时间只处理一件事。要让一个 Agent 同时运行多个独立任务：
 
-1. 在[运行配置](../reference/configuration.md)中设置 `scheduler.parallel_work: true`。
+1. 设置 `scheduler.parallel_work: true`（见[任务模块](../modules/tasks.md#设置)）。
 2. 把任务标记为可并行，并声明它们会操作的共享对象：
 
 ```json
@@ -103,4 +95,4 @@ agt tool call --principal lead task_list --args '{"limit":20}'
 agt tool call --principal lead task_get --args '{"task_id":"<任务 ID>"}'
 ```
 
-完整的工具参数见[内置工具](../reference/builtin-tools.md#任务协作)。
+所有工具和参数见[任务模块](../modules/tasks.md)。

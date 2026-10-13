@@ -96,7 +96,7 @@ agt agent update reviewer --add-builtin-tool task_collaboration
 
 `resource_management` is powerful: it covers every resource in the home, including other
 agents' definitions. Give it only to agents you trust to manage the workspace, such as a
-lead. Details are in [Built-in tools](../reference/builtin-tools.md).
+lead. Details are in the [Agent module](../modules/agent.md#built-in-capabilities).
 
 ## Enabling an agent from the CLI
 

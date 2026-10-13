@@ -1,7 +1,7 @@
 # Harness：外部执行引擎
 
 最近整理：2026-10-10。本文合并原“Harness 资源与外部执行引擎”“Harness 执行流程”“Harness 执行状态与租约”三篇；
-Lead 通过工具管理 Harness 的用法见下文 [Lead 管理 Harness 的工具](#lead-管理-harness-的工具)，工具参数见[内置工具](../reference/builtin-tools.md#codex-会话)。
+Lead 通过工具管理 Harness 的用法见下文 [Lead 管理 Harness 的工具](#lead-管理-harness-的工具)，工具参数见[Harness 模块](../modules/harness.md#agent-工具)。
 
 ## 决策
 

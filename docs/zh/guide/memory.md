@@ -58,5 +58,5 @@ agt 中的 Agent 有两种记忆，都不需要向量服务或额外配置：
 
 ## 关闭记忆
 
-在[运行配置](../reference/configuration.md)中设置 `memory.enabled: false`，或在**运行设置** → **跨会话记忆**中关闭
+设置 `memory.enabled: false`（见[记忆模块](../modules/memory.md#设置)），或在**运行设置** → **跨会话记忆**中关闭
 **历史记忆检索**。之后的调用会立即被拒绝；新的执行不再提供记忆工具。

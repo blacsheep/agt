@@ -9,7 +9,7 @@
 
 ## 开启
 
-1. 在工作空间中允许：在[运行配置](../reference/configuration.md)中设置 `execution.enabled: true`，
+1. 在工作空间中允许：设置 `execution.enabled: true`（见[本机命令模块](../modules/local-execution.md#设置-config-yaml)），
    或在**运行设置** → **本机执行**中打开**允许本机命令**。
 2. 交给某个 Agent：编辑 Agent 时在**框架内置工具**中勾选**本机命令**，或：
 

@@ -44,15 +44,16 @@ agt model update fast --temperature 0.2 --timeout 120
 agt model info fast
 ```
 
-| Option | Default | Meaning |
-| --- | --- | --- |
-| `--api-format` | `chat-completions` | `chat-completions` or `responses`. Must match what the provider supports for this model; agt does not switch automatically. |
-| `--tool-call` | | Whether the model supports function calling. Agents need it to use any tool. |
-| `--temperature` | `0.7` | Sampling temperature. Omitted when a reasoning effort is set. |
-| `--reasoning-effort` | not sent | For reasoning models, for example `low`, `medium`, `high`. Any value your provider accepts. |
-| `--max-tokens` | not sent | Output token limit. |
-| `--timeout` | `60` | Seconds per request. |
-| `--context-window` | `272000` | Input tokens the model accepts. Used to decide when to compact the conversation; it does not limit output. Set it from your provider's documentation. |
+The options that matter most:
+
+- `--api-format`: `chat-completions` (default) or `responses`. It must match what the provider
+  supports for this model; agt does not switch automatically.
+- `--tool-call true`: required for agents that use any tool.
+- `--reasoning-effort`: the thinking level of reasoning models.
+- `--context-window`: the input tokens the model accepts (default 272000). Set it from your
+  provider's documentation; agt uses it to decide when to summarize old context.
+
+Every option, its default and the file format are in the [Model module](../modules/model.md).
 
 Several model resources can point to the same provider model with different settings, for
 example a `fast` and a `careful` variant.

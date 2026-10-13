@@ -1,6 +1,6 @@
 # 内置工具：权限与契约
 
-工具列表与参数见[内置工具参考](../reference/builtin-tools.md)。本文记录资源管理工具的授权范围、契约与语义，供贡献者参考。
+工具列表与参数见[工具服务模块](../modules/tool-service.md#可用的工具)。本文记录资源管理工具的授权范围、契约与语义，供贡献者参考。
 
 内置工具按组挂载到 Agent 定义的 `builtin_tools`，默认全部关闭，由操作员显式开启。
 Web 在创建/编辑 Agent 时勾选，CLI 用 `--builtin-tool`、`--add-builtin-tool`、`--remove-builtin-tool`。

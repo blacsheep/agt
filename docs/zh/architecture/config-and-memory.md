@@ -1,6 +1,6 @@
 # 运行配置、记忆与本机执行：设计与语义
 
-使用方法见[运行配置](../reference/configuration.md)、[记忆](../guide/memory.md)和[本机命令](../guide/local-execution.md)。本文记录完整语义与边界，供贡献者参考。
+使用方法见[运行配置](../modules/workspace.md#config-yaml)、[记忆](../guide/memory.md)和[本机命令](../guide/local-execution.md)。本文记录完整语义与边界，供贡献者参考。
 
 本阶段将运行默认值集中到 AGT home 的 `config.yaml`。配置只由本机管理员修改，不作为资源管理 Agent 的可写资源。
 
