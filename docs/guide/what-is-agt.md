@@ -1,83 +1,71 @@
 # What is agt?
 
-Most agent frameworks ask you to build every agent by hand: write its prompt, wire up its
-tools, decide who talks to whom. agt turns that around. **Resource management is itself a
-capability you can give to an agent.** An agent that has it can create the prompts, tools,
-skills and teammates it needs, and then use them to get the work done.
+agt is a framework for running a team of AI agents on your own machine. Its central idea:
+**resource management is a capability you can give to an agent.** An agent that has it can
+write prompts, register tools, create other agents and put them in a group chat, then use
+that team to get the work done.
 
-In practice you talk to one agent, the *lead*. You tell it the goal; it designs the team,
-creates each member, has Codex build any missing tools, and coordinates the work in a group
-chat while you watch.
+In practice you talk to one agent, the *lead*. You describe the goal; the lead designs the
+team, creates each member, has a coding agent build any tool that is missing, and
+coordinates the work while you watch.
 
-## Resources
+## What you can do with it
 
-Everything an agent is made of is a resource stored in the agt home directory
-(`~/.agt` by default):
+| Feature | What it gives you | Guide |
+| --- | --- | --- |
+| Any OpenAI-compatible model | Connect OpenAI, a gateway, or a local server with Chat Completions or Responses | [Connect models](./models.md) |
+| Agents as configuration | An agent is a model plus a prompt, skills, MCP servers and built-in tools | [Create agents](./agents.md) |
+| Direct and group chats | Talk to agents in an IM; agents answer direct messages and @mentions | [Conversations](./conversations.md) |
+| A lead that builds its team | A built-in prompt that knows how to create and coordinate agents | [Build a team with a lead](./lead-team.md) |
+| MCP tools | Attach stdio or HTTP MCP servers to agents, or let agents register new ones | [MCP tools](./mcp.md) |
+| Codex agents | Run an agent on a [Codex](https://github.com/openai/codex) session that can edit code | [Codex agents](./codex.md) |
+| Tracked tasks | Delegate work with queuing, waiting, results and reports | [Task collaboration](./tasks.md) |
+| Memory | Agents search their own history and keep notes linked to the source messages | [Memory](./memory.md) |
+| Local commands | Optionally let an agent run shell commands on the host | [Local commands](./local-execution.md) |
+| Approvals | Review each tool call by hand, with a reviewer model, or allow all | [Permissions](./permissions.md) |
+| Use from other clients | Expose agt's tools to any MCP client, such as an editor or another agent | [Use agt from MCP clients](./mcp-clients.md) |
 
-| Resource | What it is |
-| --- | --- |
-| Provider | An OpenAI-compatible endpoint and the API key to reach it |
-| Model | A named model on a provider, with its protocol and options |
-| Prompt | A role description (`PROMPT.md`) |
-| Skill | A reusable instruction package (`SKILL.md`) |
-| MCP | An MCP server definition (stdio or HTTP) that provides tools |
-| Harness | An external execution engine, currently Codex |
-| Agent | A model or harness, plus a prompt, skills, MCP servers and built-in tools |
+Everything is available both in the Web console and in the `agt` CLI.
 
-People edit these through the Web console or the CLI. Agents edit them through the
-`resource_management` tools, which go through the same code path, validation and locks.
+## How it fits together
 
-## Built-in capabilities
+```mermaid
+flowchart LR
+  you([You]) -- chat --> im[Conversations]
+  im -- messages --> sched[Scheduler]
+  sched -- runs --> agents[Agents]
+  agents -- reply / delegate --> im
+  agents -- create & change --> res[(Resources)]
+  res -- configure --> agents
+  agents -- call --> tools[MCP servers, Codex, shell]
+```
 
-Agents only get the abilities you mount on them. Besides the MCP servers you attach, there
-are three built-in tool groups:
+- **Resources** are the files that describe agents: providers, models, prompts, skills, MCP
+  servers, harnesses and agent definitions.
+- **Conversations** are direct and group chats between people and agents.
+- The **scheduler** decides which agents should reply to a message, runs them, and keeps
+  pending work across restarts.
+- Agents with the `resource_management` capability can change the resources, which is how a
+  lead builds its own team.
 
-| Capability | What it allows |
-| --- | --- |
-| `resource_management` | Create and change resources, create agent identities, bind and enable agents |
-| `task_collaboration` | Delegate tracked tasks to other agents, wait for results, and file reports |
-| `local_execution` | Run commands on the local machine |
+[Core concepts](./concepts.md) explains each of these in more detail.
 
-A new agent does not inherit its creator's capabilities. The lead decides what each
-teammate actually needs, so isolation is enforced by tools, not by asking the model to
-behave.
+## Design principles
 
-## Identities and conversations
-
-An agent definition is just configuration. To take part in chats it needs an identity
-(a *principal*) and a *binding* that connects the identity to the definition. Bound agents
-then join direct and group conversations alongside you.
-
-By default an agent replies to direct messages and to group messages that mention it.
-A persistent scheduler decides who runs, who waits and who stays silent, enforces reply
-limits, and resumes unfinished work after a restart.
-
-## Engines
-
-Each agent runs on one of two engines:
-
-- **Native**: agt's own model and tool loop, talking to any OpenAI-compatible model with
-  Chat Completions or Responses.
-- **Codex**: a [Codex](https://github.com/openai/codex) session started through a
-  harness, useful for agents that write and test code, such as the ones that build MCP
-  tools for the rest of the team.
-
-## The lead
-
-`agt init` creates a built-in `lead` prompt that knows the whole framework. It tells the
-agent how to:
-
-1. Check what already exists before creating anything.
-2. Build a working teammate: prompt, agent definition, identity, binding, conversation.
-3. Have Codex write an MCP server, register it, probe it, and attach it to agents.
-4. Delegate tracked tasks and review the results.
-5. Set standing rules so the team coordinates directly instead of relaying every step.
-6. Report honestly, based only on what the tools actually returned.
-
-Give an agent this prompt plus `resource_management` and `task_collaboration`, and you
-have a lead. [Getting started](./getting-started.md) walks through it.
+- **Capabilities are tools, not instructions.** An agent can only do what its attached tools
+  allow. A new agent does not inherit the capabilities of the agent that created it.
+- **Durable by default.** Conversations, runs, tasks and approvals are stored in SQLite, so
+  pending work resumes after a restart instead of being lost or silently repeated.
+- **One core, two front ends.** All logic lives in the Rust core. The Web console is a thin
+  local UI over the same CLI, so anything you do in one you can do in the other.
 
 ## What agt is not
 
-agt is a trusted local tool. The Web console listens on `127.0.0.1` only, and whoever holds
-its link can manage every resource. It is not a hosted or multi-tenant service.
+agt is a trusted local tool for one operator. The Web console listens on `127.0.0.1` only,
+and whoever holds its link can manage every resource. It is not a hosted or multi-tenant
+service. See [Security model](../help/security.md).
+
+## Next steps
+
+- [Install agt](./installation.md)
+- [Quick start](./quick-start.md): from a fresh clone to a lead that builds its own team

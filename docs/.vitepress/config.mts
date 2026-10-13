@@ -24,19 +24,106 @@ function sourceLinks(md: MarkdownIt) {
   })
 }
 
-const zhGuide = [
-  {
-    text: '使用指南',
-    items: [
-      { text: '快速上手与验收', link: '/zh/guide/getting-started' },
-      { text: 'Web 控制台', link: '/zh/guide/web-console' },
-      { text: 'CLI 参考', link: '/zh/guide/cli' },
-      { text: 'Agent 内置工具', link: '/zh/guide/builtin-tools' },
-      { text: '异步任务协作', link: '/zh/guide/tasks' },
-      { text: '运行配置、记忆与本机执行', link: '/zh/guide/config-and-memory' },
-    ],
-  },
-]
+// The English and Chinese user docs mirror each other page for page.
+function userDocs(prefix: string, t: Record<string, string>) {
+  const item = (key: string, path: string) => ({ text: t[key], link: `${prefix}${path}` })
+  return [
+    {
+      text: t.intro,
+      items: [
+        item('what', '/guide/what-is-agt'),
+        item('install', '/guide/installation'),
+        item('quick', '/guide/quick-start'),
+        item('concepts', '/guide/concepts'),
+      ],
+    },
+    {
+      text: t.guides,
+      items: [
+        item('models', '/guide/models'),
+        item('agents', '/guide/agents'),
+        item('conversations', '/guide/conversations'),
+        item('lead', '/guide/lead-team'),
+        item('mcp', '/guide/mcp'),
+        item('codex', '/guide/codex'),
+        item('tasks', '/guide/tasks'),
+        item('memory', '/guide/memory'),
+        item('local', '/guide/local-execution'),
+        item('permissions', '/guide/permissions'),
+        item('clients', '/guide/mcp-clients'),
+      ],
+    },
+    {
+      text: t.reference,
+      items: [
+        item('web', '/reference/web-console'),
+        item('cli', '/reference/cli'),
+        item('tools', '/reference/builtin-tools'),
+        item('config', '/reference/configuration'),
+      ],
+    },
+    {
+      text: t.help,
+      items: [item('troubleshooting', '/help/troubleshooting'), item('security', '/help/security')],
+    },
+  ]
+}
+
+const enDocs = userDocs('', {
+  intro: 'Introduction',
+  what: 'What is agt?',
+  install: 'Installation',
+  quick: 'Quick start',
+  concepts: 'Core concepts',
+  guides: 'Guides',
+  models: 'Connect models',
+  agents: 'Create agents',
+  conversations: 'Conversations and auto-reply',
+  lead: 'Build a team with a lead',
+  mcp: 'MCP tools',
+  codex: 'Codex agents',
+  tasks: 'Task collaboration',
+  memory: 'Memory',
+  local: 'Local commands',
+  permissions: 'Permissions and approvals',
+  clients: 'Use agt from MCP clients',
+  reference: 'Reference',
+  web: 'Web console',
+  cli: 'CLI',
+  tools: 'Built-in tools',
+  config: 'Configuration',
+  help: 'Help',
+  troubleshooting: 'Troubleshooting',
+  security: 'Security model',
+})
+
+const zhDocs = userDocs('/zh', {
+  intro: '入门',
+  what: 'agt 是什么？',
+  install: '安装',
+  quick: '快速开始',
+  concepts: '核心概念',
+  guides: '使用指南',
+  models: '接入模型',
+  agents: '创建 Agent',
+  conversations: '对话与自动回复',
+  lead: '让 lead 组建团队',
+  mcp: 'MCP 工具',
+  codex: 'Codex Agent',
+  tasks: '任务协作',
+  memory: '记忆',
+  local: '本机命令',
+  permissions: '权限审批',
+  clients: '在 MCP 客户端中使用 agt',
+  reference: '参考',
+  web: 'Web 控制台',
+  cli: 'CLI 命令',
+  tools: '内置工具',
+  config: '运行配置',
+  help: '帮助',
+  troubleshooting: '常见问题与排错',
+  security: '安全模型',
+})
 
 const zhArchitecture = [
   {
@@ -60,19 +147,12 @@ const zhArchitecture = [
       { text: 'Harness：外部执行引擎', link: '/zh/architecture/harness' },
       { text: '权限审批', link: '/zh/architecture/permissions' },
       { text: '共享资源管理', link: '/zh/architecture/resources' },
+      { text: '内置工具：权限与契约', link: '/zh/architecture/builtin-tools' },
+      { text: '异步任务：设计与语义', link: '/zh/architecture/tasks' },
+      { text: '运行配置、记忆与本机执行', link: '/zh/architecture/config-and-memory' },
       { text: 'MCP 工具', link: '/zh/architecture/mcp-tools' },
       { text: '会话生命周期', link: '/zh/architecture/conversations' },
       { text: 'Web 控制台架构', link: '/zh/architecture/web-console' },
-    ],
-  },
-]
-
-const enGuide = [
-  {
-    text: 'Introduction',
-    items: [
-      { text: 'What is agt?', link: '/guide/what-is-agt' },
-      { text: 'Getting started', link: '/guide/getting-started' },
     ],
   },
 ]
@@ -115,10 +195,11 @@ export default withMermaid({
       description: 'Agents that build themselves: prompts, tools, skills and teammates.',
       themeConfig: {
         nav: [
-          { text: 'Guide', link: '/guide/what-is-agt' },
-          { text: 'Docs (中文)', link: '/zh/guide/getting-started' },
+          { text: 'Guide', link: '/guide/what-is-agt', activeMatch: '^/guide/' },
+          { text: 'Reference', link: '/reference/cli', activeMatch: '^/reference/' },
+          { text: 'Architecture (中文)', link: '/zh/architecture/' },
         ],
-        sidebar: { '/guide/': enGuide },
+        sidebar: { '/guide/': enDocs, '/reference/': enDocs, '/help/': enDocs },
         editLink: { pattern: `${repo}/edit/main/docs/:path`, text: 'Edit this page on GitHub' },
         footer: { message: 'Released under the MIT License.', copyright: 'Copyright © 2026 blacsheep' },
       },
@@ -130,10 +211,16 @@ export default withMermaid({
       description: '让 Agent 拥有资源管理能力：自己写 Prompt、造工具、招队友。',
       themeConfig: {
         nav: [
-          { text: '指南', link: '/zh/guide/getting-started' },
-          { text: '架构', link: '/zh/architecture/' },
+          { text: '指南', link: '/zh/guide/what-is-agt', activeMatch: '^/zh/guide/' },
+          { text: '参考', link: '/zh/reference/cli', activeMatch: '^/zh/reference/' },
+          { text: '架构设计', link: '/zh/architecture/', activeMatch: '^/zh/architecture/' },
         ],
-        sidebar: { '/zh/guide/': zhGuide, '/zh/architecture/': zhArchitecture },
+        sidebar: {
+          '/zh/guide/': zhDocs,
+          '/zh/reference/': zhDocs,
+          '/zh/help/': zhDocs,
+          '/zh/architecture/': zhArchitecture,
+        },
         editLink: { pattern: `${repo}/edit/main/docs/:path`, text: '在 GitHub 上编辑此页' },
         footer: { message: '基于 MIT 许可发布', copyright: 'Copyright © 2026 blacsheep' },
         outline: { label: '本页目录', level: [2, 3] },

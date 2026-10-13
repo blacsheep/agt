@@ -1,7 +1,7 @@
 # Web 控制台架构
 
 最近整理：2026-10-10（由英文版翻译，并删除已过期的“5 秒安静窗口”和“1.5 秒轮询”描述）。
-使用说明见 [Web 指南](../guide/web-console.md)，调度行为见[调度器](scheduler.md)。
+使用说明见 [Web 控制台](../reference/web-console.md)，调度行为见[调度器](scheduler.md)。
 
 ## 进程与职责边界
 

@@ -16,10 +16,13 @@ agt 在本机管理 Agent 所需的资源（Provider、Model、Prompt、Skill、
 
 | 想做什么 | 看哪里 |
 | --- | --- |
-| 用界面上手 | [Web 指南](docs/zh/guide/web-console.md) |
-| 用 CLI 接入模型并验收 | [快速上手](docs/zh/guide/getting-started.md) |
-| 查命令 | [CLI 参考](docs/zh/guide/cli.md) |
-| 了解架构 | [整体架构](docs/zh/architecture/overview.md) |
+| 了解理念和功能 | [agt 是什么？](docs/zh/guide/what-is-agt.md) |
+| 从安装到让 lead 自己组队 | [快速开始](docs/zh/guide/quick-start.md) |
+| 资源、身份、讨论与任务 | [核心概念](docs/zh/guide/concepts.md) |
+| 模型、Agent、MCP、Codex、任务、记忆、审批 | [使用指南](docs/zh/guide/models.md) |
+| Web 控制台、CLI、内置工具、运行配置 | [参考](docs/zh/reference/cli.md) |
+| Agent 不回复怎么办 | [常见问题与排错](docs/zh/help/troubleshooting.md) |
+| 了解架构 | [架构图与执行流程](docs/zh/architecture/index.md) |
 | 全部文档 | [文档导航](docs/README.md) |
 
 ## 快速开始
@@ -48,7 +51,7 @@ node web/server.mjs --binary "$(command -v agt)"
 
 打开终端打印的完整带令牌链接。Node 提供页面与本机 HTTP 接口，并启动 Rust
 调度进程。升级代码后重新构建 CLI、重启 Web 并刷新页面。
-远程部署的本机访问方式与安全限制见 [Web 指南](docs/zh/guide/web-console.md)。
+远程服务器的访问方式见[安装](docs/zh/guide/installation.md#在远程服务器上运行)，安全边界见[安全模型](docs/zh/help/security.md)。
 
 ## 模块
 

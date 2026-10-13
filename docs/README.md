@@ -1,58 +1,47 @@
-# 文档导航
+# Docs / 文档
 
-最近整理：2026-10-13。详细文档以中文为主；与代码冲突时以代码为准，并在同一变更中修正文档。
+This directory is the source of the documentation site, <https://blacsheep.github.io/agt/>.
+本目录是文档网站的源文件。
 
-## 目录约定
+## Layout / 目录
 
-本目录同时是文档网站（VitePress）的源文件，网站发布在 <https://blacsheep.github.io/agt/>。
-
-| 目录 | 放什么 |
+| Path | Content |
 | --- | --- |
-| `index.md`、`guide/` | 英文首页与面向新用户的英文指南 |
-| `zh/guide/` | 中文使用指南：上手、Web 控制台、命令、功能用法 |
-| `zh/architecture/` | 中文架构设计：架构图、模块边界、协议与不变量 |
-| `.vitepress/` | 网站配置：导航、侧边栏、搜索、Mermaid |
+| `index.md`, `guide/`, `reference/`, `help/` | English user docs |
+| `zh/index.md`, `zh/guide/`, `zh/reference/`, `zh/help/` | 中文用户文档，与英文逐页对应 |
+| `zh/architecture/` | 架构与设计文档（仅中文），面向贡献者 |
+| `.vitepress/` | Site config: navigation, sidebars, search, Mermaid |
 
-本地预览（需要 Node.js 22+）：
+User docs (English / 中文):
+
+| Section | English | 中文 |
+| --- | --- | --- |
+| Start | [What is agt?](guide/what-is-agt.md) · [Installation](guide/installation.md) · [Quick start](guide/quick-start.md) · [Core concepts](guide/concepts.md) | [agt 是什么？](zh/guide/what-is-agt.md) · [安装](zh/guide/installation.md) · [快速开始](zh/guide/quick-start.md) · [核心概念](zh/guide/concepts.md) |
+| Guides | [Models](guide/models.md) · [Agents](guide/agents.md) · [Conversations](guide/conversations.md) · [Lead](guide/lead-team.md) · [MCP](guide/mcp.md) · [Codex](guide/codex.md) · [Tasks](guide/tasks.md) · [Memory](guide/memory.md) · [Local commands](guide/local-execution.md) · [Permissions](guide/permissions.md) · [MCP clients](guide/mcp-clients.md) | [模型](zh/guide/models.md) · [Agent](zh/guide/agents.md) · [对话](zh/guide/conversations.md) · [lead](zh/guide/lead-team.md) · [MCP](zh/guide/mcp.md) · [Codex](zh/guide/codex.md) · [任务](zh/guide/tasks.md) · [记忆](zh/guide/memory.md) · [本机命令](zh/guide/local-execution.md) · [权限](zh/guide/permissions.md) · [MCP 客户端](zh/guide/mcp-clients.md) |
+| Reference | [Web console](reference/web-console.md) · [CLI](reference/cli.md) · [Built-in tools](reference/builtin-tools.md) · [Configuration](reference/configuration.md) | [Web 控制台](zh/reference/web-console.md) · [CLI](zh/reference/cli.md) · [内置工具](zh/reference/builtin-tools.md) · [运行配置](zh/reference/configuration.md) |
+| Help | [Troubleshooting](help/troubleshooting.md) · [Security](help/security.md) | [排错](zh/help/troubleshooting.md) · [安全](zh/help/security.md) |
+
+Architecture (Chinese): [架构图与执行流程](zh/architecture/index.md).
+
+## Preview / 本地预览
+
+Requires Node.js 22+:
 
 ```bash
 cd docs
 npm install
-npm run dev
+npm run dev     # http://localhost:5173/agt/
+npm run build   # fails on dead links
 ```
 
-## 使用指南（zh/guide/）
+## Conventions / 维护约定
 
-| 文档 | 内容 |
-| --- | --- |
-| [Web 控制台](zh/guide/web-console.md) | 启动、界面布局、自动回复规则、常见问题与安全边界 |
-| [快速上手与验收](zh/guide/getting-started.md) | 自动化验收、手动接入模型、MCP 客户端配置、响应策略、排错与已知限制 |
-| [CLI 参考](zh/guide/cli.md) | 资源管理、分类、递归删除、IM、显式 Agent 执行、Harness |
-| [Agent 内置工具](zh/guide/builtin-tools.md) | `resource_management` 的权限与工具契约、创建并启用 Agent、Harness 管理工具 |
-| [异步任务协作](zh/guide/tasks.md) | `task_collaboration`：委派、等待、排序延后、取消重试、汇报、事件订阅 |
-| [运行配置、记忆与本机执行](zh/guide/config-and-memory.md) | `config.yaml`、Memory 工具、`local_execution`、并行工作与资源锁 |
-
-## 架构与设计（zh/architecture/）
-
-先看[架构图与执行流程](zh/architecture/index.md)，其中有整体架构、资源、消息、Run、任务五张流程图。专题设计：
-
-| 文档 | 内容 |
-| --- | --- |
-| [调度器](zh/architecture/scheduler.md) | 讨论、参与判断、回复准入、额度、恢复、重试 |
-| [Native 执行循环](zh/architecture/native-loop.md) | 循环层次、steering/follow-up、工具阶段契约 |
-| [上下文管理](zh/architecture/context.md) | token 预算、自动压缩、会话摘要、重置语义 |
-| [Harness：外部执行引擎](zh/architecture/harness.md) | Codex 接入、会话与恢复、执行流程、状态与租约 |
-| [权限审批](zh/architecture/permissions.md) | Native 权限策略、Harness 原生审批、人工入口、交互观察 |
-| [共享资源管理](zh/architecture/resources.md) | 七类资源的统一入口、更新契约、版本检查 |
-| [MCP 工具](zh/architecture/mcp-tools.md) | 开发契约、注册探测、schema 校验、Run 内能力刷新 |
-| [会话生命周期](zh/architecture/conversations.md) | 隐藏、退群、解散、负责人、已删除身份 |
-| [Web 控制台](zh/architecture/web-console.md) | Node 与 Rust 分工、HTTP 工作流、SSE、界面行为、安全边界 |
-
-## 维护约定
-
-1. 修改行为时，在同一变更中更新对应的现行文档；架构图的更新规则见 [架构图导航](zh/architecture/index.md#更新约定)。
-2. 现行文档只描述当前行为，不写“本轮验收”“测试 N 项通过”这类按轮次的记录，这些放在提交说明里。
-3. 不在现行文档中写数据库版本号；结构版本由代码中的 `Schema` 定义。
-4. 方案落地后，把设计要点并入 `zh/architecture/`；方案草稿和实测记录不进入仓库。
-5. 详细文档默认用中文；面向新用户的入门内容同时提供英文版（`guide/`）。代码标识、命令和协议字段保持原文。
-6. 新增页面后，在 `.vitepress/config.mts` 的侧边栏中登记，并运行 `npm run build` 确认没有断链。
+1. **English and Chinese user docs mirror each other.** Every page under `guide/`, `reference/`
+   and `help/` has a counterpart under `zh/` with the same file name and the same sections.
+   Change both in the same commit. 中英文用户文档逐页对应，修改时同一提交中同步两边。
+2. **User docs describe how to use agt**, not how it is implemented. Implementation details,
+   invariants and module boundaries go in `zh/architecture/`.
+3. When behavior changes, update the affected docs in the same change. Docs describe current
+   behavior only; test results and change history belong in commit messages.
+4. Keep code identifiers, commands and protocol fields in their original form.
+5. Register new pages in `.vitepress/config.mts` and run `npm run build` to check for dead links.

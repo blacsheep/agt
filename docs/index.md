@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: Get started
-      link: /guide/getting-started
+      link: /guide/quick-start
     - theme: alt
       text: What is agt?
       link: /guide/what-is-agt

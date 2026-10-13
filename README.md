@@ -58,8 +58,8 @@ cargo install --path crates/agt-cli
 node web/server.mjs --binary "$(command -v agt)"
 ```
 
-See the [Web guide](docs/zh/guide/web-console.md) for remote access over an SSH tunnel and the
-security model.
+See [Installation](docs/guide/installation.md#running-on-a-remote-server) for remote access over an SSH
+tunnel, and [Security model](docs/help/security.md).
 
 ## Where data lives
 
@@ -96,13 +96,13 @@ in [`docs/`](docs/README.md).
 
 | Topic | Link |
 | --- | --- |
-| The idea behind agt | [What is agt?](docs/guide/what-is-agt.md) |
-| From clone to a lead that builds its own team | [Getting started](docs/guide/getting-started.md) |
-| Every screen of the Web console (Chinese) | [Web guide](docs/zh/guide/web-console.md) |
-| Command reference (Chinese) | [CLI reference](docs/zh/guide/cli.md) |
-| Built-in agent tools (Chinese) | [Built-in tools](docs/zh/guide/builtin-tools.md) |
-| Task delegation between agents (Chinese) | [Tasks](docs/zh/guide/tasks.md) |
-| Architecture (Chinese) | [Overview](docs/zh/architecture/overview.md) |
+| The idea and the feature list | [What is agt?](docs/guide/what-is-agt.md) |
+| From install to a lead that builds its own team | [Quick start](docs/guide/quick-start.md) |
+| Resources, identities, discussions and tasks | [Core concepts](docs/guide/concepts.md) |
+| Models, agents, MCP tools, Codex, tasks, memory, approvals | [Guides](docs/guide/models.md) |
+| Web console, CLI, built-in tools, configuration | [Reference](docs/reference/cli.md) |
+| When an agent does not reply | [Troubleshooting](docs/help/troubleshooting.md) |
+| How it is built (Chinese) | [Architecture](docs/zh/architecture/index.md) |
 
 ## Crates
 
@@ -134,7 +134,7 @@ cargo build -p agt-cli && node --test web/test/*.test.mjs
 ```
 
 None of the tests need a real API key. Browser tests (`web/test/*.browser.mjs`) need
-a local Chrome and are run separately; see the [Web guide](docs/zh/guide/web-console.md).
+a local Chrome and are run separately; see [Web console architecture](docs/zh/architecture/web-console.md) (Chinese).
 
 ## Citation
 
