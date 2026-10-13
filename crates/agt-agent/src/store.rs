@@ -818,7 +818,9 @@ mod tests {
             "example-model-1.5"
         );
 
-        let deleted = store.delete("example-model-1.5").expect("delete dotted agent");
+        let deleted = store
+            .delete("example-model-1.5")
+            .expect("delete dotted agent");
         assert_eq!(deleted, home.join("agents/default/example-model-1.5"));
         assert!(!deleted.exists());
 
