@@ -40,12 +40,12 @@ flowchart TD
 
 ## 代码入口
 
-- [Web 发送与授权](../../web/server.mjs)：`message_send` 后调用 `schedule start`。
-- [协调循环](../../crates/agt-runtime/src/scheduler.rs)：`Scheduler::run`、`tick`、`dispatch_ready`。
-- [投递入队](../../crates/agt-runtime/src/scheduler/ingress.rs)。
-- [讨论授权与控制](../../crates/agt-runtime/src/scheduler/controls.rs)。
-- [准入](../../crates/agt-runtime/src/scheduler/admission.rs)与[引擎差异](../../crates/agt-runtime/src/scheduler/backend.rs)。
-- [Run 构造](../../crates/agt-runtime/src/scheduler/execution.rs)与[结果结算](../../crates/agt-runtime/src/scheduler/completion.rs)。
-- [调度持久化](../../crates/agt-runtime/src/schedule_store.rs)：原子领取、租约和版本检查。
+- [Web 发送与授权](../../../web/server.mjs)：`message_send` 后调用 `schedule start`。
+- [协调循环](../../../crates/agt-runtime/src/scheduler.rs)：`Scheduler::run`、`tick`、`dispatch_ready`。
+- [投递入队](../../../crates/agt-runtime/src/scheduler/ingress.rs)。
+- [讨论授权与控制](../../../crates/agt-runtime/src/scheduler/controls.rs)。
+- [准入](../../../crates/agt-runtime/src/scheduler/admission.rs)与[引擎差异](../../../crates/agt-runtime/src/scheduler/backend.rs)。
+- [Run 构造](../../../crates/agt-runtime/src/scheduler/execution.rs)与[结果结算](../../../crates/agt-runtime/src/scheduler/completion.rs)。
+- [调度持久化](../../../crates/agt-runtime/src/schedule_store.rs)：原子领取、租约和版本检查。
 
-返回[架构图导航](README.md)。
+返回[架构图导航](index.md)。

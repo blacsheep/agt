@@ -58,7 +58,7 @@ cargo install --path crates/agt-cli
 node web/server.mjs --binary "$(command -v agt)"
 ```
 
-See the [Web guide](web/README.md) for remote access over an SSH tunnel and the
+See the [Web guide](docs/zh/guide/web-console.md) for remote access over an SSH tunnel and the
 security model.
 
 ## Where data lives
@@ -91,17 +91,18 @@ agt init ~/my_agent_project
 
 ## Documentation
 
-The detailed docs are written in Chinese.
+**Docs site: <https://blacsheep.github.io/agt/>**, in English and Chinese. The site's source is
+in [`docs/`](docs/README.md).
 
 | Topic | Link |
 | --- | --- |
-| Using the Web console | [Web guide](web/README.md) |
-| Connecting a model and running an end-to-end check | [Getting started](docs/guide/getting-started.md) |
-| Command reference | [CLI reference](docs/guide/cli.md) |
-| Built-in agent tools | [Built-in tools](docs/guide/builtin-tools.md) |
-| Task delegation between agents | [Tasks](docs/guide/tasks.md) |
-| Architecture | [Overview](docs/architecture/overview.md) |
-| Everything else | [Docs index](docs/README.md) |
+| The idea behind agt | [What is agt?](docs/guide/what-is-agt.md) |
+| From clone to a lead that builds its own team | [Getting started](docs/guide/getting-started.md) |
+| Every screen of the Web console (Chinese) | [Web guide](docs/zh/guide/web-console.md) |
+| Command reference (Chinese) | [CLI reference](docs/zh/guide/cli.md) |
+| Built-in agent tools (Chinese) | [Built-in tools](docs/zh/guide/builtin-tools.md) |
+| Task delegation between agents (Chinese) | [Tasks](docs/zh/guide/tasks.md) |
+| Architecture (Chinese) | [Overview](docs/zh/architecture/overview.md) |
 
 ## Crates
 
@@ -133,7 +134,7 @@ cargo build -p agt-cli && node --test web/test/*.test.mjs
 ```
 
 None of the tests need a real API key. Browser tests (`web/test/*.browser.mjs`) need
-a local Chrome and are run separately; see the [Web guide](web/README.md).
+a local Chrome and are run separately; see the [Web guide](docs/zh/guide/web-console.md).
 
 ## Citation
 

@@ -63,13 +63,13 @@ flowchart TD
 
 ## 代码入口
 
-- [CLI 执行](../../crates/agt-cli/src/runtime.rs)：`execute`。
-- [公共生命周期](../../crates/agt-runtime/src/engine.rs)：`Runtime::run`、`finish`。
-- [引擎分派](../../crates/agt-runtime/src/engine/dispatch.rs)：`EngineKind`、`execute_claimed`。
-- [Native 循环](../../crates/agt-runtime/src/engine/native.rs)：`NativeRun`。
-- [模型请求](../../crates/agt-runtime/src/engine/native/request.rs)与[工具阶段](../../crates/agt-runtime/src/engine/native/tools.rs)。
-- [能力刷新](../../crates/agt-runtime/src/engine/native/refresh.rs)与[MCP 工具快照](../../crates/agt-runtime/src/engine/native/mcp.rs)。
-- [Native 审批](../../crates/agt-runtime/src/permission.rs)：`PermissionLoop`。
-- [Harness 宿主](../../crates/agt-runtime/src/harness.rs)与[Codex 协议](../../crates/agt-harness/src/codex.rs)。
+- [CLI 执行](../../../crates/agt-cli/src/runtime.rs)：`execute`。
+- [公共生命周期](../../../crates/agt-runtime/src/engine.rs)：`Runtime::run`、`finish`。
+- [引擎分派](../../../crates/agt-runtime/src/engine/dispatch.rs)：`EngineKind`、`execute_claimed`。
+- [Native 循环](../../../crates/agt-runtime/src/engine/native.rs)：`NativeRun`。
+- [模型请求](../../../crates/agt-runtime/src/engine/native/request.rs)与[工具阶段](../../../crates/agt-runtime/src/engine/native/tools.rs)。
+- [能力刷新](../../../crates/agt-runtime/src/engine/native/refresh.rs)与[MCP 工具快照](../../../crates/agt-runtime/src/engine/native/mcp.rs)。
+- [Native 审批](../../../crates/agt-runtime/src/permission.rs)：`PermissionLoop`。
+- [Harness 宿主](../../../crates/agt-runtime/src/harness.rs)与[Codex 协议](../../../crates/agt-harness/src/codex.rs)。
 
-返回[架构图导航](README.md)。
+返回[架构图导航](index.md)。

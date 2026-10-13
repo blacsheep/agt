@@ -12,12 +12,14 @@ agt 在本机管理 Agent 所需的资源（Provider、Model、Prompt、Skill、
 
 ## 文档
 
+**文档网站：<https://blacsheep.github.io/agt/zh/>**，源文件在 [`docs/`](docs/README.md)。
+
 | 想做什么 | 看哪里 |
 | --- | --- |
-| 用界面上手 | [Web 指南](web/README.md) |
-| 用 CLI 接入模型并验收 | [快速上手](docs/guide/getting-started.md) |
-| 查命令 | [CLI 参考](docs/guide/cli.md) |
-| 了解架构 | [整体架构](docs/architecture/overview.md) |
+| 用界面上手 | [Web 指南](docs/zh/guide/web-console.md) |
+| 用 CLI 接入模型并验收 | [快速上手](docs/zh/guide/getting-started.md) |
+| 查命令 | [CLI 参考](docs/zh/guide/cli.md) |
+| 了解架构 | [整体架构](docs/zh/architecture/overview.md) |
 | 全部文档 | [文档导航](docs/README.md) |
 
 ## 快速开始
@@ -46,7 +48,7 @@ node web/server.mjs --binary "$(command -v agt)"
 
 打开终端打印的完整带令牌链接。Node 提供页面与本机 HTTP 接口，并启动 Rust
 调度进程。升级代码后重新构建 CLI、重启 Web 并刷新页面。
-远程部署的本机访问方式与安全限制见 [Web 指南](web/README.md)。
+远程部署的本机访问方式与安全限制见 [Web 指南](docs/zh/guide/web-console.md)。
 
 ## 模块
 

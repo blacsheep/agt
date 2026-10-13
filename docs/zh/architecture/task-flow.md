@@ -40,11 +40,11 @@ sequenceDiagram
 
 ## 代码入口
 
-- [任务账本](../../crates/agt-runtime/src/work.rs)：`WorkLedger`、`WorkRequest`。
-- [任务工具](../../crates/agt-runtime/src/work/control.rs)：固定 Actor 的 `TaskControl`。
-- [任务分派与对账](../../crates/agt-runtime/src/work/dispatch.rs)：Run 关联、通知和 publication。
-- [等待与恢复](../../crates/agt-runtime/src/work/wait.rs)：`Checkpoint`、等待登记与恢复。
-- [汇报责任](../../crates/agt-runtime/src/work/reporting.rs)。
-- [并行与资源互斥](../../crates/agt-runtime/src/work/execution_policy.rs)。
+- [任务账本](../../../crates/agt-runtime/src/work.rs)：`WorkLedger`、`WorkRequest`。
+- [任务工具](../../../crates/agt-runtime/src/work/control.rs)：固定 Actor 的 `TaskControl`。
+- [任务分派与对账](../../../crates/agt-runtime/src/work/dispatch.rs)：Run 关联、通知和 publication。
+- [等待与恢复](../../../crates/agt-runtime/src/work/wait.rs)：`Checkpoint`、等待登记与恢复。
+- [汇报责任](../../../crates/agt-runtime/src/work/reporting.rs)。
+- [并行与资源互斥](../../../crates/agt-runtime/src/work/execution_policy.rs)。
 
-详细行为见[异步任务使用指南](../guide/tasks.md)；返回[架构图导航](README.md)。
+详细行为见[异步任务使用指南](../guide/tasks.md)；返回[架构图导航](index.md)。

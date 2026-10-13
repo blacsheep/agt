@@ -91,14 +91,14 @@ flowchart TB
 
 ## 代码入口
 
-- [Workspace](../../Cargo.toml)：crate 列表与依赖。
-- [Web 服务](../../web/server.mjs)：`cliRunner`、`createConsole`、`watchEvents`。
-- [共享资源服务](../../crates/agt-service/src/resources/mod.rs)与[更新/版本检查](../../crates/agt-service/src/resources/mutation.rs)。
-- [能力刷新](../../crates/agt-runtime/src/engine/native/refresh.rs)：批次边界装配与应用。
-- [Agent 配置](../../crates/agt-agent/src/config.rs)：`AgentConfig::validate`。
-- [服务接口](../../crates/agt-service/src/lib.rs)：Runtime 能力端口。
-- [身份绑定](../../crates/agt-service/src/bindings.rs)：`Binding`、`BindingStore`。
-- [事件投影](../../crates/agt-runtime/src/events.rs)：`Events`。
-- [长期记忆](../../crates/agt-service/src/memory/mod.rs)：身份隔离与来源可见性校验。
+- [Workspace](../../../Cargo.toml)：crate 列表与依赖。
+- [Web 服务](../../../web/server.mjs)：`cliRunner`、`createConsole`、`watchEvents`。
+- [共享资源服务](../../../crates/agt-service/src/resources/mod.rs)与[更新/版本检查](../../../crates/agt-service/src/resources/mutation.rs)。
+- [能力刷新](../../../crates/agt-runtime/src/engine/native/refresh.rs)：批次边界装配与应用。
+- [Agent 配置](../../../crates/agt-agent/src/config.rs)：`AgentConfig::validate`。
+- [服务接口](../../../crates/agt-service/src/lib.rs)：Runtime 能力端口。
+- [身份绑定](../../../crates/agt-service/src/bindings.rs)：`Binding`、`BindingStore`。
+- [事件投影](../../../crates/agt-runtime/src/events.rs)：`Events`。
+- [长期记忆](../../../crates/agt-service/src/memory/mod.rs)：身份隔离与来源可见性校验。
 
-返回[架构图导航](README.md)。
+返回[架构图导航](index.md)。
