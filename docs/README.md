@@ -9,7 +9,8 @@ This directory is the source of the documentation site, <https://blacsheep.githu
 | `index.md`, `guide/`, `modules/`, `help/` | English user docs |
 | `zh/index.md`, `zh/guide/`, `zh/modules/`, `zh/help/` | 中文用户文档，与英文逐页对应 |
 | `zh/architecture/` | 架构与设计文档（仅中文），面向贡献者 |
-| `.vitepress/` | Site config: navigation, sidebars, search, Mermaid |
+| `.vitepress/` | Site config: navigation, sidebars, search |
+| `diagrams/` | Python scripts that draw the SVG diagrams in `public/` |
 
 User docs (English / 中文):
 
@@ -40,3 +41,4 @@ npm run build   # fails on dead links
 3. When behavior changes, update the affected docs in the same change. Docs describe current behavior only; test results and change history belong in commit messages.
 4. Keep code identifiers, commands and protocol fields in their original form.
 5. Register new pages in `.vitepress/config.mts` and run `npm run build` to check for dead links.
+6. Diagrams are SVG files drawn by the scripts in `diagrams/`. Edit the script and run `python3 diagrams/build.py`; do not edit the SVG by hand. User-guide diagrams are generated in both languages from one layout. 图由 `diagrams/` 下的脚本生成，改脚本后重新生成，不要手改 SVG。

@@ -22,19 +22,7 @@ Agents that only **receive** tasks need nothing extra; they only need to be boun
 
 ## How a task flows
 
-```mermaid
-sequenceDiagram
-  participant L as Lead
-  participant S as Scheduler
-  participant W as Worker
-  L->>S: task_request(assignee, conversation, input)
-  S-->>L: queued
-  S->>W: run the task
-  W-->>S: result
-  S->>L: notify: result ready
-  L->>L: review (task_get)
-  L->>S: task_report(body) to the original conversation
-```
+![The lead requests a task, the worker runs it, the lead is notified and files a report](../public/guide/task-flow.en.svg)
 
 1. **Request.** The lead calls `task_request` with the assignee, a conversation both are in, the input, and a `request_key`. Repeating the same key returns the same task, so retries do not create duplicates.
 2. **Run.** The scheduler runs the worker. Its final answer is the result, and agt posts it in the task's conversation; if the worker tries to post the result with `message_send`, the call is refused and it is told to answer instead. Failures and unclear outcomes are reported too.

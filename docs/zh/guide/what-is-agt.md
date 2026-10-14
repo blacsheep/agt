@@ -26,16 +26,7 @@ agt 在你自己的机器上运行一组 AI Agent。它背后的想法是：管�
 
 ## 各部分如何配合
 
-```mermaid
-flowchart LR
-  you([你]) -- 对话 --> im[会话]
-  im -- 消息 --> sched[调度器]
-  sched -- 执行 --> agents[Agent]
-  agents -- 回复 / 委派 --> im
-  agents -- 创建与修改 --> res[(资源)]
-  res -- 配置 --> agents
-  agents -- 调用 --> tools[MCP 服务、Codex、Shell]
-```
+![你在会话中对话，调度器执行 Agent，Agent 回复、修改资源并调用工具](../../public/guide/how-it-fits.zh.svg)
 
 - **资源**是描述 Agent 的文件：Provider、Model、Prompt、Skill、MCP 服务、Harness 和 Agent 定义。
 - **会话**是人和 Agent 之间的私聊与群聊。

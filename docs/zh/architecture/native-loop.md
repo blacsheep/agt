@@ -2,7 +2,7 @@
 
 最近整理：2026-10-10。
 
-Native 执行采用明确的阶段函数。调度器仍负责输入投递、参与判断、租约和任务责任；执行循环负责已经认领的一次 Run，不接管其他会话的消息，也不共享全局 transcript。 Harness 保留自己的执行引擎，不作为 Native 模型请求的一种实现。
+Native 执行采用明确的阶段函数。调度器仍负责输入投递、参与判断、租约和任务责任；执行循环负责已经认领的一次 Run，不接管其他会话的消息，也不共享全局 transcript。Harness 保留自己的执行引擎，不作为 Native 模型请求的一种实现。
 
 ## 模块与状态归属
 
@@ -23,9 +23,9 @@ Native 执行采用明确的阶段函数。调度器仍负责输入投递、参�
 
 ## 公共执行边界
 
-调度器为两种引擎共用准入、请求标识、任务绑定和结果结算。 `scheduler/backend.rs` 集中表达执行前的差异：参与策略、上下文准备、 Native 模型预算与 MCP 准入检查。公共执行流程不再组合 `external` 布尔值与可空的 Native 配置。适配模块是固定的两种引擎分派，不是插件注册层。
+调度器为两种引擎共用准入、请求标识、任务绑定和结果结算。 `scheduler/backend.rs` 集中表达执行前的差异：参与策略、上下文准备、Native 模型预算与 MCP 准入检查。公共执行流程不再组合 `external` 布尔值与可空的 Native 配置。适配模块是固定的两种引擎分派，不是插件注册层。
 
-Runtime 仍按 `claim → execute_claimed → finish` 执行。已保存的 Run 先返回，不会因引擎配置变化重新执行；新 Run 认领后才再次解析引擎。调度准入时的引擎选择不替代运行时配置检查。显式 Native 子 Run 继续使用原委派配置快照。 Native 与 Harness 分别维护自己的执行阶段；Harness 的宿主、协议与取消确认边界见 [Harness 执行流程](harness.md#执行流程)。两种引擎返回原有执行结果，并由公共终态逻辑保留 completed / suspended / canceled / interrupted / outcome_unknown 等区别。
+Runtime 仍按 `claim → execute_claimed → finish` 执行。已保存的 Run 先返回，不会因引擎配置变化重新执行；新 Run 认领后才再次解析引擎。调度准入时的引擎选择不替代运行时配置检查。显式 Native 子 Run 继续使用原委派配置快照。Native 与 Harness 分别维护自己的执行阶段；Harness 的宿主、协议与取消确认边界见 [Harness 执行流程](harness.md#执行流程)。两种引擎返回原有执行结果，并由公共终态逻辑保留 completed / suspended / canceled / interrupted / outcome_unknown 等区别。
 
 ## 循环层次
 
@@ -44,7 +44,7 @@ Runtime: 保存 Run 终态与剩余已接纳输入的终态
 
 普通消息不再固定等待 5 秒，也不合并为一个调度任务。每条消息独立持久化。人类消息默认 steering，Agent 消息默认 follow-up；发送时可用 `input_mode` 或 CLI `im message send --input-mode steering|follow_up` 指定。模式不授予额外权限。仅同 principal、同 conversation、同 discussion 的普通输入可进入当前 Native Run。群内未被点名的 Agent 消息仍须参与判断；silent/wait 不进入执行上下文。
 
-接纳先写 `run_inputs` 收据，再进入模型或工具阶段，并计入回复额度。暂停、额度、成员资格、删除和上下文重置仍生效。压缩保留已接纳输入原文。已接纳但未完成的输入在失败、取消或接管时随 Run 结算，不自动重放；尚未接纳的消息保留在队列，包含最后一次轮询之后到达的消息。已完成输入不被后续失败覆盖。 follow-up 开始新的发送去重范围；steering 保留当前范围。回复关联当前处理的消息。
+接纳先写 `run_inputs` 收据，再进入模型或工具阶段，并计入回复额度。暂停、额度、成员资格、删除和上下文重置仍生效。压缩保留已接纳输入原文。已接纳但未完成的输入在失败、取消或接管时随 Run 结算，不自动重放；尚未接纳的消息保留在队列，包含最后一次轮询之后到达的消息。已完成输入不被后续失败覆盖。follow-up 开始新的发送去重范围；steering 保留当前范围。回复关联当前处理的消息。
 
 显式 work 继续使用 task_input/await；Harness 使用后续独立 Run 处理排队消息，不支持本机制的运行中注入。普通网络重试仍只重试同一个模型请求，不消费队列。
 
@@ -52,10 +52,10 @@ Runtime: 保存 Run 终态与剩余已接纳输入的终态
 
 ## 工具阶段契约
 
-1. `prepare_tool_batch`：先验证完整响应、工具名、调用 ID 和委派权限。 await/yield/input 必须独占批次。任何一项失败，都不开始该批次的工具副作用。
+1. `prepare_tool_batch`：先验证完整响应、工具名、调用 ID 和委派权限。await/yield/input 必须独占批次。任何一项失败，都不开始该批次的工具副作用。
 2. `prepare_tool_call`：解析参数，准备脱敏审计记录；不写数据库或调用工具。
 3. `before_tool_call`：检查取消与调度围栏，然后持久化 Started 审计记录。
-4. `execute_tool_call`：调用 delegate、Framework 或 MCP 实现。 Framework 服务继续执行身份、成员和权限检查；数据库短事务围栏不包住外部请求。
+4. `execute_tool_call`：调用 delegate、Framework 或 MCP 实现。Framework 服务继续执行身份、成员和权限检查；数据库短事务围栏不包住外部请求。
 5. `after_tool_call`：先保存成功/失败审计与失败计数，再把裁剪后的结果写入 transcript。可反馈给模型的业务错误保留为工具结果，后续调用继续；致命错误或取消终止批次。框架工具分类后的公开错误进入审计与模型上下文；被隐藏的根因只写入私有工具详情的 `diagnostic` 字段（`agt tool call` 失败时输出到 stderr），不进入调用记录、Web 投影或外部 MCP 客户端。成功的等待工具返回 Suspend，由循环保存包括该工具结果的 checkpoint。
 
 这些阶段是内部 Rust 方法，不是任意注册的插件回调。新增工具后端接入 execute 阶段，通用审计或结果处理放在 before/after 阶段；强制权限和取消校验不能被扩展绕过。当前工具批次保持串行，以保留已有副作用顺序。

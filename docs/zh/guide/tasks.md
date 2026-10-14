@@ -22,19 +22,7 @@ agt agent update lead --add-builtin-tool task_collaboration
 
 ## 任务的流程
 
-```mermaid
-sequenceDiagram
-  participant L as Lead
-  participant S as 调度器
-  participant W as 执行者
-  L->>S: task_request(assignee, conversation, input)
-  S-->>L: queued
-  S->>W: 执行任务
-  W-->>S: 结果
-  S->>L: 通知：结果已就绪
-  L->>L: 审阅（task_get）
-  L->>S: task_report(body) 发往原会话
-```
+![lead 发起任务，执行者完成后通知 lead，lead 提交汇报](../../public/guide/task-flow.zh.svg)
 
 1. **请求。** lead 调用 `task_request`，传入执行者、双方都在的会话、输入内容和 `request_key`。重复使用同一个 key 会返回同一个任务，重试不会产生重复任务。
 2. **执行。** 调度器运行执行者。它的最终回答就是任务结果，agt 会把它发到任务所在的会话；如果执行者试图用 `message_send` 自己发布结果，这次调用会被拒绝，并提示它改为直接回答。失败和结果不明确的情况也会通知。

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 766" width="720" height="766" role="img" aria-labelledby="title desc">
+  <title id="title">Run 执行总览</title>
+  <desc id="desc">RunRequest 先规范化并持久化 claim；新请求按 Agent 执行方式进入 Native 循环或 Harness，最终保存 Run 终态，或保存检查点后返回 suspended。</desc>
+  <style>
+svg { --bg: #fbfbfd; --band: #f2f1fb; --band-line: #dcd8f4; --node: #ffffff; --node-line: #b8b1ea;
+  --ext: #f6f6f8; --ext-line: #c9c9d6; --dec: #fff8ec; --dec-line: #e2b766; --end: #eef6f1; --end-line: #8cc3a2;
+  --stop: #fbefef; --stop-line: #e0a3a3; --title: #1f1f2e; --sub: #5d5d72; --label: #6e6a92; --line: #77778d;
+  --accent: #7c6fe0; --life: #c7c4dc; --block: #8c88b0; }
+@media (prefers-color-scheme: dark) {
+  svg { --bg: #1c1c23; --band: #252432; --band-line: #3b3854; --node: #2d2c3c; --node-line: #5e57a8;
+    --ext: #262630; --ext-line: #4a4a5e; --dec: #332c1f; --dec-line: #a3813f; --end: #1f2e26; --end-line: #4f8a66;
+    --stop: #352223; --stop-line: #9a5c5c; --title: #ececf4; --sub: #a9a9bb; --label: #a39ee0; --line: #9a9ab0;
+    --accent: #a99ff0; --life: #47455e; --block: #8f8ab8; }
+}
+text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+.bg { fill: var(--bg); }
+.band { fill: var(--band); stroke: var(--band-line); }
+.band-label { fill: var(--label); font-size: 13px; font-weight: 600; }
+.node { fill: var(--node); stroke: var(--node-line); stroke-width: 1.2; }
+.ext { fill: var(--ext); stroke: var(--ext-line); stroke-dasharray: 4 3; }
+.dec { fill: var(--dec); stroke: var(--dec-line); stroke-width: 1.2; }
+.end { fill: var(--end); stroke: var(--end-line); stroke-width: 1.2; }
+.stop { fill: var(--stop); stroke: var(--stop-line); stroke-width: 1.2; }
+.t { fill: var(--title); font-size: 14px; font-weight: 600; text-anchor: middle; }
+.s { fill: var(--sub); font-size: 12px; text-anchor: middle; }
+.edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+.back { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.el { fill: var(--sub); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.el-band { stroke: var(--band); }
+.bl { fill: var(--accent); }
+.head { fill: var(--line); }
+.head-back { fill: var(--accent); }
+.life { stroke: var(--life); stroke-width: 1.2; stroke-dasharray: 4 4; }
+.block { fill: none; stroke: var(--block); stroke-width: 1; }
+.block-tag { fill: var(--block); }
+.block-tag-text { fill: var(--bg); font-size: 11px; font-weight: 700; }
+.block-label { fill: var(--label); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.block-split { stroke: var(--block); stroke-width: 1; stroke-dasharray: 5 4; }
+.note { fill: var(--dec); stroke: var(--dec-line); }
+</style>
+  <defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker>
+  <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-back" d="M0 0L10 5L0 10z"/></marker>
+</defs>
+  <rect class="bg" width="720" height="766" rx="12"/>
+  <rect class="end" x="210" y="16" width="300" height="36" rx="18.0"/>
+  <text class="t" x="360.0" y="39.0">RunRequest</text>
+  <rect class="node" x="210" y="76" width="300" height="36" rx="8"/>
+  <text class="t" x="360.0" y="99.0">规范化参数并持久化 claim</text>
+  <rect class="dec" x="210" y="136" width="300" height="36" rx="8"/>
+  <text class="t" x="360.0" y="159.0">请求键已存在？</text>
+  <rect class="end" x="20" y="216" width="170" height="36" rx="18.0"/>
+  <text class="t" x="105.0" y="239.0">返回已有记录</text>
+  <rect class="dec" x="210" y="216" width="300" height="36" rx="8"/>
+  <text class="t" x="360.0" y="239.0">Agent 执行方式？</text>
+  <rect class="stop" x="560" y="216" width="140" height="36" rx="18.0"/>
+  <text class="t" x="630.0" y="239.0">拒绝</text>
+  <rect class="node" x="30" y="306" width="300" height="64" rx="8"/>
+  <text class="t" x="180.0" y="334.0">Native 循环</text>
+  <text class="s" x="180.0" y="352.0">模型请求、工具批次与能力刷新，见下图</text>
+  <rect class="node" x="390" y="306" width="300" height="48" rx="8"/>
+  <text class="t" x="540.0" y="326.0">获取会话执行锁</text>
+  <text class="s" x="540.0" y="344.0">读取配置与线程映射</text>
+  <rect class="node" x="390" y="378" width="300" height="48" rx="8"/>
+  <text class="t" x="540.0" y="398.0">启动 Codex app-server</text>
+  <text class="s" x="540.0" y="416.0">建立或恢复 thread</text>
+  <rect class="node" x="390" y="450" width="300" height="48" rx="8"/>
+  <text class="t" x="540.0" y="470.0">执行 turn</text>
+  <text class="s" x="540.0" y="488.0">桥接框架工具、审批和公开进度</text>
+  <rect class="dec" x="390" y="522" width="300" height="36" rx="8"/>
+  <text class="t" x="540.0" y="545.0">协议确认结果</text>
+  <rect class="end" x="210" y="622" width="300" height="36" rx="18.0"/>
+  <text class="t" x="360.0" y="645.0">保存检查点，返回 suspended</text>
+  <rect class="end" x="30" y="714" width="660" height="36" rx="18.0"/>
+  <text class="t" x="360.0" y="737.0">保存 Run 终态</text>
+  <path class="edge" d="M360 53L360 74" marker-end="url(#a)"/>
+  <path class="edge" d="M360 113L360 134" marker-end="url(#a)"/>
+  <path class="edge" d="M360 173L360 214" marker-end="url(#a)"/>
+  <text class="el" x="368.0" y="202" text-anchor="start">新请求</text>
+  <path class="edge" d="M209 154L111 154Q105 154 105 160L105 214" marker-end="url(#a)"/>
+  <text class="el" x="198" y="148" text-anchor="end">参数相同</text>
+  <path class="edge" d="M511 154L624 154Q630 154 630 160L630 214" marker-end="url(#a)"/>
+  <text class="el" x="522" y="148" text-anchor="start">参数冲突</text>
+  <path class="edge" d="M280 253L280 267Q280 273 274 273L186 273Q180 273 180 279L180 304" marker-end="url(#a)"/>
+  <text class="el" x="272" y="267" text-anchor="end">Model</text>
+  <path class="edge" d="M440 253L440 267Q440 273 446 273L534 273Q540 273 540 279L540 304" marker-end="url(#a)"/>
+  <text class="el" x="448" y="267" text-anchor="start">Harness</text>
+  <path class="edge" d="M540 355L540 376" marker-end="url(#a)"/>
+  <path class="edge" d="M540 427L540 448" marker-end="url(#a)"/>
+  <path class="edge" d="M540 499L540 520" marker-end="url(#a)"/>
+  <path class="edge" d="M270 371L270 620" marker-end="url(#a)"/>
+  <text class="el" x="262" y="582" text-anchor="end">工具要求挂起</text>
+  <path class="edge" d="M60 371L60 712" marker-end="url(#a)"/>
+  <text class="el" x="68" y="674" text-anchor="start">完成、失败或取消</text>
+  <path class="edge" d="M450 559L450 620" marker-end="url(#a)"/>
+  <text class="el" x="458" y="579" text-anchor="start">确认安全等待</text>
+  <path class="edge" d="M660 559L660 712" marker-end="url(#a)"/>
+  <text class="el" x="652" y="660" text-anchor="end">正常完成；失败或</text>
+  <text class="el" x="652" y="674" text-anchor="end">结果不确定</text>
+</svg>

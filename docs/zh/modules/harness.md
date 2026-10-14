@@ -11,7 +11,7 @@
 
 ## 作用
 
-Harness 让 Agent 运行在 [Codex](https://github.com/openai/codex) 上，而不是 agt 自己的模型循环。Codex 自带文件编辑、 Shell 命令和沙箱，因此 Codex Agent 可以编写和测试代码，包括供团队其他成员使用的 MCP 服务。
+Harness 让 Agent 运行在 [Codex](https://github.com/openai/codex) 上，而不是 agt 自己的模型循环。Codex 自带文件编辑、Shell 命令和沙箱，因此 Codex Agent 可以编写和测试代码，包括供团队其他成员使用的 MCP 服务。
 
 agt 启动 `codex app-server`，为每个 Agent 在每个会话中保持一个 Codex 会话，把 Codex 的审批请求转发到 [审批队列](./permissions.md)，并把 Codex 的最终答复发布为 Agent 的回复。Codex 使用自己的登录和配置；agt 不保存 Codex 凭据。
 

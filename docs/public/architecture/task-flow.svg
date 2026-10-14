@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 564" width="720" height="564" role="img" aria-labelledby="title desc">
+  <title id="title">异步任务协作时序</title>
+  <desc id="desc">Agent A 创建子任务并登记等待后安全挂起；Agent B 执行子任务，结果持久化后 A 在条件满足时继续，读取结果并提交汇报，最后以稳定消息键发布到原始会话。</desc>
+  <style>
+svg { --bg: #fbfbfd; --band: #f2f1fb; --band-line: #dcd8f4; --node: #ffffff; --node-line: #b8b1ea;
+  --ext: #f6f6f8; --ext-line: #c9c9d6; --dec: #fff8ec; --dec-line: #e2b766; --end: #eef6f1; --end-line: #8cc3a2;
+  --stop: #fbefef; --stop-line: #e0a3a3; --title: #1f1f2e; --sub: #5d5d72; --label: #6e6a92; --line: #77778d;
+  --accent: #7c6fe0; --life: #c7c4dc; --block: #8c88b0; }
+@media (prefers-color-scheme: dark) {
+  svg { --bg: #1c1c23; --band: #252432; --band-line: #3b3854; --node: #2d2c3c; --node-line: #5e57a8;
+    --ext: #262630; --ext-line: #4a4a5e; --dec: #332c1f; --dec-line: #a3813f; --end: #1f2e26; --end-line: #4f8a66;
+    --stop: #352223; --stop-line: #9a5c5c; --title: #ececf4; --sub: #a9a9bb; --label: #a39ee0; --line: #9a9ab0;
+    --accent: #a99ff0; --life: #47455e; --block: #8f8ab8; }
+}
+text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+.bg { fill: var(--bg); }
+.band { fill: var(--band); stroke: var(--band-line); }
+.band-label { fill: var(--label); font-size: 13px; font-weight: 600; }
+.node { fill: var(--node); stroke: var(--node-line); stroke-width: 1.2; }
+.ext { fill: var(--ext); stroke: var(--ext-line); stroke-dasharray: 4 3; }
+.dec { fill: var(--dec); stroke: var(--dec-line); stroke-width: 1.2; }
+.end { fill: var(--end); stroke: var(--end-line); stroke-width: 1.2; }
+.stop { fill: var(--stop); stroke: var(--stop-line); stroke-width: 1.2; }
+.t { fill: var(--title); font-size: 14px; font-weight: 600; text-anchor: middle; }
+.s { fill: var(--sub); font-size: 12px; text-anchor: middle; }
+.edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+.back { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.el { fill: var(--sub); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.el-band { stroke: var(--band); }
+.bl { fill: var(--accent); }
+.head { fill: var(--line); }
+.head-back { fill: var(--accent); }
+.life { stroke: var(--life); stroke-width: 1.2; stroke-dasharray: 4 4; }
+.block { fill: none; stroke: var(--block); stroke-width: 1; }
+.block-tag { fill: var(--block); }
+.block-tag-text { fill: var(--bg); font-size: 11px; font-weight: 700; }
+.block-label { fill: var(--label); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.block-split { stroke: var(--block); stroke-width: 1; stroke-dasharray: 5 4; }
+.note { fill: var(--dec); stroke: var(--dec-line); }
+</style>
+  <defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker>
+  <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-back" d="M0 0L10 5L0 10z"/></marker>
+</defs>
+  <rect class="bg" width="720" height="564" rx="12"/>
+  <line class="life" x1="102" y1="68" x2="102" y2="548"/>
+  <rect class="node" x="21.0" y="16" width="162.0" height="52" rx="8"/>
+  <text class="t" x="102.0" y="38.0">Agent A</text>
+  <text class="s" x="102.0" y="56.0">请求方</text>
+  <line class="life" x1="274" y1="68" x2="274" y2="548"/>
+  <rect class="node" x="193.0" y="16" width="162.0" height="52" rx="8"/>
+  <text class="t" x="274.0" y="38.0">Work 账本</text>
+  <text class="s" x="274.0" y="56.0">与 Scheduler</text>
+  <line class="life" x1="446" y1="68" x2="446" y2="548"/>
+  <rect class="node" x="365.0" y="16" width="162.0" height="52" rx="8"/>
+  <text class="t" x="446.0" y="38.0">Agent B</text>
+  <text class="s" x="446.0" y="56.0">执行方</text>
+  <line class="life" x1="618" y1="68" x2="618" y2="548"/>
+  <rect class="node" x="537.0" y="16" width="162.0" height="52" rx="8"/>
+  <text class="t" x="618.0" y="38.0">原始会话</text>
+  <text class="s" x="618.0" y="56.0">IM</text>
+  <text class="el" x="188" y="98" text-anchor="middle" style="font-size:12px">task_request 创建子任务</text>
+  <path class="edge" d="M102 107H272" marker-end="url(#a)"/>
+  <text class="el" x="188" y="133" text-anchor="middle" style="font-size:12px">返回 task_id</text>
+  <path class="back" d="M274 142H104" marker-end="url(#b)"/>
+  <text class="el" x="188" y="168" text-anchor="middle" style="font-size:12px">task_await 登记依赖</text>
+  <path class="edge" d="M102 177H272" marker-end="url(#a)"/>
+  <rect class="note" x="29.8" y="191" width="316.5" height="42" rx="6"/>
+  <text class="s" x="188" y="210" style="fill: var(--title)">保存上下文与已采用配置指纹</text>
+  <text class="s" x="188" y="225" style="fill: var(--title)">确认安全挂起，释放 A 的执行槽</text>
+  <text class="el" x="360" y="257" text-anchor="middle" style="font-size:12px">准入后启动子任务 Run</text>
+  <path class="edge" d="M274 266H444" marker-end="url(#a)"/>
+  <text class="el" x="360" y="292" text-anchor="middle" style="font-size:12px">成功、失败或其他真实结果</text>
+  <path class="back" d="M446 301H276" marker-end="url(#b)"/>
+  <rect class="node" x="186" y="315" width="176" height="25" rx="6"/>
+  <text class="s" x="274" y="333" style="fill: var(--title)">持久化结果、通知与恢复条件</text>
+  <text class="el" x="188" y="364" text-anchor="middle" style="font-size:12px">条件满足且获准后启动 continuation Run</text>
+  <path class="edge" d="M274 373H104" marker-end="url(#a)"/>
+  <rect class="note" x="29.8" y="387" width="316.5" height="42" rx="6"/>
+  <text class="s" x="188" y="406" style="fill: var(--title)">核对重新加载的配置指纹与工作目录</text>
+  <text class="s" x="188" y="421" style="fill: var(--title)">一致才从检查点继续，不重放已完成工具</text>
+  <text class="el" x="188" y="453" text-anchor="middle" style="font-size:12px">读取结果并提交 task_report</text>
+  <path class="edge" d="M102 462H272" marker-end="url(#a)"/>
+  <text class="el" x="446" y="488" text-anchor="middle" style="font-size:12px">使用稳定消息键发布</text>
+  <path class="edge" d="M274 497H616" marker-end="url(#a)"/>
+  <rect class="node" x="222" y="511" width="104" height="25" rx="6"/>
+  <text class="s" x="274" y="529" style="fill: var(--title)">确认汇报已送达</text>
+</svg>

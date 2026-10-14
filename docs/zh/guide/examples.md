@@ -63,7 +63,7 @@
 
 ![主持人公布真相](../../public/showcase/mystery-reveal.webp)
 
-玩家的 Prompt 里没有真相，玩家的工具也取不到别人的线索，秘密是靠工具的接法保住的。延伸阅读：[Codex Agent](./codex.md)、 [MCP 服务器](./mcp.md)。
+玩家的 Prompt 里没有真相，玩家的工具也取不到别人的线索，秘密是靠工具的接法保住的。延伸阅读：[Codex Agent](./codex.md)、[MCP 服务器](./mcp.md)。
 
 ## 自己尝试时会遇到什么
 

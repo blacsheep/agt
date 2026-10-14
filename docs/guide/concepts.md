@@ -31,11 +31,7 @@ An **agent definition** is only configuration. To take part in conversations it 
 - an **identity** (a *principal*): a participant in the chat system, such as `lead`. People are principals too; the Web console's operator is `web-operator` by default.
 - a **binding** that connects the identity to the definition and holds its running settings: enabled or disabled, working directory and response policy.
 
-```mermaid
-flowchart LR
-  def[Agent definition<br/>agents/default/reviewer] -- binding --> id[Identity<br/>reviewer]
-  id -- member of --> conv[Conversations]
-```
+![An agent definition is bound to an identity, which is a member of conversations](../public/guide/agent-binding.en.svg)
 
 The Web console's **Create agent** (创建 Agent) creates all three at once. In the CLI and in agent tools they are separate steps: `resource_write` (definition), `principal_create` (identity) and `agent_bind` (binding). Disabling a binding stops the agent everywhere but keeps its identity and history.
 

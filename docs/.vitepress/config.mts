@@ -1,6 +1,6 @@
 import { posix } from 'node:path'
 import type MarkdownIt from 'markdown-it'
-import { withMermaid } from 'vitepress-plugin-mermaid'
+import { defineConfig } from 'vitepress'
 
 const repo = 'https://github.com/blacsheep/agt'
 
@@ -202,7 +202,7 @@ const zhArchitecture = [
   },
 ]
 
-export default withMermaid({
+export default defineConfig({
   title: 'agt',
   base: '/agt/',
   cleanUrls: true,
@@ -213,9 +213,6 @@ export default withMermaid({
     ['meta', { name: 'theme-color', content: '#3c8772' }],
   ],
   markdown: { config: sourceLinks },
-  // The dev server serves mermaid's CommonJS dependencies (such as fastdom)
-  // unbundled, which breaks every page. Pre-bundling mermaid converts them.
-  vite: { optimizeDeps: { include: ['mermaid'] } },
   themeConfig: {
     socialLinks: [{ icon: 'github', link: repo }],
     search: {

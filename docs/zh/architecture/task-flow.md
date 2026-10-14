@@ -2,25 +2,7 @@
 
 最近代码核对：2026-10-09。此图描述 `task_*` 持久任务协作，不是显式 Run 内的同步 `delegate`。
 
-```mermaid
-sequenceDiagram
-    participant A as Agent A
-    participant W as Work 账本与 Scheduler
-    participant B as Agent B
-    participant IM as 原始会话
-    A->>W: task_request 创建子任务
-    W-->>A: 返回 task_id
-    A->>W: task_await 登记依赖
-    Note over A,W: 保存上下文与已采用配置指纹<br/>确认安全挂起，释放 A 的执行槽
-    W->>B: 准入后启动子任务 Run
-    B-->>W: 成功、失败或其他真实结果
-    W->>W: 持久化结果、通知与恢复条件
-    W->>A: 条件满足且获准后启动 continuation Run
-    Note over A,W: 核对重新加载的配置指纹与工作目录<br/>一致才从检查点继续，不重放已完成工具
-    A->>W: 读取结果并提交 task_report
-    W->>IM: 使用稳定消息键发布
-    W->>W: 确认汇报已送达
-```
+![异步任务协作时序：创建子任务、等待、恢复与汇报](../../public/architecture/task-flow.svg)
 
 ## 关键约束
 

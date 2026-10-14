@@ -1,13 +1,13 @@
 # 整体架构
 
-最近代码核对：2026-10-10。箭头表示调用或数据流，不是严格的 crate 依赖关系；紫色虚线是工具调用和变更事件的回流。图里只画主干，各模块的细节见下文和专题页。
+最近代码核对：2026-10-10。箭头表示调用或数据流，不是严格的 crate 依赖关系；紫色虚线是工具调用和变更事件的回流。图里只画主干：agt CLI 还会启动长期运行的 scheduler，并执行显式 `agt agent run`，这两条没有单独画出；各模块的细节见下文和专题页。
 
 ![agt 整体架构：入口、服务层、执行层、执行引擎与存储](../../public/architecture/overview.svg)
 
 ## 模块与进程边界
 
 - `agt-core`、`agt-storage`、`agt-config` 提供通用引用、文件操作、唤醒通知和 home 配置。
-- 七类配置资源由 `agt-service::Resources` 统一管理；CLI 资源命令和 ToolService 都调用它， Web 经 `agt tool call` 进入 ToolService。各资源模块保留自己的配置类型与校验规则。
+- 七类配置资源由 `agt-service::Resources` 统一管理；CLI 资源命令和 ToolService 都调用它，Web 经 `agt tool call` 进入 ToolService。各资源模块保留自己的配置类型与校验规则。
 - 资源管理使用 `.resources.lock` 串行化读写与删除执行；`revision/expected_revision` 检测过期编辑。详情见[资源管理与能力生效](resource-flow.md)。
 - 资源服务保存配置；Native Runtime 在成功自修改 MCP/Skill 后，于工具批次结束刷新能力。保存成功不等于当前 Run 已加载，刷新失败保留旧能力并单独报告。
 - Agent 引用 Model 或 Harness，二者互斥；Model 再引用 Provider。Prompt、Skill 与工具能力附着于 Agent。

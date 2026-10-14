@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 764" width="720" height="764" role="img" aria-labelledby="title desc">
+  <title id="title">lead 创建 Agent 的调用路径</title>
+  <desc id="desc">Web 保存消息并启动调度，Scheduler 以 lead 的身份执行 NativeRun；framework_resource_write 经校验与审批进入 ToolService，由 Resources 写入 agent.yaml，工具结果返回 Run。要求成为可用队友时再创建身份并保存绑定；最终回答幂等发布回 IM。</desc>
+  <style>
+svg { --bg: #fbfbfd; --band: #f2f1fb; --band-line: #dcd8f4; --node: #ffffff; --node-line: #b8b1ea;
+  --ext: #f6f6f8; --ext-line: #c9c9d6; --dec: #fff8ec; --dec-line: #e2b766; --end: #eef6f1; --end-line: #8cc3a2;
+  --stop: #fbefef; --stop-line: #e0a3a3; --title: #1f1f2e; --sub: #5d5d72; --label: #6e6a92; --line: #77778d;
+  --accent: #7c6fe0; --life: #c7c4dc; --block: #8c88b0; }
+@media (prefers-color-scheme: dark) {
+  svg { --bg: #1c1c23; --band: #252432; --band-line: #3b3854; --node: #2d2c3c; --node-line: #5e57a8;
+    --ext: #262630; --ext-line: #4a4a5e; --dec: #332c1f; --dec-line: #a3813f; --end: #1f2e26; --end-line: #4f8a66;
+    --stop: #352223; --stop-line: #9a5c5c; --title: #ececf4; --sub: #a9a9bb; --label: #a39ee0; --line: #9a9ab0;
+    --accent: #a99ff0; --life: #47455e; --block: #8f8ab8; }
+}
+text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+.bg { fill: var(--bg); }
+.band { fill: var(--band); stroke: var(--band-line); }
+.band-label { fill: var(--label); font-size: 13px; font-weight: 600; }
+.node { fill: var(--node); stroke: var(--node-line); stroke-width: 1.2; }
+.ext { fill: var(--ext); stroke: var(--ext-line); stroke-dasharray: 4 3; }
+.dec { fill: var(--dec); stroke: var(--dec-line); stroke-width: 1.2; }
+.end { fill: var(--end); stroke: var(--end-line); stroke-width: 1.2; }
+.stop { fill: var(--stop); stroke: var(--stop-line); stroke-width: 1.2; }
+.t { fill: var(--title); font-size: 14px; font-weight: 600; text-anchor: middle; }
+.s { fill: var(--sub); font-size: 12px; text-anchor: middle; }
+.edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+.back { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.el { fill: var(--sub); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.el-band { stroke: var(--band); }
+.bl { fill: var(--accent); }
+.head { fill: var(--line); }
+.head-back { fill: var(--accent); }
+.life { stroke: var(--life); stroke-width: 1.2; stroke-dasharray: 4 4; }
+.block { fill: none; stroke: var(--block); stroke-width: 1; }
+.block-tag { fill: var(--block); }
+.block-tag-text { fill: var(--bg); font-size: 11px; font-weight: 700; }
+.block-label { fill: var(--label); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.block-split { stroke: var(--block); stroke-width: 1; stroke-dasharray: 5 4; }
+.note { fill: var(--dec); stroke: var(--dec-line); }
+</style>
+  <defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker>
+  <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-back" d="M0 0L10 5L0 10z"/></marker>
+</defs>
+  <rect class="bg" width="720" height="764" rx="12"/>
+  <rect class="end" x="260" y="16" width="200" height="36" rx="18.0"/>
+  <text class="t" x="360.0" y="39.0">用户：请创建 reviewer</text>
+  <rect class="node" x="260" y="76" width="200" height="48" rx="8"/>
+  <text class="t" x="360.0" y="96.0">Web / Node</text>
+  <text class="s" x="360.0" y="114.0">发送消息并授权自动回复</text>
+  <rect class="node" x="24" y="76" width="200" height="48" rx="8"/>
+  <text class="t" x="124.0" y="96.0">outbox → events watch</text>
+  <text class="s" x="124.0" y="114.0">Node SSE → Web 刷新</text>
+  <rect class="node" x="24" y="168" width="200" height="48" rx="8"/>
+  <text class="t" x="124.0" y="188.0">agt-service → agt-im</text>
+  <text class="s" x="124.0" y="206.0">保存消息与投递</text>
+  <rect class="node" x="496" y="168" width="200" height="48" rx="8"/>
+  <text class="t" x="596.0" y="188.0">Scheduler</text>
+  <text class="s" x="596.0" y="206.0">授权、准入、领取 lead 任务</text>
+  <rect class="node" x="24" y="268" width="200" height="64" rx="8"/>
+  <text class="t" x="124.0" y="288.0">lead 配置</text>
+  <text class="s" x="124.0" y="306.0">builtin_tools:</text>
+  <text class="s" x="124.0" y="322.0">resource_management</text>
+  <rect class="node" x="260" y="268" width="200" height="52" rx="8"/>
+  <text class="t" x="360.0" y="290.0">Runtime / NativeRun</text>
+  <text class="s" x="360.0" y="308.0">以 lead 的身份执行</text>
+  <rect class="ext" x="496" y="268" width="200" height="40" rx="8"/>
+  <text class="t" x="596.0" y="293.0">lead 使用的模型</text>
+  <rect class="node" x="24" y="392" width="200" height="48" rx="8"/>
+  <text class="t" x="124.0" y="421.0">调度结算与幂等发布</text>
+  <rect class="node" x="260" y="392" width="200" height="48" rx="8"/>
+  <text class="t" x="360.0" y="421.0">参数校验、审批、调度围栏</text>
+  <rect class="node" x="496" y="392" width="200" height="60" rx="8"/>
+  <text class="t" x="596.0" y="410.0">启用为可用队友</text>
+  <text class="s" x="596.0" y="428.0">principal_create →</text>
+  <text class="s" x="596.0" y="444.0">agent_bind → binding_list 核验</text>
+  <rect class="node" x="260" y="476" width="200" height="48" rx="8"/>
+  <text class="t" x="360.0" y="496.0">ToolService</text>
+  <text class="s" x="360.0" y="514.0">固定 lead Actor + 能力校验</text>
+  <rect class="node" x="24" y="564" width="200" height="48" rx="8"/>
+  <text class="t" x="124.0" y="584.0">im/im.db</text>
+  <text class="s" x="124.0" y="602.0">Agent 身份</text>
+  <rect class="node" x="260" y="564" width="200" height="48" rx="8"/>
+  <text class="t" x="360.0" y="584.0">Resources::write_with</text>
+  <text class="s" x="360.0" y="602.0">资源锁、领域写入 → AgentStore</text>
+  <rect class="node" x="496" y="564" width="200" height="48" rx="8"/>
+  <text class="t" x="596.0" y="584.0">runtime/runtime.db</text>
+  <text class="s" x="596.0" y="602.0">托管绑定 bindings</text>
+  <rect class="ext" x="230" y="640" width="260" height="36" rx="8"/>
+  <text class="s" x="360.0" y="662.0">agents/default/reviewer/agent.yaml</text>
+  <rect class="end" x="230" y="700" width="260" height="48" rx="8"/>
+  <text class="t" x="360.0" y="720.0">工具结果</text>
+  <text class="s" x="360.0" y="738.0">配置摘要、revision 与 activation</text>
+  <path class="edge" d="M360 53L360 74" marker-end="url(#a)"/>
+  <path class="edge" d="M124 166L124 126" marker-end="url(#a)"/>
+  <path class="edge" d="M300 125L300 174Q300 180 294 180L226 180" marker-end="url(#a)"/>
+  <text class="el" x="308" y="150" text-anchor="start">Rust CLI</text>
+  <path class="edge" d="M420 125L420 174Q420 180 426 180L494 180" marker-end="url(#a)"/>
+  <text class="el" x="428" y="142" text-anchor="start">schedule start</text>
+  <text class="el" x="428" y="156" text-anchor="start">--message</text>
+  <path class="edge" d="M225 204L494 204" marker-end="url(#a)"/>
+  <text class="el" x="360.0" y="198" text-anchor="middle">待处理投递</text>
+  <path class="edge" d="M596 217L596 238Q596 244 590 244L416 244Q410 244 410 250L410 266" marker-end="url(#a)"/>
+  <path class="edge" d="M225 294L258 294" marker-end="url(#a)"/>
+  <text class="el" x="242.0" y="288" text-anchor="middle">挂载</text>
+  <path class="edge" d="M461 288L494 288" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path class="edge" d="M290 321L290 346Q290 352 284 352L130 352Q124 352 124 358L124 390" marker-end="url(#a)"/>
+  <text class="el" x="207.0" y="346" text-anchor="middle">形成最终回答</text>
+  <path class="edge" d="M360 321L360 390" marker-end="url(#a)"/>
+  <text class="el" x="368.0" y="376" text-anchor="start">framework_resource_write</text>
+  <path class="edge" d="M430 321L430 346Q430 352 436 352L590 352Q596 352 596 358L596 390" stroke-dasharray="5 4" marker-end="url(#a)"/>
+  <text class="el" x="513.0" y="346" text-anchor="middle">若要求成为可用队友</text>
+  <path class="edge" d="M360 441L360 474" marker-end="url(#a)"/>
+  <path class="edge" d="M596 453L596 486Q596 492 590 492L462 492" marker-end="url(#a)"/>
+  <path class="edge" d="M259 500L130 500Q124 500 124 506L124 562" marker-end="url(#a)"/>
+  <text class="el" x="192.0" y="494" text-anchor="middle">创建 Agent 身份</text>
+  <path class="edge" d="M461 512L640 512Q646 512 646 518L646 562" marker-end="url(#a)"/>
+  <text class="el" x="553.0" y="506" text-anchor="middle">保存托管绑定</text>
+  <path class="edge" d="M360 525L360 562" marker-end="url(#a)"/>
+  <path class="edge" d="M360 613L360 638" marker-end="url(#a)"/>
+  <path class="edge" d="M360 677L360 698" marker-end="url(#a)"/>
+  <path class="back" d="M491 724L704 724Q710 724 710 718L710 320Q710 314 704 314L462 314" marker-end="url(#b)"/>
+  <path class="back" d="M23 416L16 416Q10 416 10 410L10 210Q10 204 16 204L22 204" marker-end="url(#b)"/>
+</svg>

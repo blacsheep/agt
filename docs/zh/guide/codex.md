@@ -1,6 +1,6 @@
 # Codex Agent
 
-Codex Agent 运行在 [Codex](https://github.com/openai/codex) 会话上，而不是 agt 自己的模型循环中。 Codex 自带文件编辑、Shell 命令和沙箱，因此 Codex Agent 适合编写和测试代码，包括其他 Agent 要用的 MCP 服务。
+Codex Agent 运行在 [Codex](https://github.com/openai/codex) 会话上，而不是 agt 自己的模型循环中。Codex 自带文件编辑、Shell 命令和沙箱，因此 Codex Agent 适合编写和测试代码，包括其他 Agent 要用的 MCP 服务。
 
 ## 环境要求
 

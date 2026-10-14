@@ -2,124 +2,126 @@
   <title id="title">agt 整体架构</title>
   <desc id="desc">入口经 agt CLI 与 agt serve 进入服务层；新消息交给执行层的 Scheduler，Runtime 把 Run 交给 Native 或 Harness 执行，工具调用回到 ToolService；状态保存在资源文件与 SQLite 中，变更事件推送回 Web 服务。</desc>
   <style>
-    svg { --bg: #fbfbfd; --band: #f2f1fb; --band-line: #dcd8f4; --node: #ffffff; --node-line: #b8b1ea; --ext: #f6f6f8; --ext-line: #d0d0da; --title: #1f1f2e; --sub: #5d5d72; --label: #6e6a92; --line: #77778d; --accent: #7c6fe0; }
-    @media (prefers-color-scheme: dark) {
-      svg { --bg: #1c1c23; --band: #252432; --band-line: #3b3854; --node: #2d2c3c; --node-line: #5e57a8; --ext: #262630; --ext-line: #45455a; --title: #ececf4; --sub: #a9a9bb; --label: #a39ee0; --line: #9a9ab0; --accent: #a99ff0; }
-    }
-    text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
-    .bg { fill: var(--bg); }
-    .band { fill: var(--band); stroke: var(--band-line); }
-    .band-label { fill: var(--label); font-size: 13px; font-weight: 600; }
-    .node { fill: var(--node); stroke: var(--node-line); stroke-width: 1.2; }
-    .ext { fill: var(--ext); stroke: var(--ext-line); stroke-dasharray: 4 3; }
-    .t { fill: var(--title); font-size: 14px; font-weight: 600; text-anchor: middle; }
-    .s { fill: var(--sub); font-size: 12px; text-anchor: middle; }
-    .e { fill: var(--sub); font-size: 12px; text-anchor: middle; }
-    .edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
-    .back { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; }
-    .edge-label { fill: var(--sub); font-size: 11.5px; }
-    .back-label { fill: var(--accent); font-size: 11.5px; }
-    .head { fill: var(--line); }
-    .head-back { fill: var(--accent); }
-  </style>
+svg { --bg: #fbfbfd; --band: #f2f1fb; --band-line: #dcd8f4; --node: #ffffff; --node-line: #b8b1ea;
+  --ext: #f6f6f8; --ext-line: #c9c9d6; --dec: #fff8ec; --dec-line: #e2b766; --end: #eef6f1; --end-line: #8cc3a2;
+  --stop: #fbefef; --stop-line: #e0a3a3; --title: #1f1f2e; --sub: #5d5d72; --label: #6e6a92; --line: #77778d;
+  --accent: #7c6fe0; --life: #c7c4dc; --block: #8c88b0; }
+@media (prefers-color-scheme: dark) {
+  svg { --bg: #1c1c23; --band: #252432; --band-line: #3b3854; --node: #2d2c3c; --node-line: #5e57a8;
+    --ext: #262630; --ext-line: #4a4a5e; --dec: #332c1f; --dec-line: #a3813f; --end: #1f2e26; --end-line: #4f8a66;
+    --stop: #352223; --stop-line: #9a5c5c; --title: #ececf4; --sub: #a9a9bb; --label: #a39ee0; --line: #9a9ab0;
+    --accent: #a99ff0; --life: #47455e; --block: #8f8ab8; }
+}
+text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+.bg { fill: var(--bg); }
+.band { fill: var(--band); stroke: var(--band-line); }
+.band-label { fill: var(--label); font-size: 13px; font-weight: 600; }
+.node { fill: var(--node); stroke: var(--node-line); stroke-width: 1.2; }
+.ext { fill: var(--ext); stroke: var(--ext-line); stroke-dasharray: 4 3; }
+.dec { fill: var(--dec); stroke: var(--dec-line); stroke-width: 1.2; }
+.end { fill: var(--end); stroke: var(--end-line); stroke-width: 1.2; }
+.stop { fill: var(--stop); stroke: var(--stop-line); stroke-width: 1.2; }
+.t { fill: var(--title); font-size: 14px; font-weight: 600; text-anchor: middle; }
+.s { fill: var(--sub); font-size: 12px; text-anchor: middle; }
+.edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+.back { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.el { fill: var(--sub); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.el-band { stroke: var(--band); }
+.bl { fill: var(--accent); }
+.head { fill: var(--line); }
+.head-back { fill: var(--accent); }
+.life { stroke: var(--life); stroke-width: 1.2; stroke-dasharray: 4 4; }
+.block { fill: none; stroke: var(--block); stroke-width: 1; }
+.block-tag { fill: var(--block); }
+.block-tag-text { fill: var(--bg); font-size: 11px; font-weight: 700; }
+.block-label { fill: var(--label); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.block-split { stroke: var(--block); stroke-width: 1; stroke-dasharray: 5 4; }
+.note { fill: var(--dec); stroke: var(--dec-line); }
+</style>
   <defs>
-    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker>
-    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-back" d="M0 0L10 5L0 10z"/></marker>
-  </defs>
-
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker>
+  <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-back" d="M0 0L10 5L0 10z"/></marker>
+</defs>
   <rect class="bg" width="734" height="652" rx="12"/>
-
-  <g transform="translate(34 0)">
-    <!-- Entry -->
-    <rect class="band" x="0" y="12" width="512" height="92" rx="10"/>
-    <text class="band-label" x="14" y="31">入口</text>
-    <rect class="node" x="16" y="40" width="140" height="50" rx="8"/>
-    <text class="t" x="86" y="61">外部 MCP 客户端</text><text class="s" x="86" y="79">Claude、IDE 等</text>
-    <rect class="node" x="186" y="40" width="140" height="50" rx="8"/>
-    <text class="t" x="256" y="61">浏览器</text><text class="s" x="256" y="79">Web 控制台</text>
-    <rect class="node" x="356" y="40" width="140" height="50" rx="8"/>
-    <text class="t" x="426" y="61">Node Web 服务</text><text class="s" x="426" y="79">静态页面、HTTP、SSE</text>
-
-    <!-- Processes -->
-    <rect class="node" x="16" y="132" width="140" height="44" rx="8"/>
-    <text class="t" x="86" y="159">agt serve</text>
-    <rect class="node" x="356" y="132" width="140" height="44" rx="8"/>
-    <text class="t" x="426" y="159">agt CLI</text>
-
-    <!-- Service layer -->
-    <rect class="band" x="0" y="200" width="512" height="100" rx="10"/>
-    <text class="band-label" x="14" y="219">服务层</text>
-    <rect class="node" x="16" y="230" width="140" height="52" rx="8"/>
-    <text class="t" x="86" y="252">ToolService</text><text class="s" x="86" y="271">工具契约、身份与权限</text>
-    <rect class="node" x="186" y="230" width="140" height="52" rx="8"/>
-    <text class="t" x="256" y="252">Resources</text><text class="s" x="256" y="271">七类配置资源</text>
-    <rect class="node" x="356" y="230" width="140" height="52" rx="8"/>
-    <text class="t" x="426" y="252">agt-im</text><text class="s" x="426" y="271">会话、消息、投递</text>
-
-
-    <!-- Execution layer -->
-    <rect class="band" x="0" y="332" width="512" height="100" rx="10"/>
-    <text class="band-label" x="14" y="351">执行层 · agt-runtime</text>
-    <rect class="node" x="16" y="362" width="140" height="52" rx="8"/>
-    <text class="t" x="86" y="384">Runtime</text><text class="s" x="86" y="403">Run 认领与终态</text>
-    <rect class="node" x="186" y="362" width="140" height="52" rx="8"/>
-    <text class="t" x="256" y="384">Scheduler</text><text class="s" x="256" y="403">准入、排队、并发</text>
-    <rect class="node" x="356" y="362" width="140" height="52" rx="8"/>
-    <text class="t" x="426" y="384">WorkItem</text><text class="s" x="426" y="403">任务、依赖、汇报</text>
-
-
-    <!-- Engines -->
-    <rect class="band" x="0" y="464" width="342" height="100" rx="10"/>
-    <text class="band-label" x="14" y="483">执行引擎</text>
-    <rect class="node" x="16" y="494" width="140" height="52" rx="8"/>
-    <text class="t" x="86" y="516">Native</text><text class="s" x="86" y="535">内置模型与工具循环</text>
-    <rect class="node" x="186" y="494" width="140" height="52" rx="8"/>
-    <text class="t" x="256" y="516">Harness</text><text class="s" x="256" y="535">外部引擎桥接</text>
-
-    <!-- Tool calls go back to ToolService -->
-
-    <!-- External -->
-    <rect class="ext" x="0" y="598" width="92" height="40" rx="8"/>
-    <text class="e" x="46" y="622">模型 API</text>
-    <rect class="ext" x="100" y="598" width="100" height="40" rx="8"/>
-    <text class="e" x="150" y="622">外部 MCP 工具</text>
-    <rect class="ext" x="208" y="598" width="126" height="40" rx="8"/>
-    <text class="e" x="271" y="622">Codex app-server</text>
-
-    <!-- Storage -->
-    <path class="node" d="M548 222a70 12 0 0 1 140 0V408a70 12 0 0 1 -140 0z"/>
-    <text class="t" x="618" y="300">资源文件</text>
-    <text class="t" x="618" y="320">SQLite</text>
-    <text class="s" x="618" y="344">im · runtime</text>
-    <text class="s" x="618" y="360">memory</text>
-
-    <!-- Change events back to the web server -->
-
-    <!-- Edges last, so arrowheads draw over the bands -->
-    <path class="edge" d="M328 65H354" marker-start="url(#a)" marker-end="url(#a)"/>
-    <path class="edge" d="M86 92V130" marker-start="url(#a)" marker-end="url(#a)"/>
-    <text class="edge-label" x="94" y="116">stdio</text>
-    <path class="edge" d="M426 92V130" marker-end="url(#a)"/>
-    <text class="edge-label" x="434" y="116">子进程</text>
-    <path class="edge" d="M120 178V228" marker-end="url(#a)"/>
-    <path class="edge" d="M426 178V198" marker-end="url(#a)"/>
-    <text class="edge-label" x="434" y="192">工具调用、资源命令</text>
-    <path class="edge" d="M426 284V316H256V360" marker-end="url(#a)"/>
-    <text class="edge-label" x="270" y="311">新消息</text>
-    <path class="edge" d="M184 388H158" marker-end="url(#a)"/>
-    <path class="edge" d="M328 388H354" marker-start="url(#a)" marker-end="url(#a)"/>
-    <path class="edge" d="M86 416V492" marker-end="url(#a)"/>
-    <path class="edge" d="M130 416V448H256V492" marker-end="url(#a)"/>
-    <path class="back" d="M16 520H-12V256H14" marker-end="url(#b)"/>
-    <text class="back-label" transform="translate(-21 388) rotate(-90)" text-anchor="middle">工具调用</text>
-    <path class="edge" d="M56 548L48 596" marker-start="url(#a)" marker-end="url(#a)"/>
-    <path class="edge" d="M118 548L146 596" marker-start="url(#a)" marker-end="url(#a)"/>
-    <path class="edge" d="M268 548V596" marker-start="url(#a)" marker-end="url(#a)"/>
-    <path class="edge" style="stroke: var(--node-line)" d="M548 222a70 12 0 0 0 140 0"/>
-    <path class="edge" d="M514 250H546" marker-end="url(#a)"/>
-    <path class="edge" d="M514 382H546" marker-end="url(#a)"/>
-    <path class="back" d="M618 208V65H498" marker-end="url(#b)"/>
-    <text class="back-label" x="626" y="140">变更事件</text>
-    <text class="back-label" x="626" y="156">→ SSE</text>
-  </g>
+  <rect class="band" x="34" y="12" width="512" height="92" rx="10"/>
+  <text class="band-label" x="48" y="31">入口</text>
+  <rect class="node" x="50" y="40" width="140" height="50" rx="8"/>
+  <text class="t" x="120.0" y="61.0">外部 MCP 客户端</text>
+  <text class="s" x="120.0" y="79.0">Claude、IDE 等</text>
+  <rect class="node" x="220" y="40" width="140" height="50" rx="8"/>
+  <text class="t" x="290.0" y="61.0">浏览器</text>
+  <text class="s" x="290.0" y="79.0">Web 控制台</text>
+  <rect class="node" x="390" y="40" width="140" height="50" rx="8"/>
+  <text class="t" x="460.0" y="61.0">Node Web 服务</text>
+  <text class="s" x="460.0" y="79.0">静态页面、HTTP、SSE</text>
+  <rect class="node" x="50" y="132" width="140" height="44" rx="8"/>
+  <text class="t" x="120.0" y="159.0">agt serve</text>
+  <rect class="node" x="390" y="132" width="140" height="44" rx="8"/>
+  <text class="t" x="460.0" y="159.0">agt CLI</text>
+  <rect class="band" x="34" y="200" width="512" height="100" rx="10"/>
+  <text class="band-label" x="48" y="219">服务层</text>
+  <rect class="node" x="50" y="230" width="140" height="52" rx="8"/>
+  <text class="t" x="120.0" y="252.0">ToolService</text>
+  <text class="s" x="120.0" y="270.0">工具契约、身份与权限</text>
+  <rect class="node" x="220" y="230" width="140" height="52" rx="8"/>
+  <text class="t" x="290.0" y="252.0">Resources</text>
+  <text class="s" x="290.0" y="270.0">七类配置资源</text>
+  <rect class="node" x="390" y="230" width="140" height="52" rx="8"/>
+  <text class="t" x="460.0" y="252.0">agt-im</text>
+  <text class="s" x="460.0" y="270.0">会话、消息、投递</text>
+  <rect class="band" x="34" y="332" width="512" height="100" rx="10"/>
+  <text class="band-label" x="48" y="351">执行层 · agt-runtime</text>
+  <rect class="node" x="50" y="362" width="140" height="52" rx="8"/>
+  <text class="t" x="120.0" y="384.0">Runtime</text>
+  <text class="s" x="120.0" y="402.0">Run 认领与终态</text>
+  <rect class="node" x="220" y="362" width="140" height="52" rx="8"/>
+  <text class="t" x="290.0" y="384.0">Scheduler</text>
+  <text class="s" x="290.0" y="402.0">准入、排队、并发</text>
+  <rect class="node" x="390" y="362" width="140" height="52" rx="8"/>
+  <text class="t" x="460.0" y="384.0">WorkItem</text>
+  <text class="s" x="460.0" y="402.0">任务、依赖、汇报</text>
+  <rect class="band" x="34" y="464" width="342" height="100" rx="10"/>
+  <text class="band-label" x="48" y="483">执行引擎</text>
+  <rect class="node" x="50" y="494" width="140" height="52" rx="8"/>
+  <text class="t" x="120.0" y="516.0">Native</text>
+  <text class="s" x="120.0" y="534.0">内置模型与工具循环</text>
+  <rect class="node" x="220" y="494" width="140" height="52" rx="8"/>
+  <text class="t" x="290.0" y="516.0">Harness</text>
+  <text class="s" x="290.0" y="534.0">外部引擎桥接</text>
+  <rect class="ext" x="34" y="598" width="92" height="40" rx="8"/>
+  <text class="s" x="80.0" y="622.0">模型 API</text>
+  <rect class="ext" x="134" y="598" width="100" height="40" rx="8"/>
+  <text class="s" x="184.0" y="622.0">外部 MCP 工具</text>
+  <rect class="ext" x="242" y="598" width="126" height="40" rx="8"/>
+  <text class="s" x="305.0" y="622.0">Codex app-server</text>
+  <path class="node" d="M582 220a70.0 10 0 0 1 140 0V420a70.0 10 0 0 1 -140 0z"/>
+  <path class="edge" style="stroke: var(--node-line)" d="M582 220a70.0 10 0 0 0 140 0"/>
+  <text class="t" x="652.0" y="310.0">资源文件</text>
+  <text class="t" x="652.0" y="328.0">SQLite</text>
+  <text class="s" x="652.0" y="344.0">im · runtime</text>
+  <text class="s" x="652.0" y="360.0">memory</text>
+  <path class="edge" d="M362 65L388 65" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path class="edge" d="M120 92L120 130" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text class="el" x="128" y="115.0" text-anchor="start">stdio</text>
+  <path class="edge" d="M460 92L460 130" marker-end="url(#a)"/>
+  <text class="el" x="468" y="115.0" text-anchor="start">子进程</text>
+  <path class="edge" d="M154 178L154 228" marker-end="url(#a)"/>
+  <path class="edge" d="M460 178L460 198" marker-end="url(#a)"/>
+  <text class="el" x="468" y="192" text-anchor="start">工具调用、资源命令</text>
+  <path class="edge" d="M460 284L460 310Q460 316 454 316L296 316Q290 316 290 322L290 360" marker-end="url(#a)"/>
+  <text class="el" x="304" y="311" text-anchor="start">新消息</text>
+  <path class="edge" d="M218 388L192 388" marker-end="url(#a)"/>
+  <path class="edge" d="M362 388L388 388" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path class="edge" d="M120 416L120 492" marker-end="url(#a)"/>
+  <path class="edge" d="M164 416L164 442Q164 448 170 448L284 448Q290 448 290 454L290 492" marker-end="url(#a)"/>
+  <path class="edge" d="M90 548L82 596" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path class="edge" d="M152 548L180 596" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path class="edge" d="M302 548L302 596" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path class="edge" d="M548 250L580 250" marker-end="url(#a)"/>
+  <path class="edge" d="M548 382L580 382" marker-end="url(#a)"/>
+  <path class="back" d="M50 520L28 520Q22 520 22 514L22 262Q22 256 28 256L48 256" marker-end="url(#b)"/>
+  <text class="el bl" x="13" y="388" text-anchor="middle" transform="rotate(-90 13 388)">工具调用</text>
+  <path class="back" d="M652 208L652 71Q652 65 646 65L532 65" marker-end="url(#b)"/>
+  <text class="el bl" x="660" y="140" text-anchor="start">变更事件</text>
+  <text class="el bl" x="660" y="154" text-anchor="start">→ SSE</text>
 </svg>

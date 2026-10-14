@@ -2,7 +2,7 @@
 
 工具列表与参数见[工具服务模块](../modules/tool-service.md#可用的工具)。本文记录资源管理工具的授权范围、契约与语义，供贡献者参考。
 
-内置工具按组挂载到 Agent 定义的 `builtin_tools`，默认全部关闭，由操作员显式开启。 Web 在创建/编辑 Agent 时勾选，CLI 用 `--builtin-tool`、`--add-builtin-tool`、`--remove-builtin-tool`。模型侧的工具名带 `framework_` 前缀。
+内置工具按组挂载到 Agent 定义的 `builtin_tools`，默认全部关闭，由操作员显式开启。Web 在创建/编辑 Agent 时勾选，CLI 用 `--builtin-tool`、`--add-builtin-tool`、`--remove-builtin-tool`。模型侧的工具名带 `framework_` 前缀。
 
 | 工具组 | 用途 | 说明 |
 | --- | --- | --- |
@@ -16,9 +16,9 @@
 
 ## Agent 授权范围
 
-Agent 定义增加 `builtin_tools: [resource_management]`，缺省为空。 Web 创建／编辑 Agent 提供“资源管理”复选框，操作员勾选并保存即授予权限。 CLI 提供 `--builtin-tool`、`--add-builtin-tool`、`--remove-builtin-tool`。未知工具组、配置文件及创建请求中的重复挂载拒绝保存；CLI 添加已挂载的组采用幂等行为。
+Agent 定义增加 `builtin_tools: [resource_management]`，缺省为空。Web 创建／编辑 Agent 提供“资源管理”复选框，操作员勾选并保存即授予权限。CLI 提供 `--builtin-tool`、`--add-builtin-tool`、`--remove-builtin-tool`。未知工具组、配置文件及创建请求中的重复挂载拒绝保存；CLI 添加已挂载的组采用幂等行为。
 
-授权作用于当前框架 home 中的全部七类资源，不局限于该 Agent 自身的挂载资源。可以读取、创建、修改、删除 Provider、Model、Prompt、Skill、MCP、Harness 和 Agent 定义；因此也能修改其他 Agent 的后续配置，包括其内置资源工具挂载。不会影响已加载的运行快照。不把执行身份升级为 Manager。允许 principal_create（仅 Agent 类型）、agent_bind、 agent_set_enabled、agent_unbind、binding_list；普通用户等身份创建仍仅 Manager 可用。不绕过通信工具的会话成员权限。
+授权作用于当前框架 home 中的全部七类资源，不局限于该 Agent 自身的挂载资源。可以读取、创建、修改、删除 Provider、Model、Prompt、Skill、MCP、Harness 和 Agent 定义；因此也能修改其他 Agent 的后续配置，包括其内置资源工具挂载。不会影响已加载的运行快照。不把执行身份升级为 Manager。允许 principal_create（仅 Agent 类型）、agent_bind、agent_set_enabled、agent_unbind、binding_list；普通用户等身份创建仍仅 Manager 可用。不绕过通信工具的会话成员权限。
 
 删除继续使用现有“计划 → 精确确认”协议；资源工具允许请求递归删除依赖者。默认 Prompt、仍托管的 Agent、损坏配置和悬空引用继续受到现有删除保护。分类删除仅允许空的非 default 分类。模型可以自行完成两次工具调用，该确认协议不是 Web 人工审批弹窗；挂载资源管理意味着授权这些写入和删除能力。
 
@@ -38,7 +38,7 @@ Agent 定义增加 `builtin_tools: [resource_management]`，缺省为空。 Web 
 
 MCP 和 CLI `tool call` 继续由 `--manager` 开放这组工具；内置挂载通过单独资源权限开放同一组，运行时名称添加 `framework_` 前缀。
 
-Provider 创建支持 `{base_url, api_key}` 直接输入；保留 api_key_env 兼容旧 MCP 客户端，二者互斥，创建必填一种非空密钥，更新可省略密钥。所有返回与错误继续脱敏。 Web 用户仍只看到直接输入密钥；单次 CLI 子进程的安全传递方式保留。 Web 模型列表读取改为复用 provider_models，避免独立实现同一功能。
+Provider 创建支持 `{base_url, api_key}` 直接输入；保留 api_key_env 兼容旧 MCP 客户端，二者互斥，创建必填一种非空密钥，更新可省略密钥。所有返回与错误继续脱敏。Web 用户仍只看到直接输入密钥；单次 CLI 子进程的安全传递方式保留。Web 模型列表读取改为复用 provider_models，避免独立实现同一功能。
 
 ## 执行和撤销语义
 
@@ -57,7 +57,7 @@ Provider 创建支持 `{base_url, api_key}` 直接输入；保留 api_key_env �
 
 1. `resource_write(kind=agent, create=true)` 保存配置，不自动运行。
 2. 用 `principal_list` / `binding_list` 检查身份，`principal_create(kind=agent)` 创建新身份。
-3. `agent_bind(principal, agent)` 创建绑定并默认启用：目录默认 home、模型调用轮数不限、 policy 默认 mentioned；MCP 按 Agent 装配加载。更新已停用的绑定不会自动启用。
+3. `agent_bind(principal, agent)` 创建绑定并默认启用：目录默认 home、模型调用轮数不限、policy 默认 mentioned；MCP 按 Agent 装配加载。更新已停用的绑定不会自动启用。
 4. `agent_set_enabled(principal, enabled)` 保留设置启停；启用可能处理已授权的积压消息。
 5. `agent_unbind` 删除运行设置，用于解除配置或删除 Agent 前清理，非普通停用。
 

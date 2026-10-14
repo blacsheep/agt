@@ -2,38 +2,15 @@
 
 最近代码核对：2026-10-09。以下以 Native lead 为主线，末尾说明 Harness 差异。这是当前实现的静态调用链；工具示例不代表已经在用户 home 中执行。
 
-用户在 Web 私聊 lead：“创建一个 reviewer Agent，使用已有的 default/fast 模型。” 此例假设 lead 已绑定到启用的 Agent 身份，配置挂载 `resource_management`， Web 发送时开启自动回复，目标 Model 已存在，且通过当前调度与工具审批策略。群聊中还需满足成员、响应策略和参与判断条件。
+用户在 Web 私聊 lead：“创建一个 reviewer Agent，使用已有的 default/fast 模型。” 此例假设 lead 已绑定到启用的 Agent 身份，配置挂载 `resource_management`，Web 发送时开启自动回复，目标 Model 已存在，且通过当前调度与工具审批策略。群聊中还需满足成员、响应策略和参与判断条件。
 
-**创建 Agent 定义与启用可运行身份是不同操作。** 如果用户要求创建可用队友， lead 还需创建或确认 Agent principal，再建立 binding 并核验启用状态；只要求保存定义时无需做这些步骤。工具调用由模型选择，不是 Web 收到这句话后执行的固定脚本。
+**创建 Agent 定义与启用可运行身份是不同操作。** 如果用户要求创建可用队友，lead 还需创建或确认 Agent principal，再建立 binding 并核验启用状态；只要求保存定义时无需做这些步骤。工具调用由模型选择，不是 Web 收到这句话后执行的固定脚本。
 
 ## 在整体架构中的位置
 
-这是[整体架构](overview.md)中“聊天入口 → Runtime → Service → 资源存储”的具体路径。资源工具由当前 Rust 执行进程直接调用，不经 Node 回调，也无需另起 `agt serve`。
+这是[整体架构](overview.md)中“入口 → agt-im → Scheduler → Native → 工具调用回到 ToolService → Resources 与存储”这条路径的展开。图中左列是消息路径，中列是 lead 的执行与工具调用链，右列是模型和启用步骤；紫色虚线是工具结果回到 Run、最终回答发布回 IM。资源工具由当前 Rust 执行进程直接调用，不经 Node 回调，也无需另起 `agt serve`。
 
-```mermaid
-flowchart TB
-    User["用户：请创建 reviewer"] --> Web["Web / Node<br/>发送消息并授权自动回复"]
-    Web -->|Rust CLI| IM["agt-service → agt-im<br/>保存消息与投递"]
-    Web -->|schedule start --message| Scheduler["Scheduler<br/>授权、准入、领取 lead 任务"]
-    IM -->|待处理投递| Scheduler
-    Scheduler --> Run["Runtime / NativeRun<br/>以 lead 的身份执行"]
-    Config["lead 配置<br/>builtin_tools: resource_management"] -->|挂载工具能力| Run
-    Run <-->|提示词、工具 schema、工具结果| Model["lead 使用的模型"]
-    Run -->|framework_resource_write| Gate["参数校验、审批、调度围栏"]
-    Gate --> Service["ToolService<br/>固定 lead Actor + 能力校验"]
-    Service --> Resources["Resources::write_with<br/>资源锁、领域写入 → AgentStore"]
-    Resources --> File["agents/default/reviewer/agent.yaml"]
-    File --> Result["工具结果：配置摘要、revision 与 activation"]
-    Result --> Run
-
-    Run -.->|若要求成为可用队友| Activate["principal_create → agent_bind<br/>binding_list 核验"]
-    Activate --> Service
-    Service -->|创建 Agent 身份| Identity["im/im.db"]
-    Service -->|保存托管绑定| Bindings["runtime/runtime.db<br/>bindings"]
-    Run -->|形成最终回答| Publish["调度结算与幂等发布"]
-    Publish --> IM
-    IM --> Refresh["变化 outbox → events watch<br/>Node SSE → Web 刷新"]
-```
+![lead 创建 Agent 的调用路径](../../public/architecture/web-lead-create-agent.svg)
 
 `resource_management` 来自 lead 的配置快照。模型看到的是可用工具 schema，实际权限仍由执行器和 Service 检查。Actor 是 lead 的绑定身份，不是发消息的 Web 用户，也不会因该消息而获得用户的 Manager 身份。
 
@@ -41,57 +18,9 @@ flowchart TB
 
 ## 完整调用时序
 
-图中省略了可选的资源查询，以及每个工具都重复经过的 schema、审批、审计和调度检查。工具可能在同一模型响应中形成批次，也可能分多个回合调用；这里按逻辑依赖顺序展示。
+图中省略了写入前可选的资源查询。每次工具调用都会经过参数校验、审批、审计和调度围栏，图中以 lead 列上的步骤表示。为了放进页面宽度，用户与 Web 合为一列，Agent 存储、身份与绑定存储并入 ToolService 一列。工具可能在同一模型响应中形成批次，也可能分多个回合调用；这里按逻辑依赖顺序展示。
 
-```mermaid
-sequenceDiagram
-    actor U as 用户
-    participant W as Web / Node
-    participant S as Rust Service / IM
-    participant Q as Scheduler
-    participant R as lead NativeRun
-    participant M as 模型
-    participant T as ToolService / Resources
-    participant D as AgentStore / 身份与绑定存储
-
-    U->>W: 发送创建 reviewer 的消息
-    W->>S: CLI tool call message_send
-    S-->>W: 已保存消息及 message ID
-    W->>Q: schedule start --message ID
-    Q->>Q: 扫描投递、校验授权、领取任务
-    Q->>R: RunRequest，trigger principal = lead
-    R->>R: 加载配置、固定 Actor、挂载资源工具
-    R->>M: 消息上下文与 framework 工具 schema
-    M-->>R: framework_resource_write 调用
-    R->>R: 校验参数、PermissionLoop、审计与围栏
-    alt 审批允许且 Service 能力检查通过
-        R->>T: resource_write(kind=agent, create=true)
-        T->>D: 资源锁内校验配置与引用，AgentStore::create_in
-        D->>D: 原子写入 agent.yaml
-        D-->>T: 配置摘要与 revision
-        T-->>R: 摘要 + revision + activation + next_steps
-        R->>M: 工具结果；仅保存定义时尚未启用
-        opt 用户要求成为可用队友，模型继续完成启用
-            loop 按需查询、principal_create、agent_bind、binding_list
-                M-->>R: 下一项 framework 工具调用
-                R->>R: 校验、审批、审计与围栏
-                R->>T: 调用身份或绑定工具
-                T->>D: 读取状态、创建身份或保存绑定
-                D-->>T: 实际存储结果
-                T-->>R: 工具结果
-                R->>M: 结果进入上下文，继续决策
-            end
-        end
-        M-->>R: 根据实际结果生成回答
-    else 审批拒绝或工具业务错误
-        R->>M: 返回拒绝或错误，不能报告创建成功
-        M-->>R: 修正参数继续，或说明失败
-    end
-    R-->>Q: 保存并返回 Run 结果
-    Q->>S: 复查围栏并幂等发布回复
-    S-->>W: 变化经事件投影与 SSE 触发刷新
-    W-->>U: 显示 lead 的回复
-```
+![lead 创建 Agent 的完整时序](../../public/architecture/web-lead-create-agent-sequence.svg)
 
 若 lead 已通过消息工具向当前会话发送回答，现有去重机制会抑制重复发布最终文本。致命错误、取消或发布失败走通用 Run / 调度终态处理，不保证总有一条成功回复。
 
@@ -146,7 +75,7 @@ lead 修改 reviewer 不会自动刷新 reviewer 当前正在执行的 Run，后
 
 ## 权限、失败与引擎差异
 
-- **能力与审批分开：** 挂载 `resource_management` 使资源及 Agent 生命周期工具可用； Native 每次调用还经过 `PermissionLoop`，其行为取决于人工、自动允许或模型审核策略。 Service 最后仍校验能力，审批允许不能绕过该校验。
+- **能力与审批分开：** 挂载 `resource_management` 使资源及 Agent 生命周期工具可用；Native 每次调用还经过 `PermissionLoop`，其行为取决于人工、自动允许或模型审核策略。Service 最后仍校验能力，审批允许不能绕过该校验。
 - **步骤不是一个全局事务：** 配置文件、IM 身份、binding 分别保存。中间失败可能留下“定义已存在，但还未启用”的状态；应查询现状后补齐，而非盲目重复创建。
 - **配置与连通性分开：** 创建时会校验 Model、Prompt 等引用；不会因此运行新 Agent 的模型来证明其可用。
 - **启用具有实际影响：** `agent_bind` 可能让已有获授权投递开始被处理；启用不是纯显示标记。

@@ -11,7 +11,7 @@
 
 ## 作用
 
-Agent 定义把执行引擎（[Model](./model.md) 或 [Harness](./harness.md)）与 [Prompt](./prompt.md)、[Skill](./skill.md)、 [MCP 服务](./mcp.md)和内置能力组合在一起。
+Agent 定义把执行引擎（[Model](./model.md) 或 [Harness](./harness.md)）与 [Prompt](./prompt.md)、[Skill](./skill.md)、[MCP 服务](./mcp.md)和内置能力组合在一起。
 
 只有定义什么也不会发生。要参与对话，Agent 还需要一个**身份**（会话中的参与者）和一个**绑定**：绑定把身份和定义连接起来，并保存运行设置。多个身份可以绑定同一个定义，并行运行。
 

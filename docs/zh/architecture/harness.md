@@ -1,10 +1,10 @@
 # Harness：外部执行引擎
 
-最近整理：2026-10-10。本文合并原“Harness 资源与外部执行引擎”“Harness 执行流程”“Harness 执行状态与租约”三篇； Lead 通过工具管理 Harness 的用法见下文 [Lead 管理 Harness 的工具](#lead-管理-harness-的工具)，工具参数见[Harness 模块](../modules/harness.md#agent-工具)。
+最近整理：2026-10-10。本文合并原“Harness 资源与外部执行引擎”“Harness 执行流程”“Harness 执行状态与租约”三篇；Lead 通过工具管理 Harness 的用法见下文 [Lead 管理 Harness 的工具](#lead-管理-harness-的工具)，工具参数见[Harness 模块](../modules/harness.md#agent-工具)。
 
 ## 决策
 
-Harness 是正式的可复用配置资源；Codex 是执行引擎；Agent 是独立身份与角色。一个 Agent 选择内置 Model 或外部 harness，二者互斥。 Harness 资源不是群成员，外部框架的内部子 Agent 不会自动成为 AGT 联系人。
+Harness 是正式的可复用配置资源；Codex 是执行引擎；Agent 是独立身份与角色。一个 Agent 选择内置 Model 或外部 harness，二者互斥。Harness 资源不是群成员，外部框架的内部子 Agent 不会自动成为 AGT 联系人。
 
 ## 模块与边界
 
@@ -20,13 +20,13 @@ Harness 是正式的可复用配置资源；Codex 是执行引擎；Agent 是独
 
 ## 首个接入：本机 Codex
 
-使用 `codex app-server --listen stdio://`。initialize / initialized 后通过 thread/start 或 thread/resume 建立线程，turn/start 启动任务。 item/agentMessage/delta 更新有界预览，item/completed 的非 commentary 消息作为最终回复， turn/completed 确认最终状态。错误与空最终回复不会自动重跑。
+使用 `codex app-server --listen stdio://`。initialize / initialized 后通过 thread/start 或 thread/resume 建立线程，turn/start 启动任务。item/agentMessage/delta 更新有界预览，item/completed 的非 commentary 消息作为最终回复，turn/completed 确认最终状态。错误与空最终回复不会自动重跑。
 
 协议依据：<https://developers.openai.com/codex/app-server/>；本机 codex-cli 0.154.0 的 `app-server generate-json-schema --experimental` 用于核实字段与枚举。动态工具属于实验接口，连接成功不等于所有版本兼容，也不等于模型认证可用。
 
-Harness 配置：engine=codex、服务器绝对 executable、working_directory、可选 model、 sandbox=read_only/workspace_write、timeout_seconds（默认 1800）。不保存 API Key，沿用运行账户的 Codex 认证与配置。工作区文件可能共享，协作开发应明确分配目录/worktree。审批使用 Codex 原生 `on-request` + `user`：引擎发出的人工审批请求进入 AGT 审批队列，决定回传原 JSON-RPC 请求，详见[权限审批](permissions.md)。用户输入类请求仍不支持，遇到时停止并说明原因。 Harness 写入需要 Manager 或挂载 `resource_management` 的 Agent。 AGT 工具权限不构成外部终端的文件隔离；实际文件边界由 Codex sandbox 与操作系统控制。本轮在 Linux 验证进程组清理及 SIGINT/SIGTERM 取消；Windows 的完整进程树终止尚未验收。
+Harness 配置：engine=codex、服务器绝对 executable、working_directory、可选 model、sandbox=read_only/workspace_write、timeout_seconds（默认 1800）。不保存 API Key，沿用运行账户的 Codex 认证与配置。工作区文件可能共享，协作开发应明确分配目录/worktree。审批使用 Codex 原生 `on-request` + `user`：引擎发出的人工审批请求进入 AGT 审批队列，决定回传原 JSON-RPC 请求，详见[权限审批](permissions.md)。用户输入类请求仍不支持，遇到时停止并说明原因。Harness 写入需要 Manager 或挂载 `resource_management` 的 Agent。AGT 工具权限不构成外部终端的文件隔离；实际文件边界由 Codex sandbox 与操作系统控制。本轮在 Linux 验证进程组清理及 SIGINT/SIGTERM 取消；Windows 的完整进程树终止尚未验收。
 
-Prompt 和 Skill 正文作为 developerInstructions 注入；allowed-tools 约束未实现时拒绝运行。框架工具通过 Codex dynamicTools 桥接，逐次使用 AGT 固定身份校验并检查取消围栏。 message_send 可联系其他会话；向当前会话发送时拒绝，由调度器唯一发布最终答复，避免重复消息。 AGT 挂载 MCP 和显式 --delegate allowlist 首版不支持，配置/执行时明确拒绝。 Codex 自身配置中的工具仍由 Codex 管理，其权限和认证不由 AGT 冒充控制。
+Prompt 和 Skill 正文作为 developerInstructions 注入；allowed-tools 约束未实现时拒绝运行。框架工具通过 Codex dynamicTools 桥接，逐次使用 AGT 固定身份校验并检查取消围栏。message_send 可联系其他会话；向当前会话发送时拒绝，由调度器唯一发布最终答复，避免重复消息。AGT 挂载 MCP 和显式 --delegate allowlist 首版不支持，配置/执行时明确拒绝。Codex 自身配置中的工具仍由 Codex 管理，其权限和认证不由 AGT 冒充控制。
 
 ## 资源与执行会话
 
@@ -46,7 +46,7 @@ Prompt 和 Skill 正文作为 developerInstructions 注入；allowed-tools 约�
 - `agt harness session compact <记录ID>`：恢复线程并等待压缩 turn/completed；失败保留 dirty 围栏。
 - `agt harness session cancel <记录ID>`：请求终止活跃执行/压缩；之后检查并重置上下文。
 
-修改模型、命名、执行和压缩共享数据库互斥围栏。执行中拒绝修改；取消不等于回滚文件操作。 CLI 是本机管理员入口，Web 另行验证当前操作者及目标 Agent 的会话成员身份。 `/review`、`/diff`、任意线程导入/恢复和 fork 本阶段明确不支持；不提供任意 RPC 透传。
+修改模型、命名、执行和压缩共享数据库互斥围栏。执行中拒绝修改；取消不等于回滚文件操作。CLI 是本机管理员入口，Web 另行验证当前操作者及目标 Agent 的会话成员身份。 `/review`、`/diff`、任意线程导入/恢复和 fork 本阶段明确不支持；不提供任意 RPC 透传。
 
 Web `/api/harness` 使用固定操作者，验证操作者及目标 Agent 当前成员身份，按当前会话记录 ID 拒绝过期或其他会话的操作；不提供任意 RPC 透传。停止讨论、重置和解散也会取消相关压缩。
 
@@ -131,14 +131,14 @@ Codex 协议层先检查动态工具是否在暴露列表中，再进入宿主�
 2. Submitted、Turn、Settled 分别推进执行状态。失败/中断的已确认输入进度必须在释放执行围栏前保存，不能统一挪到成功收尾中。
 3. 中断 RPC 的响应不等于中断完成。只接受匹配线程与回合的终态通知。
 4. 取消发生在读取协议帧之后时保留 pending 帧；尚无 turn ID 时进行有界恢复。停止恢复只读协议事实，不执行工具、不重放已提交任务。
-5. Stopping 是诊断通知，其失败不能跳过中断清理；继续保留原始停止错误。 InterruptRequested 与 Settled 的控制回调仍保留原有检查。
+5. Stopping 是诊断通知，其失败不能跳过中断清理；继续保留原始停止错误。InterruptRequested 与 Settled 的控制回调仍保留原有检查。
 6. 已确认完成可以赢得与取消的竞态；连接丢失不视为已确认失败，也不自动重放。
 7. 等待续跑保存原有 session/thread/config 指纹 checkpoint；恢复仍检查三者一致。
 8. 外部进程在收尾前关闭；连接释放时回收进程组，包括外部工具创建的子进程。
 
 ### 验证
 
-协议 fixture 是本地 Python app-server，不连接真实模型。 `agt-harness` 测试覆盖成功与工具失败、工具白名单、取消前后 start ack、错回合终态、完成/取消竞态，以及执行和压缩的停止通知失败后仍中断确认。 Runtime 原有测试覆盖权限、会话锁、终态分类、输入历史、工具控制和等待恢复。
+协议 fixture 是本地 Python app-server，不连接真实模型。 `agt-harness` 测试覆盖成功与工具失败、工具白名单、取消前后 start ack、错回合终态、完成/取消竞态，以及执行和压缩的停止通知失败后仍中断确认。Runtime 原有测试覆盖权限、会话锁、终态分类、输入历史、工具控制和等待恢复。
 
 原生人工审批、取消与回传状态见[权限审批](permissions.md)。
 
@@ -170,7 +170,7 @@ Codex 协议层先检查动态工具是否在暴露列表中，再进入宿主�
 
 正常完成先保存会话输入进度和结果，再释放执行权。失败或中断得到确认后，先记录引擎已收到的输入，再结束操作，避免新请求再次注入同一批历史。明确拒绝不推进输入进度。
 
-取消不是终态：发送 turn/interrupt 后，最多等待 2 秒匹配原 thread/turn 的终态通知。 RPC 应答本身不算中断确认；无关 turn 的通知不能解除执行保护。确认中断后释放执行权，允许继续会话。若取消前已经完成且成功取得结果，保留完成结果；讨论停止后的公开发布仍受 scheduler 授权限制。压缩同样区分请求接受、终态和取消；只有得到可识别的 turn 才能发送定向中断。
+取消不是终态：发送 turn/interrupt 后，最多等待 2 秒匹配原 thread/turn 的终态通知。RPC 应答本身不算中断确认；无关 turn 的通知不能解除执行保护。确认中断后释放执行权，允许继续会话。若取消前已经完成且成功取得结果，保留完成结果；讨论停止后的公开发布仍受 scheduler 授权限制。压缩同样区分请求接受、终态和取消；只有得到可识别的 turn 才能发送定向中断。
 
 ### 进程强杀与恢复边界
 
@@ -200,7 +200,7 @@ termination 保存 code/source/observed_at/interrupt_requested_at/confirmed_at/c
 
 ## Lead 管理 Harness 的工具
 
-带有 `resource_management` 内置能力的 Lead 可以管理 Harness 资源并选择某个 Agent 在某个聊天中的模型。原生 Agent 与 Codex 托管 Agent 共用工具契约，不依赖 Web 弹窗。 CLI `tool list/call` 和 stdio MCP 使用同一个服务入口；本地管理入口仍需固定身份与管理权限。
+带有 `resource_management` 内置能力的 Lead 可以管理 Harness 资源并选择某个 Agent 在某个聊天中的模型。原生 Agent 与 Codex 托管 Agent 共用工具契约，不依赖 Web 弹窗。CLI `tool list/call` 和 stdio MCP 使用同一个服务入口；本地管理入口仍需固定身份与管理权限。
 
 ### 建议调用顺序
 
@@ -226,7 +226,7 @@ termination 保存 code/source/observed_at/interrupt_requested_at/confirmed_at/c
 
 工具调用的开始、完成和失败来自持久化调用审计；`tool_progress` 将其投影为最近 40 条活动。原生 Agent 与 Codex 的框架工具都展示可读名称、具体工具名、状态和耗时。摘要采用框架白名单，例如“找到 2 个模型”“会话模型已更新”；不展示参数正文、密钥、路径、模型内部推理或工具返回正文。Codex 命令与文件活动保留类型提示，MCP 工具名以协议实际提供为准。
 
-聊天横条默认折叠，展开显示近期操作及仍在执行的操作。任务详情和回复说明可查看活动记录；回复说明展示首批调用中的最近 40 个工具，完整分页记录仍在调试模式中查看。执行结束但缺少工具结束记录时显示“状态待确认”，不会误称仍在运行或已经成功。 Lead 后台查询和配置不打开 Web 弹窗，用户主动使用会话控制面板时才出现相应交互。
+聊天横条默认折叠，展开显示近期操作及仍在执行的操作。任务详情和回复说明可查看活动记录；回复说明展示首批调用中的最近 40 个工具，完整分页记录仍在调试模式中查看。执行结束但缺少工具结束记录时显示“状态待确认”，不会误称仍在运行或已经成功。Lead 后台查询和配置不打开 Web 弹窗，用户主动使用会话控制面板时才出现相应交互。
 
 ## 后续接入契约
 
@@ -234,4 +234,4 @@ Claude Code、其他 Harness 以独立适配器实现相同的任务/事件/工�
 
 ## 测试范围
 
-无真实模型调用的协议桩覆盖启动/恢复、动态工具、流式与最终消息分离、空输出、错误、取消、未知交互与进程退出；调度测试覆盖提及、私聊、增量历史、/new 及旧任务禁止发布。资源测试覆盖旧 Agent 配置、互斥引用、Harness 依赖删除、Manager 写权限。 Web 验证创建/编辑Harness 与 Agent、缺少模型时选择外部 Harness、桌面和移动端布局。真实账户端到端执行需另行验收，不能以连接检查代替。
+无真实模型调用的协议桩覆盖启动/恢复、动态工具、流式与最终消息分离、空输出、错误、取消、未知交互与进程退出；调度测试覆盖提及、私聊、增量历史、/new 及旧任务禁止发布。资源测试覆盖旧 Agent 配置、互斥引用、Harness 依赖删除、Manager 写权限。Web 验证创建/编辑Harness 与 Agent、缺少模型时选择外部 Harness、桌面和移动端布局。真实账户端到端执行需另行验收，不能以连接检查代替。

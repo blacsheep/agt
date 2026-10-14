@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 704" width="720" height="704" role="img" aria-labelledby="title desc">
+  <title id="title">共享资源管理入口</title>
+  <desc id="desc">CLI 资源命令直接调用 Resources；Web 请求和模型的 framework_resource_* 调用经 ToolService 进入同一个资源服务。写入时先检查 expected_revision，再由对应资源模块校验并写入 Store。</desc>
+  <style>
+svg { --bg: #fbfbfd; --band: #f2f1fb; --band-line: #dcd8f4; --node: #ffffff; --node-line: #b8b1ea;
+  --ext: #f6f6f8; --ext-line: #c9c9d6; --dec: #fff8ec; --dec-line: #e2b766; --end: #eef6f1; --end-line: #8cc3a2;
+  --stop: #fbefef; --stop-line: #e0a3a3; --title: #1f1f2e; --sub: #5d5d72; --label: #6e6a92; --line: #77778d;
+  --accent: #7c6fe0; --life: #c7c4dc; --block: #8c88b0; }
+@media (prefers-color-scheme: dark) {
+  svg { --bg: #1c1c23; --band: #252432; --band-line: #3b3854; --node: #2d2c3c; --node-line: #5e57a8;
+    --ext: #262630; --ext-line: #4a4a5e; --dec: #332c1f; --dec-line: #a3813f; --end: #1f2e26; --end-line: #4f8a66;
+    --stop: #352223; --stop-line: #9a5c5c; --title: #ececf4; --sub: #a9a9bb; --label: #a39ee0; --line: #9a9ab0;
+    --accent: #a99ff0; --life: #47455e; --block: #8f8ab8; }
+}
+text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+.bg { fill: var(--bg); }
+.band { fill: var(--band); stroke: var(--band-line); }
+.band-label { fill: var(--label); font-size: 13px; font-weight: 600; }
+.node { fill: var(--node); stroke: var(--node-line); stroke-width: 1.2; }
+.ext { fill: var(--ext); stroke: var(--ext-line); stroke-dasharray: 4 3; }
+.dec { fill: var(--dec); stroke: var(--dec-line); stroke-width: 1.2; }
+.end { fill: var(--end); stroke: var(--end-line); stroke-width: 1.2; }
+.stop { fill: var(--stop); stroke: var(--stop-line); stroke-width: 1.2; }
+.t { fill: var(--title); font-size: 14px; font-weight: 600; text-anchor: middle; }
+.s { fill: var(--sub); font-size: 12px; text-anchor: middle; }
+.edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+.back { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.el { fill: var(--sub); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.el-band { stroke: var(--band); }
+.bl { fill: var(--accent); }
+.head { fill: var(--line); }
+.head-back { fill: var(--accent); }
+.life { stroke: var(--life); stroke-width: 1.2; stroke-dasharray: 4 4; }
+.block { fill: none; stroke: var(--block); stroke-width: 1; }
+.block-tag { fill: var(--block); }
+.block-tag-text { fill: var(--bg); font-size: 11px; font-weight: 700; }
+.block-label { fill: var(--label); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.block-split { stroke: var(--block); stroke-width: 1; stroke-dasharray: 5 4; }
+.note { fill: var(--dec); stroke: var(--dec-line); }
+</style>
+  <defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker>
+  <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-back" d="M0 0L10 5L0 10z"/></marker>
+</defs>
+  <rect class="bg" width="720" height="704" rx="12"/>
+  <rect class="node" x="16" y="16" width="216" height="52" rx="8"/>
+  <text class="t" x="124.0" y="38.0">agt 资源命令</text>
+  <text class="s" x="124.0" y="56.0">解析参数、文件或 stdin</text>
+  <rect class="node" x="248" y="16" width="216" height="52" rx="8"/>
+  <text class="t" x="356.0" y="47.0">Web 资源请求</text>
+  <rect class="node" x="480" y="16" width="216" height="52" rx="8"/>
+  <text class="t" x="588.0" y="38.0">模型工具调用</text>
+  <text class="s" x="588.0" y="56.0">framework_resource_*</text>
+  <rect class="node" x="248" y="88" width="216" height="40" rx="8"/>
+  <text class="t" x="356.0" y="113.0">Node → agt tool call</text>
+  <rect class="node" x="480" y="88" width="216" height="40" rx="8"/>
+  <text class="t" x="588.0" y="113.0">Runtime 工具校验与执行控制</text>
+  <rect class="node" x="248" y="156" width="448" height="52" rx="8"/>
+  <text class="t" x="472.0" y="178.0">ToolService</text>
+  <text class="s" x="472.0" y="196.0">固定身份、能力与参数检查</text>
+  <rect class="node" x="16" y="236" width="688" height="52" rx="8"/>
+  <text class="t" x="360.0" y="258.0">Resources · agt-service</text>
+  <text class="s" x="360.0" y="276.0">统一资源操作</text>
+  <rect class="node" x="16" y="316" width="163" height="64" rx="8"/>
+  <text class="t" x="97.5" y="336.0">list / read</text>
+  <text class="s" x="97.5" y="354.0">安全视图</text>
+  <text class="s" x="97.5" y="370.0">read 返回 revision</text>
+  <rect class="node" x="191" y="316" width="163" height="64" rx="8"/>
+  <text class="t" x="272.5" y="344.0">create / update</text>
+  <text class="s" x="272.5" y="362.0">共享写锁内应用修改</text>
+  <rect class="node" x="366" y="316" width="163" height="64" rx="8"/>
+  <text class="t" x="447.5" y="344.0">删除计划与执行</text>
+  <text class="s" x="447.5" y="362.0">引用、绑定与确认检查</text>
+  <rect class="node" x="541" y="316" width="163" height="64" rx="8"/>
+  <text class="t" x="622.5" y="344.0">分类管理</text>
+  <text class="s" x="622.5" y="362.0">列表、创建、删除空分类</text>
+  <rect class="dec" x="152.5" y="412" width="240" height="52" rx="8"/>
+  <text class="t" x="272.5" y="434.0">expected_revision</text>
+  <text class="s" x="272.5" y="452.0">若提供，是否匹配？</text>
+  <rect class="stop" x="450" y="418" width="240" height="40" rx="20.0"/>
+  <text class="t" x="570.0" y="443.0">返回 conflict，不修改</text>
+  <rect class="node" x="152.5" y="496" width="240" height="52" rx="8"/>
+  <text class="t" x="272.5" y="518.0">对应资源写入模块</text>
+  <text class="s" x="272.5" y="536.0">类型解析、更新规则与领域校验</text>
+  <rect class="node" x="152.5" y="572" width="240" height="52" rx="8"/>
+  <text class="t" x="272.5" y="594.0">对应 Store</text>
+  <text class="s" x="272.5" y="612.0">原子写入或暂存提交</text>
+  <rect class="end" x="152.5" y="648" width="240" height="40" rx="20.0"/>
+  <text class="t" x="272.5" y="673.0">返回安全视图与新 revision</text>
+  <path class="edge" d="M124 70L124 234" marker-end="url(#a)"/>
+  <text class="el" x="132.0" y="200" text-anchor="start">直接调用</text>
+  <path class="edge" d="M356 70L356 86" marker-end="url(#a)"/>
+  <path class="edge" d="M588 70L588 86" marker-end="url(#a)"/>
+  <path class="edge" d="M356 130L356 154" marker-end="url(#a)"/>
+  <path class="edge" d="M588 130L588 154" marker-end="url(#a)"/>
+  <path class="edge" d="M472 210L472 234" marker-end="url(#a)"/>
+  <path class="edge" d="M97.5 290L97.5 314" marker-end="url(#a)"/>
+  <path class="edge" d="M272.5 290L272.5 314" marker-end="url(#a)"/>
+  <path class="edge" d="M447.5 290L447.5 314" marker-end="url(#a)"/>
+  <path class="edge" d="M622.5 290L622.5 314" marker-end="url(#a)"/>
+  <path class="edge" d="M272.5 381L272.5 410" marker-end="url(#a)"/>
+  <path class="edge" d="M393.5 438L448 438" marker-end="url(#a)"/>
+  <text class="el" x="404.5" y="432" text-anchor="start">否</text>
+  <path class="edge" d="M272.5 465L272.5 494" marker-end="url(#a)"/>
+  <text class="el" x="280.5" y="486" text-anchor="start">是或未提供</text>
+  <path class="edge" d="M272.5 549L272.5 570" marker-end="url(#a)"/>
+  <path class="edge" d="M272.5 625L272.5 646" marker-end="url(#a)"/>
+</svg>

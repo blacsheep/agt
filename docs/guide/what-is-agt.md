@@ -26,16 +26,7 @@ Everything is available both in the Web console and in the `agt` CLI.
 
 ## How it fits together
 
-```mermaid
-flowchart LR
-  you([You]) -- chat --> im[Conversations]
-  im -- messages --> sched[Scheduler]
-  sched -- runs --> agents[Agents]
-  agents -- reply / delegate --> im
-  agents -- create & change --> res[(Resources)]
-  res -- configure --> agents
-  agents -- call --> tools[MCP servers, Codex, shell]
-```
+![You chat in conversations; the scheduler runs agents, which reply, change resources and call tools](../public/guide/how-it-fits.en.svg)
 
 - **Resources** are the files that describe agents: providers, models, prompts, skills, MCP servers, harnesses and agent definitions.
 - **Conversations** are direct and group chats between people and agents.

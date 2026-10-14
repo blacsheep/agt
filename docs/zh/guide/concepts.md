@@ -31,11 +31,7 @@
 - 一个**身份**（*principal*）：聊天系统中的参与者，例如 `lead`。人也是身份；Web 控制台的操作者默认是 `web-operator`。
 - 一个**绑定**：把身份和定义连接起来，并保存运行设置：启用或停用、工作目录和响应策略。
 
-```mermaid
-flowchart LR
-  def[Agent 定义<br/>agents/default/reviewer] -- 绑定 --> id[身份<br/>reviewer]
-  id -- 成员 --> conv[会话]
-```
+![Agent 定义通过绑定连接到身份，身份是会话的成员](../../public/guide/agent-binding.zh.svg)
 
 Web 控制台的**创建 Agent**会一次创建这三样。在 CLI 和 Agent 工具中，它们是分开的步骤： `resource_write`（定义）、`principal_create`（身份）和 `agent_bind`（绑定）。停用绑定会让 Agent 在所有会话中停止工作，但保留它的身份和历史。
 
@@ -44,7 +40,7 @@ Web 控制台的**创建 Agent**会一次创建这三样。在 CLI 和 Agent 工
 每个 Agent 定义选择一种引擎：
 
 - **Native**（`model`）：agt 自己的模型与工具循环。支持 MCP 服务、Skill、全部内置工具和审批策略。
-- **Codex**（`harness`）：把 Agent 作为项目目录中的 [Codex](https://github.com/openai/codex) 会话运行。 Codex 自带文件编辑、Shell 和沙箱。
+- **Codex**（`harness`）：把 Agent 作为项目目录中的 [Codex](https://github.com/openai/codex) 会话运行。Codex 自带文件编辑、Shell 和沙箱。
 
 ## 内置能力
 
@@ -86,7 +82,7 @@ Agent 不会自己运行。人在开启自动回复的情况下发送消息（�
 
 一次**执行**是 Agent 的一次运行：为回答一条消息或完成一项任务而进行的模型调用、工具调用和最终回复。执行记录保存在 `runtime/runtime.db` 中。可以在 Web 控制台（调试模式）或用 `agt run list`、`agt run info <id>` 查看。
 
-执行状态 `completed` 表示模型正常结束，不代表目标已经达成。如果执行在工具调用中途被中断， agt 会把它标为中断，而不是重新调用工具，因为工具可能已经产生了副作用。
+执行状态 `completed` 表示模型正常结束，不代表目标已经达成。如果执行在工具调用中途被中断，agt 会把它标为中断，而不是重新调用工具，因为工具可能已经产生了副作用。
 
 ## 任务
 
@@ -94,4 +90,4 @@ Agent 不会自己运行。人在开启自动回复的情况下发送消息（�
 
 ## 审批
 
-Native Agent 执行工具之前，调用要经过工作空间的**审批策略**：模型审核、人工审批或全部放行。 Codex Agent 会发出自己的审批请求，单独处理。见[权限审批](./permissions.md)。
+Native Agent 执行工具之前，调用要经过工作空间的**审批策略**：模型审核、人工审批或全部放行。Codex Agent 会发出自己的审批请求，单独处理。见[权限审批](./permissions.md)。

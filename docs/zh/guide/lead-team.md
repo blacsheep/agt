@@ -32,7 +32,7 @@ agt tool call --principal me --manager principal_create --args '{"id":"lead","na
 agt tool call --principal me --manager agent_bind --args '{"principal":"lead","agent":"lead"}'
 ```
 
-lead 会进行大量工具调用。开始前请设置一个你能接受的审批策略，见[权限审批](./permissions.md)。 lead 适合使用工具调用可靠的强模型；队友可以使用更便宜的模型。
+lead 会进行大量工具调用。开始前请设置一个你能接受的审批策略，见[权限审批](./permissions.md)。lead 适合使用工具调用可靠的强模型；队友可以使用更便宜的模型。
 
 ### 可选：用于造工具的 Codex Agent
 

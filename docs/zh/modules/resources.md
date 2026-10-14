@@ -69,7 +69,7 @@ agt model delete experiments/cheap --dry-run
 ### 删除规则
 
 - 删除仍被其他资源引用的资源会被拒绝，并列出依赖者。
-- `--recursive` 会一并删除依赖者：删除 Provider 会删除它的 Model 和使用这些 Model 的 Agent；删除 Prompt、Skill、 MCP 服务、Harness 或 Model 会删除使用它的 Agent。删除 Agent 不会删除它使用的资源。
+- `--recursive` 会一并删除依赖者：删除 Provider 会删除它的 Model 和使用这些 Model 的 Agent；删除 Prompt、Skill、MCP 服务、Harness 或 Model 会删除使用它的 Agent。删除 Agent 不会删除它使用的资源。
 - 仍有绑定的 Agent 需要先解除绑定（见 [Agent](./agent.md#身份与绑定)）。
 - `default/default`（Prompt）不能删除。
 - 删除前，agt 会检查全部七种资源是否有损坏的配置和悬空引用，发现不一致就拒绝删除。

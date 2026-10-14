@@ -10,11 +10,11 @@
 
 1. `resource_write(kind="mcp", reference=..., create=true, data={mcpServers:{...}})` 注册单个服务；亦可使用 `agt mcp create`。stdio 服务必须提供绝对路径 `cwd`， `command` 只能是 PATH 中的命令名或绝对路径；`args` 中的相对路径按该 `cwd` 解析， `${cwd}` / `${workspace}` 占位符也展开为它。服务进程从不继承 Agent、Run 或探测方的工作目录，因此同一配置无论挂到哪个 Agent 都以相同方式启动。更早保存的、缺少绝对 `cwd` 的配置仍可读取和修改，但在启动或探测时会报错并说明如何修正。
 2. `resource_test(kind="mcp", reference=...)` 只验证连接配置，不启动服务。
-3. `mcp_probe(reference=...)` 按与 Run 完全相同的方式显式启动/连接服务，执行 initialize、tools/list 并编译每个 inputSchema，随后关闭连接；不调用任何业务工具。 CLI 对应 `agt mcp probe <reference>`。
-4. 使用既有 `resource_write(kind="agent", reference=..., create=false, data={mcps:[...]})` 设置 MCP 引用列表；提供 `mcps` 时替换整个列表，省略时保持原值，空列表清空挂载。 `agent_mcp_list` 查看配置。引用支持 category/name，不新增挂载表。 CLI 的 `agt agent update <agent> --add-mcp/--remove-mcp <mcp>` 则增删单项。工具增删可用 `add:{mcps:[...]}` / `remove:{mcps:[...]}`，与 CLI 共用资源服务。 `resource_read` 返回 revision；更新携带 expected_revision 可拒绝过期表单覆盖。参见[资源管理](resources.md)。
+3. `mcp_probe(reference=...)` 按与 Run 完全相同的方式显式启动/连接服务，执行 initialize、tools/list 并编译每个 inputSchema，随后关闭连接；不调用任何业务工具。CLI 对应 `agt mcp probe <reference>`。
+4. 使用既有 `resource_write(kind="agent", reference=..., create=false, data={mcps:[...]})` 设置 MCP 引用列表；提供 `mcps` 时替换整个列表，省略时保持原值，空列表清空挂载。 `agent_mcp_list` 查看配置。引用支持 category/name，不新增挂载表。CLI 的 `agt agent update <agent> --add-mcp/--remove-mcp <mcp>` 则增删单项。工具增删可用 `add:{mcps:[...]}` / `remove:{mcps:[...]}`，与 CLI 共用资源服务。 `resource_read` 返回 revision；更新携带 expected_revision 可拒绝过期表单覆盖。参见[资源管理](resources.md)。
 5. 检查 Agent 的身份、绑定启用状态与 MCP 装配，然后派发新任务。
 
-这些 Framework 工具只向 manager 或安装 `resource_management` 的 Agent 暴露， Native 中也经过现有权限策略。Native 的 probe 随资源管理能力提供，不要求单独的 MCP 开关；Harness 不暴露 AGT probe。直接管理端可显式探测。 probe 会执行配置的启动命令或访问 URL，不是静态检查。 stdio 服务运行在宿主机上，注册和探测本身不提供沙箱。
+这些 Framework 工具只向 manager 或安装 `resource_management` 的 Agent 暴露，Native 中也经过现有权限策略。Native 的 probe 随资源管理能力提供，不要求单独的 MCP 开关；Harness 不暴露 AGT probe。直接管理端可显式探测。probe 会执行配置的启动命令或访问 URL，不是静态检查。stdio 服务运行在宿主机上，注册和探测本身不提供沙箱。
 
 ## MCP 使用边界
 
@@ -24,7 +24,7 @@ Native Agent 只连接自身 `mcps` 装配中的服务，并只接受该快照�
 
 ## Run 内的工具契约
 
-Native 每次新 Run 连接 MCP 并读取 tools/list，将工具 schema 与已编译 validator 保存在同一份 Run 快照。schema 也参与已有恢复指纹；探测结果不是运行时的永久认证。 Framework 和 delegate 使用固定的授权与 schema；Native MCP/Skill 自修改可在批次边界刷新。
+Native 每次新 Run 连接 MCP 并读取 tools/list，将工具 schema 与已编译 validator 保存在同一份 Run 快照。schema 也参与已有恢复指纹；探测结果不是运行时的永久认证。Framework 和 delegate 使用固定的授权与 schema；Native MCP/Skill 自修改可在批次边界刷新。
 
 处理顺序：批次结构/名称/身份检查 → 参数解析与校验 → 权限审核 → before → execute → after。参数不符合 schema 时，不创建审批、不调用后端；记录失败工具结果（invalid_arguments），保留 tool_call_id 并返回模型，由现有模型步数预算约束修正过程。没有独立重试循环。参数错误不阻止批次内其他合法调用；批次身份、未知工具及委派授权错误仍保留原有拒绝语义。
 
@@ -40,7 +40,7 @@ Native 每次新 Run 连接 MCP 并读取 tools/list，将工具 schema 与已�
 
 Framework 服务入口也使用同一校验器，并保留原有 ToolError 顶层字段格式和后续 typed/domain 校验。Harness 的 AGT 动态工具在提交回合前编译定义，收到调用后先验证，通过才进入宿主回调。Codex 自有命令、文件或 MCP 工具仍由 Codex 管理。
 
-Native 成功修改自身 MCP/Skill 挂载，或修改当前挂载的 MCP/Skill 资源后，在整个工具批次结束、下一次模型请求之前刷新。批次内调用继续使用旧快照。候选连接、工具 schema、校验器和执行路由全部就绪后才切换；失败保留旧能力，并向模型及调用审计报告“配置保存成功，但加载失败”。不会自动循环重试。工具别名由资源引用和远端工具名确定，重排挂载不会把旧名字指向其他工具。刷新更新 Run 配置指纹，因此成功刷新的 MCP/Skill 能通过匹配的挂起恢复检查。模型、Provider、基础 Prompt、内置权限及委派配置保持本 Run 快照；修改这些配置后恢复仍可能因指纹不一致被拒绝。其他 Agent 的写入及 Web/CLI 编辑不触发当前 Run 隐式刷新，后续新 Run 加载。 Harness Agent 暂不支持 AGT MCP 挂载。输出 schema 校验、工具安装器和 Harness 热装载不在本次范围。
+Native 成功修改自身 MCP/Skill 挂载，或修改当前挂载的 MCP/Skill 资源后，在整个工具批次结束、下一次模型请求之前刷新。批次内调用继续使用旧快照。候选连接、工具 schema、校验器和执行路由全部就绪后才切换；失败保留旧能力，并向模型及调用审计报告“配置保存成功，但加载失败”。不会自动循环重试。工具别名由资源引用和远端工具名确定，重排挂载不会把旧名字指向其他工具。刷新更新 Run 配置指纹，因此成功刷新的 MCP/Skill 能通过匹配的挂起恢复检查。模型、Provider、基础 Prompt、内置权限及委派配置保持本 Run 快照；修改这些配置后恢复仍可能因指纹不一致被拒绝。其他 Agent 的写入及 Web/CLI 编辑不触发当前 Run 隐式刷新，后续新 Run 加载。Harness Agent 暂不支持 AGT MCP 挂载。输出 schema 校验、工具安装器和 Harness 热装载不在本次范围。
 
 ## 本地验证
 

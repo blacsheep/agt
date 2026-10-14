@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 1006" width="720" height="1006" role="img" aria-labelledby="title desc">
+  <title id="title">消息调度流程</title>
+  <desc id="desc">用户消息经 Service 校验后由 IM 保存；授权自动回复时建立 Discussion 并唤醒 Scheduler，准入和参与判断通过后领取执行槽，Runtime 执行后结算并幂等发布回复。</desc>
+  <style>
+svg { --bg: #fbfbfd; --band: #f2f1fb; --band-line: #dcd8f4; --node: #ffffff; --node-line: #b8b1ea;
+  --ext: #f6f6f8; --ext-line: #c9c9d6; --dec: #fff8ec; --dec-line: #e2b766; --end: #eef6f1; --end-line: #8cc3a2;
+  --stop: #fbefef; --stop-line: #e0a3a3; --title: #1f1f2e; --sub: #5d5d72; --label: #6e6a92; --line: #77778d;
+  --accent: #7c6fe0; --life: #c7c4dc; --block: #8c88b0; }
+@media (prefers-color-scheme: dark) {
+  svg { --bg: #1c1c23; --band: #252432; --band-line: #3b3854; --node: #2d2c3c; --node-line: #5e57a8;
+    --ext: #262630; --ext-line: #4a4a5e; --dec: #332c1f; --dec-line: #a3813f; --end: #1f2e26; --end-line: #4f8a66;
+    --stop: #352223; --stop-line: #9a5c5c; --title: #ececf4; --sub: #a9a9bb; --label: #a39ee0; --line: #9a9ab0;
+    --accent: #a99ff0; --life: #47455e; --block: #8f8ab8; }
+}
+text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+.bg { fill: var(--bg); }
+.band { fill: var(--band); stroke: var(--band-line); }
+.band-label { fill: var(--label); font-size: 13px; font-weight: 600; }
+.node { fill: var(--node); stroke: var(--node-line); stroke-width: 1.2; }
+.ext { fill: var(--ext); stroke: var(--ext-line); stroke-dasharray: 4 3; }
+.dec { fill: var(--dec); stroke: var(--dec-line); stroke-width: 1.2; }
+.end { fill: var(--end); stroke: var(--end-line); stroke-width: 1.2; }
+.stop { fill: var(--stop); stroke: var(--stop-line); stroke-width: 1.2; }
+.t { fill: var(--title); font-size: 14px; font-weight: 600; text-anchor: middle; }
+.s { fill: var(--sub); font-size: 12px; text-anchor: middle; }
+.edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+.back { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.el { fill: var(--sub); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.el-band { stroke: var(--band); }
+.bl { fill: var(--accent); }
+.head { fill: var(--line); }
+.head-back { fill: var(--accent); }
+.life { stroke: var(--life); stroke-width: 1.2; stroke-dasharray: 4 4; }
+.block { fill: none; stroke: var(--block); stroke-width: 1; }
+.block-tag { fill: var(--block); }
+.block-tag-text { fill: var(--bg); font-size: 11px; font-weight: 700; }
+.block-label { fill: var(--label); font-size: 11.5px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+.block-split { stroke: var(--block); stroke-width: 1; stroke-dasharray: 5 4; }
+.note { fill: var(--dec); stroke: var(--dec-line); }
+</style>
+  <defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker>
+  <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-back" d="M0 0L10 5L0 10z"/></marker>
+</defs>
+  <rect class="bg" width="720" height="1006" rx="12"/>
+  <rect class="end" x="30" y="16" width="330" height="36" rx="18.0"/>
+  <text class="t" x="195.0" y="39.0">用户发送消息</text>
+  <rect class="node" x="30" y="74" width="330" height="36" rx="8"/>
+  <text class="t" x="195.0" y="97.0">Service 校验身份与会话权限</text>
+  <rect class="node" x="30" y="132" width="330" height="36" rx="8"/>
+  <text class="t" x="195.0" y="155.0">IM 持久化消息与接收者投递</text>
+  <rect class="dec" x="30" y="190" width="330" height="36" rx="8"/>
+  <text class="t" x="195.0" y="213.0">是否授权自动回复？</text>
+  <rect class="node" x="30" y="248" width="330" height="48" rx="8"/>
+  <text class="t" x="195.0" y="268.0">创建或更新 Discussion</text>
+  <text class="s" x="195.0" y="286.0">授权具体消息</text>
+  <rect class="node" x="30" y="318" width="330" height="36" rx="8"/>
+  <text class="t" x="195.0" y="341.0">唤醒 Scheduler</text>
+  <rect class="node" x="30" y="376" width="330" height="36" rx="8"/>
+  <text class="t" x="195.0" y="399.0">扫描投递，建立独立调度任务</text>
+  <rect class="dec" x="30" y="434" width="330" height="48" rx="8"/>
+  <text class="t" x="195.0" y="454.0">准入条件满足？</text>
+  <text class="s" x="195.0" y="472.0">身份、成员、策略、额度、租约</text>
+  <rect class="dec" x="30" y="504" width="330" height="36" rx="8"/>
+  <text class="t" x="195.0" y="527.0">需要参与判断？</text>
+  <rect class="node" x="30" y="582" width="330" height="48" rx="8"/>
+  <text class="t" x="195.0" y="611.0">进入 ready 队列</text>
+  <rect class="node" x="30" y="652" width="330" height="36" rx="8"/>
+  <text class="t" x="195.0" y="675.0">重新检查资格并领取执行槽</text>
+  <rect class="node" x="30" y="710" width="330" height="36" rx="8"/>
+  <text class="t" x="195.0" y="733.0">组装上下文和 RunRequest</text>
+  <rect class="node" x="30" y="768" width="330" height="36" rx="8"/>
+  <text class="t" x="195.0" y="791.0">Runtime 执行 Native 或 Harness</text>
+  <rect class="node" x="30" y="826" width="330" height="36" rx="8"/>
+  <text class="t" x="195.0" y="849.0">保存 Run 结果并结算调度任务</text>
+  <rect class="node" x="30" y="884" width="330" height="48" rx="8"/>
+  <text class="t" x="195.0" y="904.0">复查发布权限与任务版本</text>
+  <text class="s" x="195.0" y="922.0">有可发布回复时幂等写入 IM</text>
+  <rect class="end" x="30" y="954" width="330" height="36" rx="18.0"/>
+  <text class="t" x="195.0" y="977.0">变化 outbox → 事件投影 → SSE</text>
+  <rect class="stop" x="430" y="190" width="260" height="36" rx="18.0"/>
+  <text class="t" x="560.0" y="213.0">仅保存消息</text>
+  <rect class="stop" x="430" y="434" width="260" height="48" rx="8"/>
+  <text class="t" x="560.0" y="463.0">按原因等待、阻塞或终结</text>
+  <rect class="dec" x="430" y="582" width="260" height="48" rx="8"/>
+  <text class="t" x="560.0" y="602.0">参与判断</text>
+  <text class="s" x="560.0" y="620.0">participate / silent / wait</text>
+  <rect class="stop" x="430" y="666" width="260" height="36" rx="18.0"/>
+  <text class="t" x="560.0" y="689.0">记录沉默决定</text>
+  <path class="edge" d="M195 53L195 72" marker-end="url(#a)"/>
+  <path class="edge" d="M195 111L195 130" marker-end="url(#a)"/>
+  <path class="edge" d="M195 169L195 188" marker-end="url(#a)"/>
+  <path class="edge" d="M195 227L195 246" marker-end="url(#a)"/>
+  <text class="el" x="203.0" y="239" text-anchor="start">是</text>
+  <path class="edge" d="M195 297L195 316" marker-end="url(#a)"/>
+  <path class="edge" d="M195 355L195 374" marker-end="url(#a)"/>
+  <path class="edge" d="M195 413L195 432" marker-end="url(#a)"/>
+  <path class="edge" d="M195 483L195 502" marker-end="url(#a)"/>
+  <text class="el" x="203.0" y="495" text-anchor="start">是</text>
+  <path class="edge" d="M195 541L195 580" marker-end="url(#a)"/>
+  <text class="el" x="203.0" y="573" text-anchor="start">直接执行路径</text>
+  <path class="edge" d="M195 631L195 650" marker-end="url(#a)"/>
+  <path class="edge" d="M195 689L195 708" marker-end="url(#a)"/>
+  <path class="edge" d="M195 747L195 766" marker-end="url(#a)"/>
+  <path class="edge" d="M195 805L195 824" marker-end="url(#a)"/>
+  <path class="edge" d="M195 863L195 882" marker-end="url(#a)"/>
+  <path class="edge" d="M195 933L195 952" marker-end="url(#a)"/>
+  <path class="edge" d="M361 208L428 208" marker-end="url(#a)"/>
+  <text class="el" x="395.0" y="202.0" text-anchor="middle">否</text>
+  <path class="edge" d="M361 458L428 458" marker-end="url(#a)"/>
+  <text class="el" x="395.0" y="452.0" text-anchor="middle">否</text>
+  <path class="edge" d="M361 522L554 522Q560 522 560 528L560 580" marker-end="url(#a)"/>
+  <text class="el" x="372" y="516.0" text-anchor="start">Native 未被点名的同伴消息</text>
+  <path class="edge" d="M429 606L362 606" marker-end="url(#a)"/>
+  <text class="el" x="395.0" y="600.0" text-anchor="middle">participate</text>
+  <path class="edge" d="M560 631L560 664" marker-end="url(#a)"/>
+  <text class="el" x="568.0" y="650" text-anchor="start">silent</text>
+  <path class="edge" d="M691 606L700 606Q706 606 706 600L706 464Q706 458 700 458L692 458" marker-end="url(#a)"/>
+  <text class="el" x="702" y="560.0" text-anchor="end">wait</text>
+</svg>
