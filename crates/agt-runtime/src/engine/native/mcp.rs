@@ -8,6 +8,8 @@ pub(super) struct ToolSession {
     pub(super) targets: BTreeMap<String, (usize, String)>,
     pub(super) schemas: Vec<Value>,
     pub(super) validators: BTreeMap<String, agt_core::tool_schema::ToolSchema>,
+    /// Readable "server / tool" names for the hashed aliases, shown in run activity.
+    pub(super) labels: BTreeMap<String, String>,
 }
 
 impl ToolSession {
@@ -22,6 +24,7 @@ impl ToolSession {
             targets: BTreeMap::new(),
             schemas: Vec::new(),
             validators: BTreeMap::new(),
+            labels: BTreeMap::new(),
         };
         for (server_index, document) in agent.mcps.iter().enumerate() {
             check_canceled(cancellation)?;
@@ -50,6 +53,9 @@ impl ToolSession {
                     "name":alias,"description":format!("{} / {}: {}", document.name, tool.name, tool.description.unwrap_or_default()),
                     "parameters":tool.input_schema
                 }}));
+                session
+                    .labels
+                    .insert(alias.clone(), format!("{} / {}", document.name, tool.name));
                 session.targets.insert(alias, (server_index, tool.name));
             }
         }

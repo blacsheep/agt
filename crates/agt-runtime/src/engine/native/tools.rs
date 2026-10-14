@@ -146,12 +146,15 @@ impl NativeRun<'_, '_> {
             .and_then(|s| s["inputSchema"]["properties"].as_object())
             .map(|p| p.keys().map(String::as_str).collect::<Vec<_>>())
             .unwrap_or_default();
-        let invocation = CallRecord::new(
+        let mut invocation = CallRecord::new(
             self.record,
             Some(&call.function.name),
             argument_summary(&arguments, &fields),
         )
         .with_public_context(&arguments);
+        if let Some(label) = self.tools.labels.get(&call.function.name) {
+            invocation.public_label = Some(label.clone());
+        }
         Ok((arguments, invocation))
     }
 

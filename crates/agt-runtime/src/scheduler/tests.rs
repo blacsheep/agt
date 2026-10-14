@@ -1601,6 +1601,20 @@ fn scheduled_native_uses_mounted_mcp_without_an_opt_in() {
         TaskState::Completed
     );
     assert!(home.path().join("calls").exists());
+    // Activity names the MCP tool, not its hashed alias.
+    let store = crate::RunStore::open(home.path()).unwrap();
+    let run = store.list_for_conversation(&chat, 1).unwrap().remove(0);
+    let call = store
+        .calls(&run.id, 0, 50)
+        .unwrap()
+        .into_iter()
+        .find(|c| {
+            c.tool_name
+                .as_deref()
+                .is_some_and(|n| n.starts_with("mcp_"))
+        })
+        .unwrap();
+    assert_eq!(call.public_label.as_deref(), Some("counter / count"));
 }
 
 #[cfg(unix)]
