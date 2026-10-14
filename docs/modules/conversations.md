@@ -4,7 +4,7 @@
 | --- | --- |
 | **What it is** | Participants, direct and group chats, and messages |
 | **CLI** | `agt im` |
-| **Agent tools** | `principal_list`, `direct_create`, `group_create`, `member_*`, `conversation_*`, `group_dissolve`, `response_policy`, `message_*` |
+| **Agent tools** | `principal_list`, `direct_create`, `group_create`, `member_list`, `member_add`, `member_remove`, `conversation_*`, `group_dissolve`, `response_policy`, `message_*` |
 | **Web console** | **会话空间** (Conversations), **Agent 会话** (Agent conversations) |
 | **Storage** | `im/im.db` |
 | **Crate** | `agt-im` |
@@ -24,6 +24,11 @@ authorized; see [Scheduler](./scheduler.md).
 
 When an agent creates a group, the **workspace owner** (the person who first started the Web
 console) joins as group owner automatically, and the creating agent becomes an admin.
+
+When a person creates a group, they are its owner and everyone they add is a member. Only the
+owner and admins can add or remove members, so a lead you add to your group cannot invite
+teammates until you make it an admin: **群信息** (Group info) → **设为管理员** (Make admin) next to
+it, or `member_role_set`. Only the owner changes roles, and ownership cannot be transferred.
 
 ## How to use it
 
@@ -66,6 +71,7 @@ arguments.
 | `member_list` | `conversation` | Members of a conversation you belong to |
 | `member_add` | `conversation`, `principal` | Invite (owner or admin) |
 | `member_remove` | `conversation`, `principal` | Remove someone (owner or admin), or leave yourself. The owner cannot leave. |
+| `member_role_set` | `conversation`, `principal`, `role` (`admin` or `member`) | Group owner only: make a member an admin or an admin a member. Offered to people, not agents. |
 | `group_dissolve` | `conversation` | Dissolve a group you own; history stays read-only |
 | `response_policy` | `conversation`, `policy` | Set your own policy here: `all`, `mentioned` or `manual` |
 | `message_send` | see below | Send a message |
@@ -111,6 +117,7 @@ These operate on the store directly, as a trusted local administrator.
 | `group members list <conv>` | | List members |
 | `group members add <conv> <id>` | `--actor <id>` | Add a member |
 | `group members remove <conv> <id>` | `--actor <id>` | Remove a member |
+| `group members role <conv> <id> <admin\|member>` | `--actor <owner>` | Change a member's role |
 | `group members leave <conv> <id>` | | Leave |
 | `group dissolve <conv>` | `--actor <owner>` | Dissolve |
 | `conversation list` | `--principal <id>` (required), `--include-hidden`, `--groups-only` | List an identity's conversations |

@@ -524,6 +524,8 @@ enum ImMembersCommand {
     Add(ImMemberChangeArgs),
     Remove(ImMemberChangeArgs),
     Leave(ImMemberLeaveArgs),
+    /// Make a member an admin, or an admin a member again (group owner only)
+    Role(ImMemberRoleArgs),
 }
 
 #[derive(Debug, Args)]
@@ -537,6 +539,21 @@ struct ImMemberChangeArgs {
     principal: String,
     #[arg(long)]
     actor: String,
+}
+
+#[derive(Debug, Args)]
+struct ImMemberRoleArgs {
+    conversation: String,
+    principal: String,
+    role: ImMemberRole,
+    #[arg(long)]
+    actor: String,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ImMemberRole {
+    Admin,
+    Member,
 }
 
 #[derive(Debug, Args)]
@@ -857,6 +874,18 @@ fn dispatch_im_members(
                 &ConversationId::new(args.conversation),
                 &PrincipalId::new(args.actor),
                 &PrincipalId::new(args.principal),
+            )?,
+            output,
+        ),
+        ImMembersCommand::Role(args) => emit(
+            &store.set_member_role(
+                &ConversationId::new(args.conversation),
+                &PrincipalId::new(args.actor),
+                &PrincipalId::new(args.principal),
+                match args.role {
+                    ImMemberRole::Admin => agt_im::MemberRole::Admin,
+                    ImMemberRole::Member => agt_im::MemberRole::Member,
+                },
             )?,
             output,
         ),

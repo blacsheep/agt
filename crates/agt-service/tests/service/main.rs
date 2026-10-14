@@ -118,6 +118,42 @@ fn group_broadcast_is_atomic_deduplicated_and_separate_from_read_cursor() {
 }
 
 #[test]
+fn group_owner_can_make_an_agent_admin_so_it_can_add_members() {
+    let home = home();
+    let owner = service(home.path(), "owner", true);
+    let a = service(home.path(), "a", false);
+    assert!(
+        owner
+            .schemas()
+            .iter()
+            .any(|s| s["name"] == "member_role_set")
+    );
+    assert!(!a.schemas().iter().any(|s| s["name"] == "member_role_set"));
+    let group = owner
+        .call("group_create", json!({"title":"game","members":["a"]}))
+        .unwrap();
+    let add = json!({"conversation":group["id"],"principal":"b"});
+    assert!(a.call("member_add", add.clone()).is_err());
+
+    let promoted = owner
+        .call(
+            "member_role_set",
+            json!({"conversation":group["id"],"principal":"a","role":"admin"}),
+        )
+        .unwrap();
+    assert_eq!(promoted["role"], "admin");
+    a.call("member_add", add).unwrap();
+    assert!(
+        owner
+            .call(
+                "member_role_set",
+                json!({"conversation":group["id"],"principal":"a","role":"owner"}),
+            )
+            .is_err()
+    );
+}
+
+#[test]
 fn tool_identity_and_management_permissions_are_enforced() {
     let home = home();
     let owner = service(home.path(), "owner", true);

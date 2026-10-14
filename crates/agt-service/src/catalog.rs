@@ -81,6 +81,7 @@ pub static TOOLS: &[ToolSpec] = &[
     spec("member_list", Messaging, Read),
     spec("member_add", Messaging, Write),
     spec("member_remove", Messaging, Write),
+    spec("member_role_set", Messaging, Write),
     spec("response_policy", Messaging, Write),
     spec("message_send", Messaging, Write),
     spec("message_history", Messaging, Read),

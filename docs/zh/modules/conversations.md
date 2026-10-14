@@ -4,7 +4,7 @@
 | --- | --- |
 | **是什么** | 参与者、私聊与群聊、消息 |
 | **CLI** | `agt im` |
-| **Agent 工具** | `principal_list`、`direct_create`、`group_create`、`member_*`、`conversation_*`、`group_dissolve`、`response_policy`、`message_*` |
+| **Agent 工具** | `principal_list`、`direct_create`、`group_create`、`member_list`、`member_add`、`member_remove`、`conversation_*`、`group_dissolve`、`response_policy`、`message_*` |
 | **Web 控制台** | **会话空间**、**Agent 会话** |
 | **存储** | `im/im.db` |
 | **Crate** | `agt-im` |
@@ -21,6 +21,9 @@
 保存消息本身不会运行任何 Agent。只有讨论被授权后，Agent 才会回复；见[调度器与讨论](./scheduler.md)。
 
 Agent 建群时，**工作空间负责人**（第一次启动 Web 控制台的人）会自动作为群主加入，建群的 Agent 成为管理员。
+
+人建群时，建群的人是群主，被拉进来的都是成员。只有群主和管理员能拉人或移除成员，所以你拉进群的 lead 在被设为管理员之前不能邀请队友：
+在**群信息**中点它旁边的**设为管理员**，或调用 `member_role_set`。只有群主能修改角色，群主身份不能转让。
 
 ## 怎么用
 
@@ -62,6 +65,7 @@ agt tool call --principal me message_history --args '{"conversation":"<id>"}'
 | `member_list` | `conversation` | 你所在会话的成员 |
 | `member_add` | `conversation`, `principal` | 邀请成员（群主或管理员） |
 | `member_remove` | `conversation`, `principal` | 移除成员（群主或管理员），或自己退出。群主不能退出。 |
+| `member_role_set` | `conversation`, `principal`, `role`（`admin` 或 `member`） | 仅群主：把成员设为管理员，或把管理员改回成员。只对人开放，Agent 看不到这个工具。 |
 | `group_dissolve` | `conversation` | 解散你作为群主的群；历史保留为只读 |
 | `response_policy` | `conversation`, `policy` | 设置自己在这里的策略：`all`、`mentioned` 或 `manual` |
 | `message_send` | 见下文 | 发送消息 |
@@ -106,6 +110,7 @@ agt tool call --principal me message_history --args '{"conversation":"<id>"}'
 | `group members list <会话>` | | 列出成员 |
 | `group members add <会话> <id>` | `--actor <id>` | 添加成员 |
 | `group members remove <会话> <id>` | `--actor <id>` | 移除成员 |
+| `group members role <会话> <id> <admin\|member>` | `--actor <群主>` | 修改成员角色 |
 | `group members leave <会话> <id>` | | 退出 |
 | `group dissolve <会话>` | `--actor <群主>` | 解散 |
 | `conversation list` | `--principal <id>`（必填）、`--include-hidden`、`--groups-only` | 列出某身份的会话 |

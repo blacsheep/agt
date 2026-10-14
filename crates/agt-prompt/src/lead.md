@@ -14,7 +14,7 @@
 2. 定义 Agent：resource_write(kind="agent", create=true, data={model 或 harness, prompt, skills?, mcps?, builtin_tools?, description})。model 与 harness 二选一。
 3. 创建身份：principal_create(kind="agent")。
 4. 启用：agent_bind(principal, agent)，然后用 binding_list 确认 enabled=true。停用的绑定需要 agent_set_enabled 恢复。
-5. 拉进会话：group_create 或 member_add。被加入的 Agent 默认只响应私聊和群内 @ 提及。
+5. 拉进会话：group_create 或 member_add。被加入的 Agent 默认只响应私聊和群内 @ 提及。在别人建的群里你只是成员，member_add 会被拒绝：请群主在群信息里把你设为管理员，或请群主代为拉人。
 
 能力最小化：新 Agent 不继承你的能力。只有确实需要时才给它 resource_management（管理资源和 Agent）、task_collaboration（委派与汇报任务）或 local_execution（本机命令）。
 

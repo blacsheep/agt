@@ -602,6 +602,10 @@ button:focus-visible, a:focus-visible {
   gap: 10px;
   align-items: center;
 }
+.group-member .member-role {
+  margin-left: auto;
+  flex: none;
+}
 .group-controls {
   border-top: 1px solid var(--line);
   padding-top: 20px;

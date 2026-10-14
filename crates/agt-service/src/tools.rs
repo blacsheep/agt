@@ -381,6 +381,16 @@ impl ToolService {
                     )?)?
                 }
             }
+            "member_role_set" => {
+                let d: MemberRoleSet = serde_json::from_value(args)?;
+                m.member(&d.conversation)?;
+                serde_json::to_value(m.im.set_member_role(
+                    &d.conversation,
+                    &m.actor.principal,
+                    &d.principal,
+                    d.role,
+                )?)?
+            }
             "response_policy" => {
                 let d: Policy = serde_json::from_value(args)?;
                 m.member(&d.conversation)?;
@@ -528,6 +538,15 @@ fn schemas(role: Role, resource_management: bool) -> Vec<Value> {
             &["id"],
         ),
     ];
+    // Agents are never group owners, so only people see the role tool.
+    if role == Role::Manager {
+        tools.push(schema(
+            "member_role_set",
+            "Group owner only: make a member an admin, who can then add and remove members, or make an admin a member again. Ownership cannot be transferred.",
+            json!({"conversation":string,"principal":string,"role":{"enum":["admin","member"]}}),
+            &["conversation", "principal", "role"],
+        ));
+    }
     if role == Role::Manager || resource_management {
         let kind = json!({"enum":["provider","model","prompt","skill","mcp","agent","harness"]});
         tools.extend([
@@ -654,6 +673,13 @@ struct Conversation {
 struct Member {
     conversation: ConversationId,
     principal: PrincipalId,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MemberRoleSet {
+    conversation: ConversationId,
+    principal: PrincipalId,
+    role: agt_im::MemberRole,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

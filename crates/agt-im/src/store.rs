@@ -478,6 +478,63 @@ impl ImStore {
         self.get_member(conversation_id, principal_id)
     }
 
+    /// Only the group owner may change roles, and only between admin and
+    /// member; ownership itself cannot be transferred.
+    pub fn set_member_role(
+        &self,
+        conversation_id: &ConversationId,
+        actor_id: &PrincipalId,
+        principal_id: &PrincipalId,
+        role: MemberRole,
+    ) -> Result<ConversationMember> {
+        if role == MemberRole::Owner {
+            return Err(ImError::InvalidInput(
+                "role must be admin or member; ownership cannot be transferred".to_string(),
+            ));
+        }
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let (kind, state, _) = conversation_state_tx(&transaction, conversation_id)?;
+        if kind != ConversationKind::Group {
+            return Err(ImError::InvalidInput(
+                "roles only exist in group conversations".to_string(),
+            ));
+        }
+        ensure_active_state(&state)?;
+        if member_role_tx(&transaction, conversation_id, actor_id)? != MemberRole::Owner {
+            return Err(ImError::PermissionDenied(
+                "only the group owner can change member roles".to_string(),
+            ));
+        }
+        let current = member_role_tx(&transaction, conversation_id, principal_id)?;
+        if current == MemberRole::Owner {
+            return Err(ImError::PermissionDenied(
+                "the group owner's role cannot be changed".to_string(),
+            ));
+        }
+        if current != role {
+            transaction.execute(
+                "UPDATE conversation_members SET role = ?3
+                 WHERE conversation_id = ?1 AND principal_id = ?2 AND left_message_seq IS NULL",
+                params![
+                    conversation_id.as_str(),
+                    principal_id.as_str(),
+                    member_role_to_str(&role)
+                ],
+            )?;
+            append_event_tx(
+                &transaction,
+                conversation_id,
+                Some(actor_id),
+                "member.role_changed",
+                &json!({ "principal_id": principal_id.as_str(), "role": member_role_to_str(&role) }),
+            )?;
+        }
+        transaction.commit()?;
+        drop(connection);
+        self.get_member(conversation_id, principal_id)
+    }
+
     pub fn remove_member(
         &self,
         conversation_id: &ConversationId,
@@ -1938,6 +1995,64 @@ mod tests {
             .expect("member.joined event");
         assert_eq!(joined.actor_id.as_ref(), Some(&owner));
         assert_eq!(joined.payload["principal_id"], "guest");
+    }
+
+    #[test]
+    fn owner_can_promote_a_member_who_can_then_manage_members() {
+        let store = ImStore::open_in_memory().expect("open store");
+        let owner = principal(&store, "owner");
+        let lead = principal(&store, "lead");
+        let guest = principal(&store, "guest");
+        let conversation = store
+            .create_group(&owner, Some("team".to_string()), vec![lead.clone()])
+            .expect("group");
+        assert!(matches!(
+            store.add_member(&conversation.id, &lead, &guest),
+            Err(ImError::PermissionDenied(_))
+        ));
+
+        let promoted = store
+            .set_member_role(&conversation.id, &owner, &lead, MemberRole::Admin)
+            .expect("promote");
+        assert_eq!(promoted.role, MemberRole::Admin);
+        store
+            .add_member(&conversation.id, &lead, &guest)
+            .expect("admin adds a member");
+        // Admins cannot change roles, and nobody can take or change ownership.
+        assert!(matches!(
+            store.set_member_role(&conversation.id, &lead, &guest, MemberRole::Admin),
+            Err(ImError::PermissionDenied(_))
+        ));
+        assert!(matches!(
+            store.set_member_role(&conversation.id, &owner, &guest, MemberRole::Owner),
+            Err(ImError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            store.set_member_role(&conversation.id, &owner, &owner, MemberRole::Member),
+            Err(ImError::PermissionDenied(_))
+        ));
+
+        let events = store
+            .list_events(&conversation.id, &owner, None, 20)
+            .expect("events")
+            .events;
+        let changed: Vec<_> = events
+            .iter()
+            .filter(|event| event.event_type == "member.role_changed")
+            .collect();
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].payload["role"], "admin");
+        // Setting the same role again changes nothing.
+        store
+            .set_member_role(&conversation.id, &owner, &lead, MemberRole::Admin)
+            .expect("same role");
+        store
+            .set_member_role(&conversation.id, &owner, &lead, MemberRole::Member)
+            .expect("demote");
+        assert!(matches!(
+            store.add_member(&conversation.id, &lead, &principal(&store, "late")),
+            Err(ImError::PermissionDenied(_))
+        ));
     }
 
     #[test]

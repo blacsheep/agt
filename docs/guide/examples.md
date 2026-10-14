@@ -102,7 +102,8 @@ cannot return another player's clue.
   approval you decide every call; see [Permissions](./permissions.md).
 - **Who owns the group.** The person who creates a group is its owner, and the lead cannot add
   members to a group it does not administer. In the murder mystery the lead asked the owner to
-  add the four new agents. If you want the lead to manage membership, let it create the group.
+  add the four new agents. To let the lead manage membership, let it create the group, or make
+  it an admin in **群信息** (Group info).
 - **Cost.** Every agent turn calls your model. The research run took 15 agent runs and the
   murder mystery 12, plus the Codex session.
 

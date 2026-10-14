@@ -411,9 +411,11 @@ function showGroupInfo() {
   const c = state.conversation; if (!c) return;
   const entry = currentEntry(), observer = isObserver(), left = entry?.left_message_seq != null;
   const owns = c.owner_id === state.boot.principal;
+  // Admins can add and remove members; only the owner grants that.
+  const canSetRoles = owns && !observer && !left && c.kind === 'group' && c.state === 'active';
   const canReset = canResetContext(c);
   $('#group-title').textContent = conversationName(c);
-  $('#group-content').innerHTML = `<p class="form-note">${entry?.dissolved ? '群聊已解散，历史记录保留。' : left ? '已退出，仅保留过去可见的消息。' : c.kind === 'group' ? '群成员与个人会话入口分别管理。' : '管理自己的会话入口。'}</p><div class="group-members">${state.members.map(m => `<div class="group-member"><span class="avatar">${esc([...nameOf(m.principal_id)][0])}</span><span><strong>${esc(nameOf(m.principal_id))}</strong><small>${m.left_message_seq != null ? '已退出' : ({owner:'群主',admin:'管理员',member:'成员'}[m.role] || '成员')}</small></span></div>`).join('')}</div>${observer ? '<p class="form-note">只读观察。请回到“会话空间”管理你自己的群聊。</p>' : `<div class="group-controls"><button id="hide-entry" class="secondary">从会话列表移除</button>${c.kind === 'group' && c.state === 'active' && !left ? owns ? '<p class="form-note">你是群主。负责人群需保留负责人；如不再需要协作，可解散群聊。</p><button id="dissolve-group" class="danger-button">解散群聊</button>' : '<button id="leave-group" class="danger-button">退出群聊，保留历史</button>' : ''}</div>`}`;
+  $('#group-content').innerHTML = `<p class="form-note">${entry?.dissolved ? '群聊已解散，历史记录保留。' : left ? '已退出，仅保留过去可见的消息。' : c.kind === 'group' ? '群成员与个人会话入口分别管理。' : '管理自己的会话入口。'}</p><div class="group-members">${state.members.map(m => `<div class="group-member"><span class="avatar">${esc([...nameOf(m.principal_id)][0])}</span><span><strong>${esc(nameOf(m.principal_id))}</strong><small>${m.left_message_seq != null ? '已退出' : ({owner:'群主',admin:'管理员',member:'成员'}[m.role] || '成员')}</small></span>${canSetRoles && m.left_message_seq == null && m.role !== 'owner' ? `<button type="button" class="quiet member-role" data-member-role="${esc(m.principal_id)}" data-role="${m.role === 'admin' ? 'member' : 'admin'}">${m.role === 'admin' ? '取消管理员' : '设为管理员'}</button>` : ''}</div>`).join('')}</div>${observer ? '<p class="form-note">只读观察。请回到“会话空间”管理你自己的群聊。</p>' : `<div class="group-controls"><button id="hide-entry" class="secondary">从会话列表移除</button>${c.kind === 'group' && c.state === 'active' && !left ? owns ? '<p class="form-note">你是群主。负责人群需保留负责人；如不再需要协作，可解散群聊。</p><button id="dissolve-group" class="danger-button">解散群聊</button>' : '<button id="leave-group" class="danger-button">退出群聊，保留历史</button>' : ''}</div>`}`;
   if (canReset) {
     $('#group-content').insertAdjacentHTML('beforeend', '<section class="context-controls" aria-label="模型上下文"><div><strong>模型上下文</strong><p class="form-note">长对话会自动生成摘要。需要换个话题时，可让本会话的 Agent 从新的起点开始。</p></div><button id="reset-context" class="secondary">重置上下文…</button></section>');
     $('#reset-context').onclick = () => showResetContext(c);
@@ -422,7 +424,15 @@ function showGroupInfo() {
     const button = $('#' + id); if (button) button.onclick = () => { $('#group-drawer').close(); confirmGroupAction(c, action); };
   }
   if ($('#hide-entry')) $('#hide-entry').onclick = () => { $('#group-drawer').close(); showDeleteChat(c); };
-  $('#group-drawer').showModal();
+  for (const button of $('#group-content').querySelectorAll('[data-member-role]')) button.onclick = async () => {
+    button.disabled = true;
+    try {
+      await tool('member_role_set', { conversation: c.id, principal: button.dataset.memberRole, role: button.dataset.role });
+      state.members = await read('member_list', { conversation: c.id });
+      if (state.conversation?.id === c.id) showGroupInfo();
+    } catch (e) { button.disabled = false; notify(errorText(e), true); }
+  };
+  if (!$('#group-drawer').open) $('#group-drawer').showModal();
 }
 function confirmGroupAction(c, action) {
   const leaving = action === 'leave';
