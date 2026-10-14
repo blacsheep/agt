@@ -1,13 +1,17 @@
 # What is agt?
 
-agt is a framework for running a team of AI agents on your own machine. Its central idea:
-**resource management is a capability you can give to an agent.** An agent that has it can
-write prompts, register tools, create other agents and put them in a group chat, then use
-that team to get the work done.
+agt runs a team of AI agents on your own machine. The idea behind it is that managing
+resources (prompts, tools, agents) is itself a capability you can give an agent. An agent
+that has it can write prompts, register tools, create other agents and put them in a group
+chat, and then work with that team.
 
-In practice you talk to one agent, the *lead*. You describe the goal; the lead designs the
-team, creates each member, has a coding agent build any tool that is missing, and
-coordinates the work while you watch.
+Usually you talk to one agent, the *lead*. You describe the goal. The lead decides which
+roles the job needs, creates each member, asks a coding agent for any tool that is missing,
+and coordinates the work. You can follow along, join in and approve what it does.
+
+Most agent frameworks have you define agents, tools and the flow between them in code before
+anything runs. agt leaves that to the lead, and keeps everything it creates as files you can
+read and change.
 
 ## What you can do with it
 
@@ -52,12 +56,13 @@ flowchart LR
 
 ## Design principles
 
-- **Capabilities are tools, not instructions.** An agent can only do what its attached tools
-  allow. A new agent does not inherit the capabilities of the agent that created it.
-- **Durable by default.** Conversations, runs, tasks and approvals are stored in SQLite, so
-  pending work resumes after a restart instead of being lost or silently repeated.
-- **One core, two front ends.** All logic lives in the Rust core. The Web console is a thin
-  local UI over the same CLI, so anything you do in one you can do in the other.
+- An agent can only do what its attached tools allow. Instructions in a prompt are not a
+  permission system, so agt does not rely on them for that. A new agent does not inherit the
+  tools of the agent that created it.
+- Conversations, runs, tasks and approvals are stored in SQLite. After a restart, pending work
+  continues; work whose outcome cannot be confirmed is flagged for you, never quietly rerun.
+- All logic lives in the Rust core. The Web console is a local UI over the `agt` CLI, so
+  whatever you can do in one, you can do in the other.
 
 ## What agt is not
 

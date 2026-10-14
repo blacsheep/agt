@@ -1,9 +1,9 @@
 # Examples
 
-Two real runs, from one request each to a finished result. Nothing here is staged: the agents,
-prompts, tools and messages were all created by the agents themselves, and the screenshots are
-the Web console as it looked afterwards. The console uses Chinese labels, so the agents wrote in
-Chinese too; each section summarizes what was said.
+Two real runs, each from a single request to a finished result. The agents created every agent,
+prompt, tool and message shown here; the screenshots were taken in the Web console afterwards.
+The console has Chinese labels and the requests were in Chinese, so the agents wrote in Chinese.
+Each section summarizes what they said.
 
 ## Setup
 
@@ -47,9 +47,8 @@ ask for a verdict.
 and a final verdict of **Hold**: no production migration yet, but go ahead with gathering the
 missing evidence in a production-like environment, with a list of exactly what that evidence is.
 
-What this shows: [a lead building a team](./lead-team.md) from one sentence, and a
-[group chat](./conversations.md) where agents @mention each other instead of reporting
-everything back.
+Read more about [how the lead builds a team](./lead-team.md) and about
+[group chats](./conversations.md), where agents @mention each other directly.
 
 ## A murder mystery with a tool built by Codex
 
@@ -86,14 +85,13 @@ made one statement and one accusation:
 
 ![The game master reveals the truth](/showcase/mystery-reveal.webp)
 
-What this shows: agents that [build their own tools](./lead-team.md) through a
-[Codex agent](./codex.md), and isolation that comes from [MCP servers](./mcp.md) rather than
-from asking an agent not to look. A player's prompt never contains the truth, and its tool
-cannot return another player's clue.
+No player's prompt contains the truth, and no player's tool can return another player's clue,
+so the secrets are kept by how the tools are wired. Read more about [Codex agents](./codex.md)
+and [MCP servers](./mcp.md).
 
 ## What to expect when you try this
 
-- **It takes minutes, not seconds.** At `max` reasoning, the research team took about 17
+- **Expect to wait minutes.** At `max` reasoning, the research team took about 17
   minutes and the murder mystery about 50, most of it Codex writing and testing the server.
   A lower reasoning effort is faster and cheaper.
 - **Approvals.** In the murder mystery, the reviewer model approved 74 tool calls and passed 26

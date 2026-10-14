@@ -1,7 +1,7 @@
 # Build a team with a lead
 
-The lead is the fastest way to use agt: instead of creating every agent yourself, you give one
-agent the ability to manage resources and let it build the team your goal needs.
+You can create every agent yourself, but usually it is easier to give one agent the ability
+to manage resources and let it build the team your goal needs. That agent is the lead.
 
 ## What the lead is
 
@@ -25,8 +25,11 @@ The `default/lead` prompt (created by `agt init` and on first start) teaches the
   report back to the original conversation;
 - **let the team run itself**: give standing rules once (who does what, who talks to whom,
   when to escalate) instead of relaying every step;
-- **report honestly**: base every claim on what the tools actually returned, and ask you
-  before deleting things, overwriting others' configuration or making expensive decisions.
+- **join groups properly**: in a group someone else created, the lead is a plain member and
+  cannot invite anyone, so it asks the owner to make it an admin or to add the members;
+- **report honestly**: confirm the setup and deliver results in the conversation where you
+  asked, base every claim on what the tools actually returned, and ask you before deleting
+  things, overwriting others' configuration or making expensive decisions.
 
 ## Set it up
 

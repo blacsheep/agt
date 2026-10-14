@@ -1,0 +1,79 @@
+# Contributing to agt
+
+## Build and test
+
+You need Rust 1.96.1 or newer and Node.js 22 or newer.
+
+```bash
+cargo build -p agt-cli              # target/debug/agt
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+node --test web/test/*.test.mjs     # needs target/debug/agt
+```
+
+No test needs a model API key. The browser tests (`web/test/*.browser.mjs`) need a local Chrome
+and run separately; see [Web console architecture](docs/zh/architecture/web-console.md)
+(Chinese).
+
+To run the console from your working tree instead of the copy built into `agt`:
+
+```bash
+node web/server.mjs                 # uses target/debug/agt
+```
+
+## Where tests go
+
+- Short unit tests go in the file they test, in `#[cfg(test)] mod tests {}`.
+- Longer unit tests that need private items go in `<module>/tests.rs`, split into
+  `<module>/tests/<topic>.rs` by topic. Declare them with plain `mod`; do not use `#[path]` or
+  `include!`.
+- Integration tests that only use the public API go in `crates/<crate>/tests/`: one file as
+  `<suite>.rs`, or several as `<suite>/main.rs` with submodules. They do not reach into `src/`.
+
+## Crates
+
+```text
+agt-core       shared IDs, categories and typed references
+agt-storage    safe filesystem access, shared SQLite connections, local wakeups
+agt-config     home directory layout and initialization
+agt-provider   OpenAI-compatible providers
+agt-model      model aliases that reference providers
+agt-prompt     PROMPT.md resources, including the built-in default and lead prompts
+agt-skill      SKILL.md resources (scoped packages supported)
+agt-mcp        mcp.json resources (stdio and HTTP servers)
+agt-agent      agent.yaml: model or harness, prompt, skills, MCP servers
+agt-harness    harness resources, the Codex protocol and execution control
+agt-im         participants, direct and group chats, messages, roles, read state (SQLite)
+agt-service    tool service, identities and permissions, agent bindings, stdio MCP server
+agt-inference  agent resolution, model protocols, streaming, context budget and compaction
+agt-runtime    model/tool loop, persistent runs, delivery scheduling, delegation
+agt-cli        the agt command-line interface, with the Web console built in
+```
+
+The Web console lives in `web/`: a Node.js server and plain HTML, CSS and JavaScript, with no
+npm dependencies. `crates/agt-cli/build.rs` embeds it into the `agt` binary, so a change under
+`web/public/` reaches `agt web` only after a rebuild.
+
+## Documentation
+
+User docs live in `docs/` and are published with VitePress. Every page under `docs/guide`,
+`docs/modules` and `docs/help` has a Chinese counterpart under `docs/zh/` with the same file
+name and sections; change both in the same commit. Check the site builds and has no dead
+links:
+
+```bash
+cd docs && npm ci && npm run build
+```
+
+## Releasing
+
+Releases are built by [dist](https://opensource.axo.dev/cargo-dist/), configured in
+`dist-workspace.toml`. To publish version `X.Y.Z`:
+
+1. Set `version` in the workspace `Cargo.toml` and in `CITATION.cff`, and commit.
+2. Push the commit, then the tag: `git push && git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+The Release workflow builds every platform, the installers and the checksums, and publishes
+the GitHub Release with the `GH_RELEASES_TOKEN` secret. Do not edit
+`.github/workflows/release.yml` by hand: change `dist-workspace.toml` and run `dist generate`.

@@ -1,7 +1,7 @@
 # Security model
 
-agt is a **trusted local tool for one operator**. It is designed to give agents real
-abilities on your machine under your control, not to isolate untrusted users from each other.
+agt is a **trusted local tool for one operator**. It lets agents do real work on your
+machine, under your control. Keeping untrusted users apart from each other is outside its design.
 
 ## The Web console
 
@@ -43,6 +43,9 @@ On top of this, every native tool call passes through the
 - Run records store the shape of tool arguments and safe error codes, not argument values,
   tool output or model reasoning. Full tool details are kept separately and shown only to the
   operator and the agent that made the call.
+- agt refuses symbolic links inside the home: in resource domains, categories and resource
+  folders. A link planted there cannot make agt read or write files outside the home. Links
+  above the home, such as `/var` on macOS, are not checked.
 
 ## Things agt does not protect against
 
