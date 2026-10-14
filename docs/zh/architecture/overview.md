@@ -1,53 +1,8 @@
 # 整体架构
 
-最近代码核对：2026-10-10。箭头表示调用或数据流，不是严格的 crate 依赖关系。
+最近代码核对：2026-10-10。箭头表示调用或数据流，不是严格的 crate 依赖关系；紫色虚线是工具调用和变更事件的回流。图里只画主干，各模块的细节见下文和专题页。
 
-```mermaid
-flowchart TB
-    UI["浏览器 AGT Studio"]
-    Node["Node Web 服务<br/>静态页面 / HTTP / SSE"]
-    CLI["agt-cli<br/>命令入口与组件装配"]
-    Client["外部 MCP 客户端"]
-    UI <-->|HTTP / SSE| Node
-    Node -->|CLI 子进程| CLI
-    Client <-->|stdio| Serve["agt serve"]
-
-    subgraph Rust["Rust 框架"]
-        Service["ToolService / agt-service<br/>工具契约、身份权限与通信"]
-        IM["agt-im<br/>参与者、会话、消息、投递、可见性"]
-        Resources["共享资源服务 / Resources<br/>CRUD、集合更新、版本检查、删除计划"]
-        Domains["资源领域模块与 Store<br/>Agent / Model / Provider<br/>Prompt / Skill / MCP / Harness"]
-        Scheduler["Scheduler<br/>授权、排队、参与判断、租约、并发"]
-        Work["WorkItem<br/>依赖、等待、恢复、结果与汇报"]
-        Runtime["Runtime<br/>Run 认领、幂等、执行与终态"]
-        Native["Native<br/>AGT 模型与工具循环"]
-        Harness["Harness<br/>外部执行与会话桥接"]
-        Events["事件投影与 events watch"]
-        Service --> IM
-        Service --> Resources
-        Resources --> Domains
-        IM -->|消息投递| Scheduler
-        Scheduler <--> Work
-        Scheduler --> Runtime
-        Runtime --> Native
-        Runtime --> Harness
-        Native --> Service
-        Harness -->|动态工具| Service
-        Runtime -.->|加载执行配置与能力| Domains
-    end
-
-    CLI -->|tool call| Service
-    CLI -->|资源命令适配| Resources
-    CLI --> Scheduler
-    CLI -->|显式 agent run| Runtime
-    Serve --> Service
-    Native <-->|模型 API| LLM["Chat Completions / Responses"]
-    Native <-->|stdio / HTTP| MCP["外部 MCP 工具"]
-    Harness <-->|stdio| Codex["Codex app-server 子进程"]
-    Rust --> Store["资源文件与 SQLite 数据库"]
-    Store -->|变化 outbox| Events
-    Events -->|JSONL 转 SSE| Node
-```
+![agt 整体架构：入口、服务层、执行层、执行引擎与存储](../../public/architecture/overview.svg)
 
 ## 模块与进程边界
 
