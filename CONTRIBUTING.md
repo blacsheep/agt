@@ -55,6 +55,25 @@ The Web console lives in `web/`: a Node.js server and plain HTML, CSS and JavaSc
 npm dependencies. `crates/agt-cli/build.rs` embeds it into the `agt` binary, so a change under
 `web/public/` reaches `agt web` only after a rebuild.
 
+### Console text
+
+Write console text in Chinese and wrap it in `$t()`; the Chinese text is the message key.
+Values go in as arguments, not by joining strings, so each language can order the sentence:
+
+```js
+$t('已载入 {0}/{1} 个会话', [loaded, total])
+```
+
+Add the English to `web/public/locales/en.js`. For counts, use a plural form there:
+`'{0, plural, one {# message} other {# messages}}'`. Write one message per case instead of
+passing a word such as a verb in as an argument. In `index.html`, mark text with `data-i18n`
+and translated attributes with `data-i18n-attr="title aria-label"`. Text that the server or
+the CLI sends to the page is translated where it is shown, so it needs an entry too.
+
+`node --test web/test/i18n.test.mjs` fails when a key has no English or when Chinese text in
+the console is not wrapped. Messages, prompts and tool output come from people and agents and
+are never translated.
+
 ## Documentation
 
 User docs live in `docs/` and are published with VitePress. Every page under `docs/guide`,

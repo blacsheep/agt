@@ -11,6 +11,7 @@ const ROOT_FILES: &[&str] = &[
     "server.mjs",
     "activity.mjs",
     "tool-details.mjs",
+    "i18n-node.mjs",
     "package.json",
 ];
 const PUBLIC_DIR: &str = "public";

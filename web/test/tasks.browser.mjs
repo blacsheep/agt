@@ -24,7 +24,7 @@ try {
   ({ server } = createConsole({ run, home, principal: 'operator', token: 'browser-test-token' }));
   await new Promise(ok => server.listen(0, '127.0.0.1', ok));
   const url = `http://127.0.0.1:${server.address().port}`;
-  chrome = spawn(process.env.CHROME_BINARY || '/opt/google/chrome/chrome', ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  chrome = spawn(process.env.CHROME_BINARY || '/opt/google/chrome/chrome', ['--headless=new', '--accept-lang=zh-CN', '--no-sandbox', '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   const endpoint = await new Promise((ok, fail) => { let log = ''; chrome.stderr.on('data', chunk => { log += chunk; const match = log.match(/DevTools listening on (ws:\/\/\S+)/); if (match) ok(match[1]); }); chrome.on('error', fail); });
   socket = new WebSocket(endpoint);
   await new Promise(ok => socket.addEventListener('open', ok, { once: true }));

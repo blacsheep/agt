@@ -86,9 +86,10 @@ impl CallRecord {
             .unwrap_or("")
             .trim_start_matches("framework_");
         self.public_summary = match name {
-            "harness_models" | "harness_session_models" => value["data"]
-                .as_array()
-                .map(|v| format!("找到 {} 个模型", v.len())),
+            // Fixed text, so the console can translate it.
+            "harness_models" | "harness_session_models" => {
+                value["data"].is_array().then(|| "已读取模型列表".into())
+            }
             "harness_session_configure" => Some("会话模型已更新".into()),
             _ => None,
         };

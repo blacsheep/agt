@@ -13,7 +13,7 @@ try {
   ({ server } = createConsole({ run, home, principal: 'operator', token: 'browser-test-token' }));
   await new Promise(ok => server.listen(0, '127.0.0.1', ok));
   const url = `http://127.0.0.1:${server.address().port}`;
-  chrome = spawn(process.env.CHROME_BINARY || '/opt/google/chrome/chrome', ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  chrome = spawn(process.env.CHROME_BINARY || '/opt/google/chrome/chrome', ['--headless=new', '--accept-lang=zh-CN', '--no-sandbox', '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   const endpoint = await new Promise((ok, fail) => { let log = ''; chrome.stderr.on('data', chunk => { log += chunk; const match = log.match(/DevTools listening on (ws:\/\/\S+)/); if (match) ok(match[1]); }); chrome.on('error', fail); });
   socket = new WebSocket(endpoint);
   await new Promise(ok => socket.addEventListener('open', ok, { once: true }));
@@ -52,6 +52,10 @@ try {
     };
     switchPage('interactions');
   `);
+  // The page opens in the global view: every identity's conversations, each read as a member.
+  await wait('document.querySelector("#ix-viewer").value === "*" && document.querySelectorAll(".ix-row").length === 4 && document.querySelector("[data-ix-message=private-1]")');
+  assert.equal(await evaluate('ixReads.some(r => r.name === "message_history" && r.args.conversation === "private" && r.viewer === "coder")'), true);
+  await evaluate('document.querySelector("#ix-viewer").value="operator";document.querySelector("#ix-viewer").dispatchEvent(new Event("change"));');
   await wait('document.querySelectorAll(".ix-row").length === 2');
   assert.equal(await evaluate('window.injected'), undefined);
   assert.equal(await evaluate('document.querySelectorAll(".ix-node").length'),2);

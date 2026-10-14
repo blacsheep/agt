@@ -2,7 +2,7 @@
 window.AgtPalette = (() => {
   const dialog = document.querySelector('#palette'), input = document.querySelector('#palette-input'), list = document.querySelector('#palette-list');
   let entries = [], index = 0;
-  const pages = [['chat', '会话空间', '聊天、群聊与私聊'], ['agents', 'Agent 团队', '创建、编辑和启停 Agent'], ['observer', 'Agent 会话', '只读查看 Agent 的对话'], ['interactions', '交互观察', '协作网络与消息流'], ['resources', '资源库', '模型、Prompt、Skills、MCP'], ['settings', '运行设置', '调度、权限、记忆与本机执行']];
+  const pages = [['chat', $t('会话空间'), $t('聊天、群聊与私聊')], ['agents', $t('Agent 团队'), $t('创建、编辑和启停 Agent')], ['observer', $t('Agent 会话'), $t('只读查看 Agent 的对话')], ['interactions', $t('交互观察'), $t('协作网络与消息流')], ['resources', $t('资源库'), $t('模型、Prompt、Skills、MCP')], ['settings', $t('运行设置'), $t('调度、权限、记忆与本机执行')]];
   const icon = { page: '◧', chat: '#', direct: '@', action: '›', agent: '✦' };
 
   function collect() {
@@ -11,30 +11,30 @@ window.AgtPalette = (() => {
     const add = (group, kind, label, hint, run, extra = {}) => out.push({ group, kind, label, hint, run, keys: `${label} ${hint}`.toLowerCase(), ...extra });
     if (state.conversation && state.page === 'chat') {
       const c = state.conversation;
-      if (human) add('当前会话', 'action', '查看协作任务', conversationName(c), () => $('#chat-tasks').click());
-      add('当前会话', 'action', '会话控制与命令', '/help /model /status …', () => $('#chat-commands').click());
-      if (c.kind === 'group') add('当前会话', 'action', '群信息与成员', conversationName(c), () => $('#group-info').click());
+      if (human) add($t('当前会话'), 'action', $t('查看协作任务'), conversationName(c), () => $('#chat-tasks').click());
+      add($t('当前会话'), 'action', $t('会话控制与命令'), '/help /model /status …', () => $('#chat-commands').click());
+      if (c.kind === 'group') add($t('当前会话'), 'action', $t('群信息与成员'), conversationName(c), () => $('#group-info').click());
     }
     for (const { conversation: c, last_message, member_count } of state.conversations) {
-      add('会话', 'chat', conversationName(c), last_message ? previewText(last_message, c, member_count) : `${c.kind === 'group' ? '群聊' : '私聊'} · ${member_count} 位参与者`,
+      add($t('会话'), 'chat', conversationName(c), last_message ? previewText(last_message, c, member_count) : $t('{0} · {1} 位参与者', [c.kind === 'group' ? $t('群聊') : $t('私聊'), member_count]),
         () => { switchPage('chat'); selectConversation(c.id); }, { tone: toneOf(c.id), initial: initialOf(conversationName(c)), square: c.kind === 'group' });
     }
     if (human) for (const p of state.boot.principals.filter(p => p.id !== state.boot.principal && canContact(p))) {
-      add('联系人', 'direct', `与 ${p.name || p.id} 私聊`, p.kind === 'agent' ? `Agent · ${p.id}` : p.id, () => startDirect(p.id), { tone: toneOf(p.id), initial: initialOf(p.name || p.id) });
+      add($t('联系人'), 'direct', $t('与 {0} 私聊', [p.name || p.id]), p.kind === 'agent' ? `Agent · ${p.id}` : p.id, () => startDirect(p.id), { tone: toneOf(p.id), initial: initialOf(p.name || p.id) });
     }
     for (const a of items('agent')) {
-      add('Agent', 'agent', `${a.name} 的详情`, a.description || ref(a), () => { switchPage('agents'); AgtAgentDetail.open(ref(a)); }, { tone: toneOf(state.boot.bindings.find(b => b.agent === ref(a))?.principal || ref(a)), initial: initialOf(a.name) });
+      add('Agent', 'agent', $t('{0} 的详情', [a.name]), a.description || ref(a), () => { switchPage('agents'); AgtAgentDetail.open(ref(a)); }, { tone: toneOf(state.boot.bindings.find(b => b.agent === ref(a))?.principal || ref(a)), initial: initialOf(a.name) });
     }
-    for (const [page, label, hint] of pages) add('页面', 'page', label, hint, () => switchPage(page));
+    for (const [page, label, hint] of pages) add($t('页面'), 'page', label, hint, () => switchPage(page));
     if (human) {
-      add('操作', 'action', '新建会话', '群聊或私聊', () => { switchPage('chat'); $('#new-chat').click(); });
-      add('操作', 'action', '创建 Agent', '新的角色配置', () => { switchPage('agents'); $('#new-agent').click(); });
-      add('操作', 'action', '新建资源', 'Provider、模型、Prompt…', () => { switchPage('resources'); $('#new-resource').click(); });
+      add($t('操作'), 'action', $t('新建会话'), $t('群聊或私聊'), () => { switchPage('chat'); $('#new-chat').click(); });
+      add($t('操作'), 'action', $t('创建 Agent'), $t('新的角色配置'), () => { switchPage('agents'); $('#new-agent').click(); });
+      add($t('操作'), 'action', $t('新建资源'), $t('Provider、模型、Prompt…'), () => { switchPage('resources'); $('#new-resource').click(); });
     }
     const theme = AgtTheme.get(), next = { system: 'light', light: 'dark', dark: 'system' }[theme];
-    const names = { system: '跟随系统', light: '浅色', dark: '深色' };
-    add('操作', 'action', `外观：切换为${names[next]}`, `当前 ${names[theme]}`, () => { AgtTheme.set(next); $('#theme-select').value = next; });
-    add('操作', 'action', $('#debug-mode').checked ? '关闭调试模式' : '打开调试模式', '显示调度与调用细节', () => $('#debug-mode').click());
+    const names = { system: $t('跟随系统'), light: $t('浅色'), dark: $t('深色') };
+    add($t('操作'), 'action', $t('外观：切换为{0}', [names[next]]), $t('当前 {0}', [names[theme]]), () => { AgtTheme.set(next); $('#theme-select').value = next; });
+    add($t('操作'), 'action', $('#debug-mode').checked ? $t('关闭调试模式') : $t('打开调试模式'), $t('显示调度与调用细节'), () => $('#debug-mode').click());
     return out;
   }
 
@@ -54,10 +54,10 @@ window.AgtPalette = (() => {
 
   function render() {
     const query = input.value.trim().toLowerCase();
-    const groups = ['当前会话', '会话', '联系人', 'Agent', '页面', '操作'];
+    const groups = [$t('当前会话'), $t('会话'), $t('联系人'), 'Agent', $t('页面'), $t('操作')];
     entries = collect().map(e => ({ ...e, score: score(e, query) })).filter(e => e.score > 0);
     entries.sort((a, b) => query ? b.score - a.score : groups.indexOf(a.group) - groups.indexOf(b.group));
-    if (!query) entries = groups.flatMap(g => entries.filter(e => e.group === g).slice(0, g === '会话' ? 6 : g === 'Agent' ? 4 : 8));
+    if (!query) entries = groups.flatMap(g => entries.filter(e => e.group === g).slice(0, g === $t('会话') ? 6 : g === 'Agent' ? 4 : 8));
     else entries = entries.slice(0, 30);
     index = Math.min(index, Math.max(0, entries.length - 1));
     let last = '';
@@ -66,7 +66,7 @@ window.AgtPalette = (() => {
       last = e.group;
       const mark = e.initial ? `<span class="avatar${e.square ? ' group' : ''}" data-tone="${e.tone}" aria-hidden="true">${esc(e.initial)}</span>` : `<span class="palette-icon" aria-hidden="true">${icon[e.kind]}</span>`;
       return `${head}<li role="option" id="palette-option-${i}" data-index="${i}" aria-selected="${i === index}">${mark}<span><strong>${esc(e.label)}</strong><small>${esc(e.hint)}</small></span>${query ? `<em>${esc(e.group)}</em>` : ''}</li>`;
-    }).join('') || '<li class="palette-empty" role="presentation">没有匹配的结果</li>';
+    }).join('') || `<li class="palette-empty" role="presentation">${$t('没有匹配的结果')}</li>`;
     input.setAttribute('aria-activedescendant', entries.length ? `palette-option-${index}` : '');
     list.querySelectorAll('[data-index]').forEach(li => {
       li.onmousemove = () => { if (index !== Number(li.dataset.index)) { index = Number(li.dataset.index); highlight(); } };

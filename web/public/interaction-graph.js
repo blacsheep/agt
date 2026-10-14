@@ -43,14 +43,14 @@ window.createInteractionGraph = (onSelect) => {
         const x1=a.x+dx/length*36, y1=a.y+dy/length*36, x2=b.x-dx/length*40, y2=b.y-dy/length*40;
         const cx=(x1+x2)/2-dy*.12, cy=(y1+y2)/2+dx*.12, d=`M${x1} ${y1} Q${cx} ${cy} ${x2} ${y2}`;
         const lit = e.until > now, selected = chosen?.kind==='task' ? e.workTasks?.some(t=>t.id===chosen.id) : e.messages.some(m => m.id === chosen);
-        return `<g class="ix-edge ${e.membership?'membership':''} ${e.workTasks?'delegation':''} ${lit?'fresh':''} ${selected?'chosen':''} ${focus && e.from!==focus && e.to!==focus?'dim':''}" data-edge="${i}" tabindex="0" role="button" aria-label="${esc(nodes.get(e.from).label+' → '+nodes.get(e.to).label+'，'+(e.membership?'成员关系':e.workTasks?e.workTasks.length+' 项任务委派':e.messages.length+' 条消息'))}">
+        return `<g class="ix-edge ${e.membership?'membership':''} ${e.workTasks?'delegation':''} ${lit?'fresh':''} ${selected?'chosen':''} ${focus && e.from!==focus && e.to!==focus?'dim':''}" data-edge="${i}" tabindex="0" role="button" aria-label="${esc($t('{0} → {1}，{2}', [nodes.get(e.from).label, nodes.get(e.to).label, e.membership?$t('成员关系'):e.workTasks?$t('{0} 项任务委派', [e.workTasks.length]):$t('{0} 条消息', [e.messages.length])]))}">
           <path class="ix-edge-hit" d="${d}"/><path class="ix-edge-line" d="${d}" ${e.membership?'':'marker-end="url(#ix-arrow)"'}/>
           ${lit ? `<circle class="ix-packet" r="4"><animateMotion dur="1.3s" repeatCount="indefinite" path="${d}"/></circle>` : ''}
-          ${!e.membership ? `<text x="${cx}" y="${cy-7}" class="ix-edge-count">${e.workTasks?'委派 '+e.workTasks.length:e.messages.length}</text>` : ''}</g>`;
+          ${!e.membership ? `<text x="${cx}" y="${cy-7}" class="ix-edge-count">${e.workTasks?$t('委派 {0}', [e.workTasks.length]):e.messages.length}</text>` : ''}</g>`;
       }).join('')}
       ${[...nodes.values()].map(n => {
         const p=positions.get(n.id), lit=edges.some(e => e.until>now && (e.from===n.id || e.to===n.id));
-        return `<g data-tone="${n.group?'':toneOf(n.id)}" class="ix-node ${n.group?'group':''} ${focus===n.id?'focused':''} ${focus&&!neighborhood.has(n.id)?'dim':''} ${n.running?'running':''} ${n.tone||''} ${lit?'fresh':''}" data-node="${esc(n.id)}" transform="translate(${p.x} ${p.y})" tabindex="0" role="button" aria-label="${esc(n.label+'，'+n.status)}">
+        return `<g data-tone="${n.group?'':toneOf(n.id)}" class="ix-node ${n.group?'group':''} ${focus===n.id?'focused':''} ${focus&&!neighborhood.has(n.id)?'dim':''} ${n.running?'running':''} ${n.tone||''} ${lit?'fresh':''}" data-node="${esc(n.id)}" transform="translate(${p.x} ${p.y})" tabindex="0" role="button" aria-label="${esc($t('{0}，{1}', [n.label, n.status]))}">
           <circle class="ix-node-halo" r="43" pathLength="300"/>${n.group?'<rect class="ix-node-face" x="-27" y="-27" width="54" height="54" rx="12" transform="rotate(45)"/>':'<circle class="ix-node-face" r="31"/>'}
           <text class="ix-node-initial" text-anchor="middle" y="6">${esc(n.group?'#':n.label.slice(0,2))}</text>
           <circle class="ix-node-state" cx="25" cy="22" r="6"/>
@@ -61,9 +61,9 @@ window.createInteractionGraph = (onSelect) => {
     svg.querySelectorAll('.ix-node.running .ix-node-halo').forEach(halo => { halo.style.animationDelay = `-${now % 2400}ms`; });
     if (focusedKey) [...svg.querySelectorAll('[data-node]')].find(n=>n.dataset.node===focusedKey)?.focus({preventScroll:true});
     else if (focusedEdge != null) svg.querySelector(`[data-edge="${focusedEdge}"]`)?.focus({preventScroll:true});
-    $('#ix-graph-count').textContent = `${nodes.size} 个节点 · ${edges.filter(e=>!e.membership).length} 条通信路径`;
+    $('#ix-graph-count').textContent = $t('{0} 个节点 · {1} 条通信路径', [nodes.size, edges.filter(e=>!e.membership).length]);
     $('#ix-graph-empty').classList.toggle('hidden', nodes.size > 0);
-    $('#ix-graph-empty').textContent = '当前范围暂无交互 · 展开筛选切换身份或载入更多会话';
+    $('#ix-graph-empty').textContent = $t('当前范围暂无交互 · 展开筛选切换身份或载入更多会话');
     $('#ix-unfocus').disabled = !focus;
   }
   function showTip(element) {
@@ -72,7 +72,7 @@ window.createInteractionGraph = (onSelect) => {
     const relevant = node ? edges.filter(e=>e.from===node.id || e.to===node.id).flatMap(e=>e.messages) : edge?.messages || [];
     const latest = relevant.sort((a,b)=>b.created_at-a.created_at)[0];
     tip.textContent = [node ? node.label+' · '+node.status : nodes.get(edge.from).label+' → '+nodes.get(edge.to).label,
-      node?.reason, edge?.workTasks ? edge.workTasks.length+' 项任务委派，点击查看任务' : latest ? (latest.deleted_at?'消息已删除':latest.body).slice(0,220) : '当前范围暂无聊天消息', '点击聚焦 · 拖动节点调整位置'].filter(Boolean).join('\n');
+      node?.reason, edge?.workTasks ? $t('{0} 项任务委派，点击查看任务', [edge.workTasks.length]) : latest ? (latest.deleted_at?$t('消息已删除'):latest.body).slice(0,220) : $t('当前范围暂无聊天消息'), $t('点击聚焦 · 拖动节点调整位置')].filter(Boolean).join('\n');
     tip.classList.remove('hidden');
   }
   function choose(element) {
@@ -85,7 +85,7 @@ window.createInteractionGraph = (onSelect) => {
     } else if (edge) {
       focus = edge.from;
       if(edge.workTasks){onSelect({kind:'task',id:edge.workTasks[0].id}, {taskIds:edge.workTasks.map(t=>t.id)});draw();return;}
-      chosen=edge.messages[0]?.id || null; onSelect(chosen, {label:nodes.get(edge.from).label+' → '+nodes.get(edge.to).label,status:'成员关系',reason:'这条虚线表示群聊成员关系，不表示已发送或已读消息。'});
+      chosen=edge.messages[0]?.id || null; onSelect(chosen, {label:nodes.get(edge.from).label+' → '+nodes.get(edge.to).label,status:$t('成员关系'),reason:$t('这条虚线表示群聊成员关系，不表示已发送或已读消息。')});
       draw();
     }
   }
@@ -134,15 +134,15 @@ window.createInteractionGraph = (onSelect) => {
     update(rows, tasks, online, recent, selected, workTasks = [], approvals = []) {
       chosen=selected;
       const next=new Map(), paths=new Map();
-      const add=(id,label,group=false)=>{if(!next.has(id))next.set(id,{id,label,group,degree:0,status:group?'群聊':'暂无执行',running:false});return id;};
+      const add=(id,label,group=false)=>{if(!next.has(id))next.set(id,{id,label,group,degree:0,status:group?$t('群聊'):$t('暂无执行'),running:false});return id;};
       for(const {item,message:m} of rows) {
         const from=add('p:'+m.sender_id,nameOf(m.sender_id));
         let to;
         if(item.conversation.kind==='direct') {
           const peers=item.members.filter(x=>x.principal_id!==m.sender_id);
-          to=peers.length===1?add('p:'+peers[0].principal_id,nameOf(peers[0].principal_id)):add('c:'+item.conversation.id,'私聊 · 对象未确认',true);
+          to=peers.length===1?add('p:'+peers[0].principal_id,nameOf(peers[0].principal_id)):add('c:'+item.conversation.id,$t('私聊 · 对象未确认'),true);
         } else {
-          to=add('c:'+item.conversation.id,item.conversation.title||'群聊',true);
+          to=add('c:'+item.conversation.id,item.conversation.title||$t('群聊'),true);
           for(const member of item.members.filter(x=>x.left_message_seq==null)) {
             const memberId=add('p:'+member.principal_id,nameOf(member.principal_id)), key=JSON.stringify([to,memberId]);
             if(!paths.has(key))paths.set(key,{from:to,to:memberId,messages:[],membership:true,until:0});
@@ -171,8 +171,8 @@ window.createInteractionGraph = (onSelect) => {
         if(!n || seen.has(n.id))continue;seen.add(n.id);
         n.running=online && activeStates.has(t.state);
         n.tone=online ? ({waiting:'waiting',queued:'waiting',failed:'failed'})[t.state] || '' : '';
-        n.status=!online?'状态待确认':({running:'执行中',input:'已接入当前执行',responding:'回复中',evaluating:'判断中',waiting:'等待中',queued:'排队中',ready_to_reply:'等待回复',blocked:'受阻',limited:'已达限制',failed:'执行失败',canceled:'已取消',completed:'已完成',silent:'暂不发言'})[t.state]||t.state;
-        n.reason=t.last_decision?.public_reason ? '公开理由：'+t.last_decision.public_reason : '';
+        n.status=!online?$t('状态待确认'):({running:$t('执行中'),input:$t('已接入当前执行'),responding:$t('回复中'),evaluating:$t('判断中'),waiting:$t('等待中'),queued:$t('排队中'),ready_to_reply:$t('等待回复'),blocked:$t('受阻'),limited:$t('已达限制'),failed:$t('执行失败'),canceled:$t('已取消'),completed:$t('已完成'),silent:$t('暂不发言')})[t.state]||t.state;
+        n.reason=t.last_decision?.public_reason ? $t('公开理由：{0}', [t.last_decision.public_reason]) : '';
       }
       for(const n of nodes.values()) {
         if(n.group)continue;
@@ -181,9 +181,9 @@ window.createInteractionGraph = (onSelect) => {
         const harness=agent?.harness && items('harness').find(h=>ref(h)===ref(agent.harness));
         n.engine=harness?.engine || (agent?.harness?'Harness':'');
         const work=workTasks.filter(t=>t.request.assignee===principal && !['succeeded','failed','canceled','interrupted','outcome_unknown'].includes(t.state));
-        if(work.length){n.status=work.length+' 项活动任务';n.running=online&&work.some(t=>t.state==='running');}
+        if(work.length){n.status=$t('{0} 项活动任务', [work.length]);n.running=online&&work.some(t=>t.state==='running');}
         n.approvalIds=approvals.filter(a=>a.principal===principal && ['reviewing','awaiting_human'].includes(a.state)&&a.delivery==='not_sent').map(a=>a.id);
-        if(n.approvalIds.length){n.status=n.approvalIds.length+' 项权限审核';n.tone='waiting';}
+        if(n.approvalIds.length){n.status=$t('{0} 项权限审核', [n.approvalIds.length]);n.tone='waiting';}
       }
       const initial=positions.size===0;
       if(initial)layout();

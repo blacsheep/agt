@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { activitySnapshot, conversationRuns } from './activity.mjs';
 import { toolDetail } from './tool-details.mjs';
+import './i18n-node.mjs';
 import './public/commands.js';
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -13,7 +14,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const readTools = new Set(['conversation_list', 'member_list', 'message_history', 'message_status', 'message_inbox', 'task_get', 'task_list', 'task_attention']);
 const writeTools = new Set(['direct_create', 'group_create', 'message_send', 'member_add', 'member_remove', 'member_role_set', 'resource_write', 'principal_create', 'agent_bind', 'agent_unbind', 'agent_set_enabled', 'task_cancel', 'task_reply', 'task_reprioritize', 'task_defer', 'task_resolve', 'task_retry', 'task_report']);
 const kinds = ['provider', 'model', 'prompt', 'skill', 'mcp', 'agent', 'harness'];
-const assets = new Map([['/agent-detail.js',['agent-detail.js','text/javascript']],['/palette.js',['palette.js','text/javascript']],['/run-threads.js',['run-threads.js','text/javascript']],['/theme.js',['theme.js','text/javascript']],['/markdown.js',['markdown.js','text/javascript']],['/permission-mode.js',['permission-mode.js','text/javascript']],['/tool-details.js',['tool-details.js','text/javascript']],['/execution-view.css',['execution-view.css','text/css']],['/tool-renderers.js',['tool-renderers.js','text/javascript']],['/tool-activity.js',['tool-activity.js','text/javascript']],['/execution-view.js',['execution-view.js','text/javascript']],['/approvals.js', ['approvals.js', 'text/javascript']], ['/interaction-graph.js', ['interaction-graph.js', 'text/javascript']], ['/interactions.js', ['interactions.js', 'text/javascript']], ['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/settings.js', ['settings.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']], ['/favicon.svg', ['favicon.svg', 'image/svg+xml']]]);
+const assets = new Map([['/agent-detail.js',['agent-detail.js','text/javascript']],['/palette.js',['palette.js','text/javascript']],['/run-threads.js',['run-threads.js','text/javascript']],['/theme.js',['theme.js','text/javascript']],['/markdown.js',['markdown.js','text/javascript']],['/permission-mode.js',['permission-mode.js','text/javascript']],['/tool-details.js',['tool-details.js','text/javascript']],['/execution-view.css',['execution-view.css','text/css']],['/tool-renderers.js',['tool-renderers.js','text/javascript']],['/tool-activity.js',['tool-activity.js','text/javascript']],['/execution-view.js',['execution-view.js','text/javascript']],['/approvals.js', ['approvals.js', 'text/javascript']], ['/interaction-graph.js', ['interaction-graph.js', 'text/javascript']], ['/interactions.js', ['interactions.js', 'text/javascript']], ['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/tasks.js', ['tasks.js', 'text/javascript']], ['/settings.js', ['settings.js', 'text/javascript']], ['/commands.js', ['commands.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']], ['/favicon.svg', ['favicon.svg', 'image/svg+xml']], ['/i18n.js', ['i18n.js', 'text/javascript']], ['/locales/en.js', ['locales/en.js', 'text/javascript']]]);
 
 export class ApiError extends Error {
   constructor(status, code, message, field) { super(message); Object.assign(this, { status, code, field }); }
@@ -345,14 +346,17 @@ export function createConsole({ run, home, principal = 'web-operator', token = r
   return { server, token };
 }
 
+// Terminal messages follow the system locale; the page has its own language switch.
+const zhTerminal = /^zh/i.test(process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || '');
+const say = (zh, en) => zhTerminal ? zh : en;
 export async function start(argv = process.argv.slice(2)) {
   const options = { home: process.env.AGT_HOME || resolve(homedir(), '.agt'), binary: resolve(here, '../target/debug/agt'), principal: 'web-operator', port: 4317 };
   for (let i = 0; i < argv.length; i += 2) {
     const key = { '--home': 'home', '--binary': 'binary', '--principal': 'principal', '--port': 'port' }[argv[i]];
-    if (!key || !argv[i + 1]) throw new Error('用法：node web/server.mjs [--home DIR] [--binary PATH] [--principal ID] [--port 4317]');
+    if (!key || !argv[i + 1]) throw new Error(say('用法：', 'Usage: ') + 'node web/server.mjs [--home DIR] [--binary PATH] [--principal ID] [--port 4317]');
     options[key] = key === 'port' ? Number(argv[i + 1]) : argv[i + 1];
   }
-  if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65535) throw new Error('端口无效');
+  if (!Number.isInteger(options.port) || options.port < 0 || options.port > 65535) throw new Error(say('端口无效', 'Invalid port'));
   str(options.principal);
   options.binary = resolve(options.binary); options.home = resolve(options.home);
   await access(options.binary);
@@ -361,15 +365,17 @@ export async function start(argv = process.argv.slice(2)) {
     // Explicit server startup prepares the home and a dedicated human operator only.
     const principals = await run(['im', 'principal', 'list']);
     const found = principals.find(p => p.id === options.principal);
-    if (found && found.kind !== 'user') throw new Error('操作身份已被非用户占用，请使用 --principal 指定新身份。');
-    if (!found) await run(['im', 'principal', 'create', options.principal, '--name', '本地操作员', '--kind', 'user']);
+    if (found && found.kind !== 'user') throw new Error(say('操作身份已被非用户占用，请使用 --principal 指定新身份。', 'That identity belongs to a non-user participant. Choose another with --principal.'));
+    if (!found) await run(['im', 'principal', 'create', options.principal, '--name', say('本地操作员', 'Local operator'), '--kind', 'user']);
     options.home = await realpath(options.home);
     const owner = await run(['im', 'owner', 'ensure', options.principal]);
-    if (owner !== options.principal) throw new Error('此工作空间的负责人是 ' + owner + '，请使用 --principal 指定该身份启动。');
+    if (owner !== options.principal) throw new Error(say('此工作空间的负责人是 ' + owner + '，请使用 --principal 指定该身份启动。', 'The owner of this workspace is ' + owner + '. Start with --principal ' + owner + '.'));
     await run.startScheduler();
     const { server, token } = createConsole({ ...options, run });
     await new Promise((ok, fail) => { server.once('error', fail); server.listen(options.port, '127.0.0.1', ok); });
-    console.log(`\nAGT Studio · 本地控制台\n资源目录：${options.home}\n操作身份：${options.principal}\n打开：http://127.0.0.1:${server.address().port}/#${token}\n仅本机访问。此链接拥有主机管理权限，请勿分享。按 Ctrl+C 退出。\n`);
+    const url = `http://127.0.0.1:${server.address().port}/#${token}`;
+    console.log(say(`\nAGT Studio · 本地控制台\n资源目录：${options.home}\n操作身份：${options.principal}\n打开：${url}\n仅本机访问。此链接拥有主机管理权限，请勿分享。按 Ctrl+C 退出。\n`,
+      `\nAGT Studio · local console\nHome:     ${options.home}\nIdentity: ${options.principal}\nOpen:     ${url}\nOnly this machine can connect. The link gives full control of this workspace; do not share it. Press Ctrl+C to stop.\n`));
     const stop = () => { run.close(); server.close(); server.closeAllConnections(); };
     process.once('SIGINT', stop); process.once('SIGTERM', stop);
     return { server, run };

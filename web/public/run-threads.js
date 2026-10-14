@@ -3,11 +3,11 @@
 window.AgtRunThreads = (() => {
   let runs = [], scope = '', request = 0;
   const open = new Set();
-  const endings = { failed: '处理失败', canceled: '已取消', interrupted: '执行中断', outcome_unknown: '结果待确认', suspended: '已挂起' };
+  const endings = { failed: $t('处理失败'), canceled: $t('已取消'), interrupted: $t('执行中断'), outcome_unknown: $t('结果待确认'), suspended: $t('已挂起') };
   const symbols = { completed: '✓', failed: '!', canceled: '−', unsupported: '!', unknown: '?' };
   const runOf = m => m.metadata?.run_id || /^tool:run-result:(.+)$/.exec(m.client_message_id || '')?.[1];
   const scopeOf = () => JSON.stringify([state.viewer, state.conversation?.id]);
-  const count = r => `${r.items.length >= 40 ? '40+' : r.items.length} 次工具调用`;
+  const count = r => $t('{0} 次工具调用', [r.items.length >= 40 ? '40+' : r.items.length]);
   const failures = r => r.items.filter(a => a.status === 'failed').length || r.tool_failures;
   const spent = r => AgtToolActivity.duration({ started_at: r.started_at, updated_at: r.ended_at, status: 'completed' });
 
@@ -43,13 +43,13 @@ window.AgtRunThreads = (() => {
   function line({ run, mode }) {
     const fail = failures(run), name = esc(nameOf(run.principal));
     const what = mode === 'reply' ? count(run)
-      : run.state !== 'completed' ? `<strong>${name}</strong> ${endings[run.state] || '处理未完成'}${run.items.length ? ' · ' + count(run) : ''}`
-      : `<strong>${name}</strong> ${run.silent ? '处理了这条消息，没有发言' : '没有发布回复'} · ${count(run)}`;
+      : run.state !== 'completed' ? `<strong>${name}</strong> ${endings[run.state] || $t('处理未完成')}${run.items.length ? ' · ' + count(run) : ''}`
+      : `<strong>${name}</strong> ${run.silent ? $t('处理了这条消息，没有发言') : $t('没有发布回复')} · ${count(run)}`;
     const recent = run.items.slice(-8);
     return `<details class="run-thread" data-thread-run="${esc(run.id)}" data-state="${esc(run.state)}"${open.has(run.id) ? ' open' : ''}>
-      <summary><span class="run-thread-icon" aria-hidden="true">⚙</span><span class="run-thread-text">${what}${fail ? ` · <em>${fail} 项失败</em>` : ''}</span><small>${esc(spent(run))}</small></summary>
-      ${recent.length ? `<ol class="run-thread-list">${run.items.length > recent.length ? `<li class="run-thread-skip">… 更早的 ${run.items.length - recent.length} 项</li>` : ''}${recent.map(a => `<li data-status="${esc(a.status)}"><span aria-hidden="true">${symbols[a.status] || '?'}</span><span>${esc(AgtToolRenderers.describe(a).title)}</span><small>${esc(AgtToolActivity.duration(a))}</small></li>`).join('')}</ol>` : ''}
-      <button type="button" class="run-thread-more" data-run-panel="${esc(run.id)}">查看完整执行记录 →</button>
+      <summary><span class="run-thread-icon" aria-hidden="true">⚙</span><span class="run-thread-text">${what}${fail ? ` · <em>${$t('{0} 项失败', [fail])}</em>` : ''}</span><small>${esc(spent(run))}</small></summary>
+      ${recent.length ? `<ol class="run-thread-list">${run.items.length > recent.length ? `<li class="run-thread-skip">${$t('… 更早的 {0} 项', [run.items.length - recent.length])}</li>` : ''}${recent.map(a => `<li data-status="${esc(a.status)}"><span aria-hidden="true">${symbols[a.status] || '?'}</span><span>${esc(AgtToolRenderers.describe(a).title)}</span><small>${esc(AgtToolActivity.duration(a))}</small></li>`).join('')}</ol>` : ''}
+      <button type="button" class="run-thread-more" data-run-panel="${esc(run.id)}">${$t('查看完整执行记录 →')}</button>
     </details>`;
   }
   function render(preserveBottom = false) {
@@ -69,15 +69,15 @@ window.AgtRunThreads = (() => {
   function panel(id) {
     const run = runs.find(r => r.id === id); if (!run) return;
     const viewer = state.viewer, conversation = state.conversation.id, anchor = [...anchors()].find(([, list]) => list.some(e => e.run.id === id))?.[0];
-    const status = run.state === 'completed' ? (run.silent ? '已结束 · 未发言' : '已结束 · 已回复') : endings[run.state] || run.state;
-    commandPanel(`${nameOf(run.principal)} 的执行记录`, `<div class="run-panel">
-      <dl class="run-panel-facts"><dt>状态</dt><dd>${esc(status)}</dd><dt>开始</dt><dd>${Number.isFinite(run.started_at) ? esc(new Date(run.started_at).toLocaleString('zh-CN')) : '未记录'}</dd><dt>耗时</dt><dd>${esc(spent(run))}</dd><dt>工具</dt><dd>${esc(count(run))}${failures(run) ? ` · ${failures(run)} 项失败` : ''}</dd><dt>引擎</dt><dd>${run.engine === 'codex' ? 'Codex' : '内置'}</dd></dl>
-      ${anchor ? '<button type="button" class="secondary" id="run-panel-locate">定位到消息</button>' : ''}
+    const status = run.state === 'completed' ? (run.silent ? $t('已结束 · 未发言') : $t('已结束 · 已回复')) : endings[run.state] || run.state;
+    commandPanel($t('{0} 的执行记录', [nameOf(run.principal)]), `<div class="run-panel">
+      <dl class="run-panel-facts"><dt>${$t('状态')}</dt><dd>${esc(status)}</dd><dt>${$t('开始')}</dt><dd>${Number.isFinite(run.started_at) ? esc(new Date(run.started_at).toLocaleString(AgtI18n.locale)) : $t('未记录')}</dd><dt>${$t('耗时')}</dt><dd>${esc(spent(run))}</dd><dt>${$t('工具')}</dt><dd>${esc(count(run))}${failures(run) ? ` ${$t('· {0} 项失败', [failures(run)])}` : ''}</dd><dt>${$t('引擎')}</dt><dd>${run.engine === 'codex' ? 'Codex' : $t('内置')}</dd></dl>
+      ${anchor ? `<button type="button" class="secondary" id="run-panel-locate">${$t('定位到消息')}</button>` : ''}
       <div id="run-panel-tools" class="harness-activity"></div>
-      <p class="form-note">${run.items.length >= 40 ? '只保留最近 40 项公开工具记录。' : ''}执行结束不代表所有操作均成功；展开单项可查看参数与返回结果。</p>
+      <p class="form-note">${$t('{0}执行结束不代表所有操作均成功；展开单项可查看参数与返回结果。', [run.items.length >= 40 ? $t('只保留最近 40 项公开工具记录。') : ''])}</p>
     </div>`, 'run');
     $('#command-panel').dataset.run = id;
-    if (!run.items.length) $('#run-panel-tools').innerHTML = '<p class="form-note">这次执行没有调用工具。</p>';
+    if (!run.items.length) $('#run-panel-tools').innerHTML = `<p class="form-note">${$t('这次执行没有调用工具。')}</p>`;
     else AgtToolActivity.update($('#run-panel-tools'), run.items, { key: JSON.stringify([viewer, conversation, run.id]), load: activity => api('tool-detail', { id: run.id, activity, viewer, conversation }) });
     $('#run-panel-locate')?.addEventListener('click', () => {
       const target = document.querySelector(`#messages [data-thread-anchor="${CSS.escape(anchor)}"]`)?.closest('.message');

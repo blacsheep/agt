@@ -33,7 +33,7 @@ fn tool_progress_preserves_names_and_history_without_private_arguments() {
     assert_eq!(settled.activities[0].status, "completed");
     assert_eq!(
         settled.activities[0].summary.as_deref(),
-        Some("找到 2 个模型")
+        Some("已读取模型列表")
     );
     run.progress = None;
     run.state = RunState::Completed;

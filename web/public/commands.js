@@ -1,17 +1,17 @@
 // Shared by the console and its HTTP boundary. No shell or model command forwarding.
 globalThis.AgtCommands = Object.freeze({
   items: Object.freeze([
-    { name: 'help', label: '命令帮助', description: '查看 Web 已接入的命令与边界。' },
-    { name: 'new', label: '重置上下文', description: '确认后重置本会话 Agent 的工作上下文，保留聊天记录。' },
-    { name: 'clear', label: '重置上下文', description: '/new 的别名；不会删除聊天记录或项目文件。' },
-    { name: 'model', label: '选择模型', description: '读取 Codex 可用模型与档位，仅修改当前执行会话。' },
-    { name: 'status', label: '会话运行状态', description: '查看本会话 Agent 的启用状态、执行方式和最近运行。' },
-    { name: 'compact', requires: 'codex', label: '压缩上下文', description: '调用 Codex 压缩并等待完成，保留聊天记录。' },
-    { name: 'rename', requires: 'codex', label: '会话命名', description: '设置 Codex 会话名称，保留 Session ID。' },
-    { name: 'skills', requires: 'codex', label: '查看 Skills', description: '读取此 Harness 项目的 Codex Skills。' },
-    { name: 'mcp', requires: 'codex', label: '查看 MCP', description: '读取 Codex MCP 服务器和认证状态。' },
-    { name: 'permissions', requires: 'codex', label: '查看权限', description: '查看会话保存的文件权限，不提升权限。' },
-    { name: 'stop', label: '停止本会话 Agent', description: '确认后结束本轮讨论，停止相关执行。' },
+    { name: 'help', label: $t('命令帮助'), description: $t('查看 Web 已接入的命令与边界。') },
+    { name: 'new', label: $t('重置上下文'), description: $t('确认后重置本会话 Agent 的工作上下文，保留聊天记录。') },
+    { name: 'clear', label: $t('重置上下文'), description: $t('/new 的别名；不会删除聊天记录或项目文件。') },
+    { name: 'model', label: $t('选择模型'), description: $t('读取 Codex 可用模型与档位，仅修改当前执行会话。') },
+    { name: 'status', label: $t('会话运行状态'), description: $t('查看本会话 Agent 的启用状态、执行方式和最近运行。') },
+    { name: 'compact', requires: 'codex', label: $t('压缩上下文'), description: $t('调用 Codex 压缩并等待完成，保留聊天记录。') },
+    { name: 'rename', requires: 'codex', label: $t('会话命名'), description: $t('设置 Codex 会话名称，保留 Session ID。') },
+    { name: 'skills', requires: 'codex', label: $t('查看 Skills'), description: $t('读取此 Harness 项目的 Codex Skills。') },
+    { name: 'mcp', requires: 'codex', label: $t('查看 MCP'), description: $t('读取 Codex MCP 服务器和认证状态。') },
+    { name: 'permissions', requires: 'codex', label: $t('查看权限'), description: $t('查看会话保存的文件权限，不提升权限。') },
+    { name: 'stop', label: $t('停止本会话 Agent'), description: $t('确认后结束本轮讨论，停止相关执行。') },
   ]),
   parse(text) {
     if (typeof text !== 'string') return null;

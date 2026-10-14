@@ -12,7 +12,7 @@
     if (id) showDetail();
     else {
       ++detailEpoch;
-      $('#ix-detail').innerHTML = `<div class="ix-detail-heading"><span class="eyebrow">NETWORK DETAIL</span><h2>${esc(node.label)}</h2><p>${esc(node.status)}</p></div><section class="ix-message"><p class="ix-body">${esc(node.reason || '当前筛选范围内没有相关消息。')}</p>${node.approvalIds?.length?'<button id="ix-node-approvals" class="secondary">查看权限审批</button>':''}</section>`;
+      $('#ix-detail').innerHTML = `<div class="ix-detail-heading"><span class="eyebrow">NETWORK DETAIL</span><h2>${esc(node.label)}</h2><p>${esc(node.status)}</p></div><section class="ix-message"><p class="ix-body">${esc(node.reason || $t('当前筛选范围内没有相关消息。'))}</p>${node.approvalIds?.length?`<button id="ix-node-approvals" class="secondary">${$t('查看权限审批')}</button>`:''}</section>`;
       $('#ix-node-approvals')?.addEventListener('click',()=>AgtApprovals.open(node.approvalIds[0]));
     }
   });
@@ -27,9 +27,9 @@
     for (let i = 0; i < list.length; i += 3) results.push(...await Promise.all(list.slice(i, i + 3).map(async id => [id, await read(id)])));
     return results;
   }
-  const stamp = value => new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const stamp = value => new Date(value).toLocaleString(AgtI18n.locale, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   const active = generation => generation === epoch && state.page === 'interactions';
-  const title = item => item.conversation.title || (item.conversation.kind === 'direct' ? '私聊' : '未命名群聊');
+  const title = item => item.conversation.title || (item.conversation.kind === 'direct' ? $t('私聊') : $t('未命名群聊'));
   const option = (value, text) => `<option value="${esc(value)}">${esc(text)}</option>`;
   function selectOptions(id, html) {
     const node = $(id), value = node.value;
@@ -40,14 +40,14 @@
       .sort((a, b) => b.message.created_at - a.message.created_at || b.message.seq - a.message.seq);
   }
   function target(item, message) {
-    if (item.conversation.kind !== 'direct') return `群聊 · ${title(item)}`;
+    if (item.conversation.kind !== 'direct') return $t('群聊 · {0}', [title(item)]);
     const peers = item.members.filter(m => m.principal_id !== message.sender_id);
-    return peers.length === 1 ? nameOf(peers[0].principal_id) : '私聊（对象未确认）';
+    return peers.length === 1 ? nameOf(peers[0].principal_id) : $t('私聊（对象未确认）');
   }
   function render() {
     const all = rows();
-    selectOptions('#ix-agent', option('', '所有参与者') + [...new Set([...all.map(x => x.message.sender_id),...workTasks.flatMap(t=>[t.request.requester,t.request.assignee])])].map(id => option(id, nameOf(id))).join(''));
-    selectOptions('#ix-conversation', option('', '已载入的会话') + entries.map(x => option(x.conversation.id, title(x))).join(''));
+    selectOptions('#ix-agent', option('', $t('所有参与者')) + [...new Set([...all.map(x => x.message.sender_id),...workTasks.flatMap(t=>[t.request.requester,t.request.assignee])])].map(id => option(id, nameOf(id))).join(''));
+    selectOptions('#ix-conversation', option('', $t('已载入的会话')) + entries.map(x => option(x.conversation.id, title(x))).join(''));
     const query = $('#ix-query').value.trim().toLowerCase(), agent = $('#ix-agent').value, conversation = $('#ix-conversation').value, kind = $('#ix-kind').value;
     const filtered = all.filter(({ item, message: m }) => kind!=='task' && (!agent || m.sender_id === agent) && (!conversation || item.conversation.id === conversation)
       && (!kind || (principalOf(m.sender_id)?.kind === 'agent' ? 'agent' : 'human') === kind)
@@ -57,20 +57,20 @@
     graph.update(filtered, state.scheduler.tasks || [], state.scheduler.online, recent, selectedTask ? {kind:'task',id:selectedTask} : selected, work, visibleApprovals);
     $('#ix-tasks-more').classList.toggle('hidden',!tasksMore);
     $('#ix-tasks-more').disabled=busy;
-    $('#ix-approvals').textContent='权限审批'+(approvals.some(AgtApprovals.pending)?' · 待处理':'');
-    $('#ix-count').textContent = `${filtered.length} 条消息 / ${work.length} 项任务 · 已载入 ${all.length} 条消息`;
-    $('#ix-status').textContent = status || `已载入 ${loaded.size}/${entries.length} 个会话，每个会话初次读取最近 30 条；执行状态为当前快照。`;
+    $('#ix-approvals').textContent=$t('权限审批')+(approvals.some(AgtApprovals.pending)?$t(' · 待处理'):'');
+    $('#ix-count').textContent = $t('{0} 条消息 / {1} 项任务 · 已载入 {2} 条消息', [filtered.length, work.length, all.length]);
+    $('#ix-status').textContent = status || $t('已载入 {0}/{1} 个会话，每个会话初次读取最近 30 条；执行状态为当前快照。', [loaded.size, entries.length]);
     $('#ix-refresh').disabled = busy;
     $('#ix-more').classList.toggle('hidden', loaded.size >= entries.length);
     $('#ix-more').disabled = busy;
     const current = loaded.get(conversation);
     $('#ix-earlier').classList.toggle('hidden', !current?.cursor);
     $('#ix-earlier').disabled = busy;
-    const markup = work.map(t=>`<button class="ix-row" data-ix-task="${esc(t.id)}"><span><strong>任务委派 · ${esc(nameOf(t.request.requester))} → ${esc(nameOf(t.request.assignee))}</strong><span class="ix-preview">${esc(t.request.input.slice(0,180))}</span><small>${esc(t.execution_status||t.state)}</small></span></button>`).join('') + filtered.map(({ item, message: m }) => `<button class="ix-row ${selected === m.id ? 'selected' : ''}" data-ix-message="${esc(m.id)}" aria-pressed="${selected === m.id}">
+    const markup = work.map(t=>`<button class="ix-row" data-ix-task="${esc(t.id)}"><span><strong>${$t('任务委派 · {0} → {1}', [esc(nameOf(t.request.requester)), esc(nameOf(t.request.assignee))])}</strong><span class="ix-preview">${esc(t.request.input.slice(0,180))}</span><small>${esc(t.execution_status||t.state)}</small></span></button>`).join('') + filtered.map(({ item, message: m }) => `<button class="ix-row ${selected === m.id ? 'selected' : ''}" data-ix-message="${esc(m.id)}" aria-pressed="${selected === m.id}">
       <span class="ix-dot" aria-hidden="true">${esc(nameOf(m.sender_id).slice(0, 1))}</span>
       <span class="ix-row-main"><span class="ix-direction"><strong>${esc(nameOf(m.sender_id))}</strong><span aria-hidden="true"> → </span><span>${esc(target(item, m))}</span></span>
-      <span class="ix-preview">${esc(m.deleted_at ? '消息已删除' : m.body)}</span><span class="ix-meta">${esc(title(item))} · #${m.seq}</span></span>
-      <time>${esc(stamp(m.created_at))}</time><span class="ix-hover">${esc((m.deleted_at ? '消息已删除' : m.body || '空消息').slice(0, 600))}</span></button>`).join('') || empty(busy ? '正在读取交互' : '没有匹配的消息', '可切换观察身份、清除筛选，或载入更多会话。');
+      <span class="ix-preview">${esc(m.deleted_at ? $t('消息已删除') : m.body)}</span><span class="ix-meta">${esc(title(item))} · #${m.seq}</span></span>
+      <time>${esc(stamp(m.created_at))}</time><span class="ix-hover">${esc((m.deleted_at ? $t('消息已删除') : m.body || $t('空消息')).slice(0, 600))}</span></button>`).join('') || empty(busy ? $t('正在读取交互') : $t('没有匹配的消息'), $t('可切换观察身份、清除筛选，或载入更多会话。'));
     // Do not replace focused rows when an invalidation returns identical data.
     if ($('#ix-list').innerHTML !== markup) {
       const focused = document.activeElement?.dataset.ixMessage;
@@ -82,7 +82,7 @@
       });
       if (focused) $$('#ix-list [data-ix-message]').find(b => b.dataset.ixMessage === focused)?.focus({ preventScroll: true });
     }
-    if (!selected && !selectedTask) $('#ix-detail').innerHTML = '<div class="ix-detail-empty"><span aria-hidden="true">↗</span><h2>从一个节点开始</h2><p>点击 Agent 聚焦它的协作关系，点击连线查看最近交流。</p><p>悬停预览 · 拖动布局 · 滚轮缩放</p><p>执行光环来自当前运行状态；沿线流动表示刚收到新消息。</p></div>';
+    if (!selected && !selectedTask) $('#ix-detail').innerHTML = `<div class="ix-detail-empty"><span aria-hidden="true">↗</span><h2>${$t('从一个节点开始')}</h2><p>${$t('点击 Agent 聚焦它的协作关系，点击连线查看最近交流。')}</p><p>${$t('悬停预览 · 拖动布局 · 滚轮缩放')}</p><p>${$t('执行光环来自当前运行状态；沿线流动表示刚收到新消息。')}</p></div>`;
   }
   async function fetchConversation(entry, generation, earlier = false, live = false) {
     const id = entry.conversation.id, existing = loaded.get(id);
@@ -121,11 +121,11 @@
           });
           if(!active(generation))return;
           workTasks=[...next.values()];
-        } catch(e) {if(!active(generation))return;workTasks=[];status='任务读取失败：'+e.message;}
+        } catch(e) {if(!active(generation))return;workTasks=[];status=$t('任务读取失败：{0}', [$t(e.message)]);}
         try {
           const nextApprovals=await api('approvals?'+new URLSearchParams({viewer:state.viewer}));
           if(!active(generation))return;approvals=nextApprovals;
-        } catch(e) {if(!active(generation))return;approvals=[];status+=' 审批读取失败：'+e.message;}
+        } catch(e) {if(!active(generation))return;approvals=[];status+=' '+$t('审批读取失败：{0}', [$t(e.message)]);}
         if(selectedTask&&!workTasks.some(t=>t.id===selectedTask)){selectedTask=null;detailSignature='';++detailEpoch;}
       }
       if (mode === 'initial' || mode === 'refresh') {
@@ -154,8 +154,8 @@
         failures += results.filter(r => r.status === 'rejected').length;
       }
       if (!active(generation)) return;
-      if(failures)status=`${failures} 个会话读取失败，可点击刷新重试；当前记录可能不完整。`;
-    } catch (e) { if (active(generation)) status = `读取失败：${e.message}`; }
+      if(failures)status=$t('{0} 个会话读取失败，可点击刷新重试；当前记录可能不完整。', [failures]);
+    } catch (e) { if (active(generation)) status = $t('读取失败：{0}', [$t(e.message)]); }
     finally { if (active(generation)) { busy = false; render(); if (selected) showDetail(); if(selectedTask)showTask(selectedTask); AgtApprovals.refresh(); if (refreshPending) { refreshPending = false; load('refresh'); } } }
   }
   async function showDetail() {
@@ -166,8 +166,8 @@
     if (signature !== detailSignature) {
       detailSignature = signature;
       $('#ix-detail').innerHTML = `<div class="ix-detail-heading"><span class="eyebrow">MESSAGE DETAIL</span><h2>${esc(nameOf(m.sender_id))}</h2><p>→ ${esc(target(item, m))}</p><small>${esc(stamp(m.created_at))} · #${m.seq}</small></div>
-        <section class="ix-message"><h3>交流内容</h3><p class="ix-body">${esc((m.deleted_at ? '消息已删除' : m.body || '').slice(0, 160))}</p>${!m.deleted_at && m.body?.length > 160 ? `<details><summary>展开剩余 ${m.body.length - 160} 字</summary><p class="ix-body">${esc(m.body.slice(160))}</p></details>` : ''}</section>
-        <section class="ix-execution"><h3>当前执行与公开理由</h3><p class="ix-note">这是此会话的近期状态快照，不代表这条消息发送时的状态，也不是模型内部思维链。</p><div id="ix-execution-body">读取中…</div></section>`;
+        <section class="ix-message"><h3>${$t('交流内容')}</h3><p class="ix-body">${esc((m.deleted_at ? $t('消息已删除') : m.body || '').slice(0, 160))}</p>${!m.deleted_at && m.body?.length > 160 ? `<details><summary>${$t('展开剩余 {0} 字', [m.body.length - 160])}</summary><p class="ix-body">${esc(m.body.slice(160))}</p></details>` : ''}</section>
+        <section class="ix-execution"><h3>${$t('当前执行与公开理由')}</h3><p class="ix-note">${$t('这是此会话的近期状态快照，不代表这条消息发送时的状态，也不是模型内部思维链。')}</p><div id="ix-execution-body">${$t('读取中…')}</div></section>`;
     }
     try {
       const data = await api('activity?' + new URLSearchParams({ conversation: item.conversation.id, viewer: item.via }));
@@ -178,14 +178,14 @@
       const html = latest.map(t => {
         const decision = t.last_decision;
         const progress = data.runs.find(r => r.id === t.run_id && r.conversation === item.conversation.id)?.progress;
-        return `<article class="ix-state"><div><strong>${esc(nameOf(t.principal))}</strong><span>${esc(stateNames[t.state] || ({waiting:'等待中',input:'已接入当前执行',responding:'回复中',queued:'排队中',silent:'不发言',evaluating:'判断中'})[t.state] || t.state)}</span></div>
-          <p class="ix-note">框架状态 · ${data.scheduler.online ? '调度在线' : '调度离线，状态待确认'}</p>
-          ${decision ? `<p><b>模型公开决策</b> · ${esc(({participate:'参与',wait:'等待',silent:'不发言'})[decision.action] || decision.action)}</p><p class="ix-body">${esc(decision.public_reason || '未记录公开理由')}</p><small>${esc(stamp(decision.decided_at))} · 截至消息 #${decision.through_seq}</small>` : '<p class="ix-note">未记录模型公开决策</p>'}
+        return `<article class="ix-state"><div><strong>${esc(nameOf(t.principal))}</strong><span>${esc(stateNames[t.state] || ({waiting:$t('等待中'),input:$t('已接入当前执行'),responding:$t('回复中'),queued:$t('排队中'),silent:$t('不发言'),evaluating:$t('判断中')})[t.state] || t.state)}</span></div>
+          <p class="ix-note">${$t('框架状态 · {0}', [data.scheduler.online ? $t('调度在线') : $t('调度离线，状态待确认')])}</p>
+          ${decision ? `<p><b>${$t('模型公开决策')}</b> · ${esc(({participate:$t('参与'),wait:$t('等待'),silent:$t('不发言')})[decision.action] || decision.action)}</p><p class="ix-body">${esc(decision.public_reason || $t('未记录公开理由'))}</p><small>${$t('{0} · 截至消息 #{1}', [esc(stamp(decision.decided_at)), decision.through_seq])}</small>` : `<p class="ix-note">${$t('未记录模型公开决策')}</p>`}
           ${progress ? `<p>${esc(progressLabels[progress.phase] || progress.phase)}</p>${activityTimeline(progress.activities || [])}` : ''}</article>`;
-      }).join('') || '<p class="ix-note">此会话暂无可展示的执行记录。</p>';
+      }).join('') || `<p class="ix-note">${$t('此会话暂无可展示的执行记录。')}</p>`;
       const box = $('#ix-execution-body');
       if (box.innerHTML !== html) box.innerHTML = html;
-    } catch (e) { if (active(generation) && request === detailEpoch) $('#ix-execution-body').textContent = `状态读取失败：${e.message}`; }
+    } catch (e) { if (active(generation) && request === detailEpoch) $('#ix-execution-body').textContent = $t('状态读取失败：{0}', [$t(e.message)]); }
   }
   async function showTask(id,related=[id]) {
     const generation=epoch,request=++detailEpoch;
@@ -193,10 +193,10 @@
       const t=await read('task_get',{task_id:id},workTasks.find(x=>x.id===id)?.via||state.viewer);
       if(!active(generation)||request!==detailEpoch||selectedTask!==id)return;
       const relevant=approvals.filter(a=>a.work_id===id);
-      $('#ix-detail').innerHTML=`<div class="ix-detail-heading"><span class="eyebrow">TASK DELEGATION</span><h2>${esc(nameOf(t.request.requester))} → ${esc(nameOf(t.request.assignee))}</h2><p>${esc(t.execution_status||t.state)}${t.execution_engine ? ' · 执行引擎：'+esc(t.execution_engine) : ''}</p></div><section class="ix-message"><pre class="ix-body">${esc(t.request.input)}</pre><p class="ix-note">任务 ${esc(t.id)} · Run ${esc(t.run_id||'尚未执行')}</p>${t.output?`<h3>结果</h3><pre class="ix-body">${esc(t.output)}</pre>`:''}${related.length>1?related.map(other=>`<button class="secondary" data-related-task="${esc(other)}">${esc(other.slice(0,8))}</button>`).join(''):''}<h3>权限审批</h3>${relevant.map(a=>`<button class="secondary" data-task-approval="${esc(a.id)}">${esc(a.source==='harness'?'引擎原生':'Native')} · ${esc(AgtApprovals.labels[a.state]||a.state)}</button>`).join('')||'<p>当前已载入范围无审批记录。</p>'}</section>`;
+      $('#ix-detail').innerHTML=`<div class="ix-detail-heading"><span class="eyebrow">TASK DELEGATION</span><h2>${esc(nameOf(t.request.requester))} → ${esc(nameOf(t.request.assignee))}</h2><p>${esc(t.execution_status||t.state)}${t.execution_engine ? $t(' · 执行引擎：')+esc(t.execution_engine) : ''}</p></div><section class="ix-message"><pre class="ix-body">${esc(t.request.input)}</pre><p class="ix-note">${$t('任务 {0} · Run {1}', [esc(t.id), esc(t.run_id||$t('尚未执行'))])}</p>${t.output?`<h3>${$t('结果')}</h3><pre class="ix-body">${esc(t.output)}</pre>`:''}${related.length>1?related.map(other=>`<button class="secondary" data-related-task="${esc(other)}">${esc(other.slice(0,8))}</button>`).join(''):''}<h3>${$t('权限审批')}</h3>${relevant.map(a=>`<button class="secondary" data-task-approval="${esc(a.id)}">${esc(a.source==='harness'?$t('引擎原生'):'Native')} · ${esc(AgtApprovals.labels[a.state]||a.state)}</button>`).join('')||`<p>${$t('当前已载入范围无审批记录。')}</p>`}</section>`;
       $$('[data-related-task]').forEach(b=>b.onclick=()=>{selectedTask=b.dataset.relatedTask;showTask(selectedTask,related)});
       $$('[data-task-approval]').forEach(b=>b.onclick=()=>AgtApprovals.open(b.dataset.taskApproval));
-    }catch(e){if(active(generation)&&request===detailEpoch)$('#ix-detail').textContent='任务读取失败：'+e.message;}
+    }catch(e){if(active(generation)&&request===detailEpoch)$('#ix-detail').textContent=$t('任务读取失败：{0}', [$t(e.message)]);}
   }
   function reset() {
     graph.reset(); recent.clear(); workTasks=[];approvals=[];selectedTask=null;taskPages=1;tasksMore=false;
@@ -223,7 +223,7 @@
   $('#ix-earlier').onclick = () => load('earlier');
   window.AgtInteractions = {
     open() {
-      $('#ix-viewer').innerHTML = option(GLOBAL, '全局视角（所有身份）') + identities().map(id => option(id, nameOf(id))).join('');
+      $('#ix-viewer').innerHTML = option(GLOBAL, $t('全局视角（所有身份）')) + identities().map(id => option(id, nameOf(id))).join('');
       $('#ix-viewer').value = GLOBAL; changeViewer();
     },
     close() { clearInterval(poll); poll = null; reset(); },

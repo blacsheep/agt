@@ -484,7 +484,7 @@ button:focus-visible, a:focus-visible {
   color: var(--i-1b479e, #1b479e);
   border-color: var(--s-5c80b9, #5c80b9);
 }
-#chat-commands > span {
+#chat-commands > span[aria-hidden="true"] {
   font-weight: 750;
   padding-right: 4px;
 }
@@ -1638,7 +1638,7 @@ button:disabled {
     left: 15px;
     right: auto;
   }
-  .ix-filter-drawer>summary span {
+  .ix-filter-drawer>summary .summary-hint {
     display: none;
   }
 }
@@ -2085,13 +2085,13 @@ button:disabled {
 .ix-state>div>span {
   color: var(--i-245bcc, #245bcc);
 }
-.ix-filter-drawer>summary span {
+.ix-filter-drawer>summary .summary-hint {
   color: var(--muted);
   font-size: 11px;
   font-weight: 400;
   margin-left: 12px;
 }
-.ix-events>summary span {
+.ix-events>summary .summary-hint {
   font-size: 11px;
   color: var(--muted);
   font-weight: 400;
@@ -3400,7 +3400,7 @@ main {
 .chat-actions #execute:disabled, .chat-actions #end-reply:disabled, .chat-actions.hidden {
   display: none !important;
 }
-#chat-commands > span {
+#chat-commands > span[aria-hidden="true"] {
   font-family: var(--mono);
   font-weight: 700;
 }

@@ -3,9 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AGT Studio · 多 Agent 工作台</title>
+    <title data-i18n>AGT Studio · 多 Agent 工作台</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script src="/theme.js"></script>
+    <script src="/i18n.js"></script>
+    <script src="/locales/en.js"></script>
     <link rel="stylesheet" href="/style.css" />
     <link rel="stylesheet" href="/execution-view.css" />
     <script src="/markdown.js" defer></script>
@@ -27,108 +29,109 @@
   </head>
   <body class="workspace-page no-conversation">
     <aside class="rail" id="workspace-nav">
-      <a class="brand" href="/" aria-label="AGT Studio 首页"
+      <a data-i18n-attr="aria-label" class="brand" href="/" aria-label="AGT Studio 首页"
         ><img class="brand-mark" src="/favicon.svg" alt="" width="36" height="36"
         ><span class="brand-name">agt<span class="brand-light">studio</span></span></a
       >
       <div class="workspace-label">
-        工作空间 <span class="live-dot"></span>
+        <span data-i18n>工作空间</span> <span class="live-dot"></span>
       </div>
-      <nav aria-label="主导航">
-        <button class="nav active" data-page="chat" aria-current="page" aria-label="会话空间" title="会话空间"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="3"/><path d="m8 18-3 3v-4M7 9h10M7 13h6"/></svg></span><span class="nav-label">会话空间</span></button>
-        <button class="nav" data-page="agents" aria-label="Agent 团队" title="Agent 团队"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2"/></svg></span><span class="nav-label">Agent 团队</span><span id="agent-count" class="count">0</span></button>
-        <button class="nav" data-page="observer" aria-label="Agent 会话" title="Agent 会话"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="14" rx="3"/><path d="M12 3v3M8 11h.01M16 11h.01M8 16h8"/></svg></span><span class="nav-label">Agent 会话</span></button>
-        <button class="nav" data-page="interactions" aria-label="交互观察" title="交互观察"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="5" cy="6" r="3"/><circle cx="19" cy="18" r="3"/><path d="M8 6h11v6m-3-3 3 3 3-3M16 18H5v-6m-3 3 3-3 3 3"/></svg></span><span class="nav-label">交互观察</span></button>
-        <button class="nav" data-page="resources" aria-label="资源库" title="资源库"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="nav-label">资源库</span></button>
-        <button class="nav" data-page="settings" aria-label="运行设置" title="运行设置"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></span><span class="nav-label">运行设置</span></button>
+      <nav data-i18n-attr="aria-label" aria-label="主导航">
+        <button data-i18n-attr="aria-label title" class="nav active" data-page="chat" aria-current="page" aria-label="会话空间" title="会话空间"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="3"/><path d="m8 18-3 3v-4M7 9h10M7 13h6"/></svg></span><span data-i18n class="nav-label">会话空间</span></button>
+        <button data-i18n-attr="aria-label title" class="nav" data-page="agents" aria-label="Agent 团队" title="Agent 团队"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v2"/></svg></span><span data-i18n class="nav-label">Agent 团队</span><span id="agent-count" class="count">0</span></button>
+        <button data-i18n-attr="aria-label title" class="nav" data-page="observer" aria-label="Agent 会话" title="Agent 会话"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="14" rx="3"/><path d="M12 3v3M8 11h.01M16 11h.01M8 16h8"/></svg></span><span data-i18n class="nav-label">Agent 会话</span></button>
+        <button data-i18n-attr="aria-label title" class="nav" data-page="interactions" aria-label="交互观察" title="交互观察"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="5" cy="6" r="3"/><circle cx="19" cy="18" r="3"/><path d="M8 6h11v6m-3-3 3 3 3-3M16 18H5v-6m-3 3 3-3 3 3"/></svg></span><span data-i18n class="nav-label">交互观察</span></button>
+        <button data-i18n-attr="aria-label title" class="nav" data-page="resources" aria-label="资源库" title="资源库"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span data-i18n class="nav-label">资源库</span></button>
+        <button data-i18n-attr="aria-label title" class="nav" data-page="settings" aria-label="运行设置" title="运行设置"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></span><span data-i18n class="nav-label">运行设置</span></button>
       </nav>
       <div class="rail-bottom">
-        <div class="avatar user">你</div>
+        <div data-i18n class="avatar user">你</div>
         <div>
-          <strong id="operator-name">本地操作员</strong
-          ><small>主机管理模式</small><small id="home-path" class="debug-only" title="资源目录"></small>
+          <strong data-i18n id="operator-name">本地操作员</strong
+          ><small data-i18n>主机管理模式</small><small data-i18n-attr="title" id="home-path" class="debug-only" title="资源目录"></small>
         </div>
-        <button id="help" class="icon-button" aria-label="使用指南">?</button>
+        <button data-i18n-attr="aria-label" id="help" class="icon-button" aria-label="使用指南">?</button>
       </div>
     </aside>
     <main>
       <header class="topbar">
         <div class="topbar-location">
-          <button id="toggle-nav" class="icon-button" type="button" aria-controls="workspace-nav" aria-expanded="true" aria-label="收起导航" title="收起导航">☰</button>
-        <div class="breadcrumb"><strong id="page-label">会话空间</strong></div>
+          <button data-i18n-attr="aria-label title" id="toggle-nav" class="icon-button" type="button" aria-controls="workspace-nav" aria-expanded="true" aria-label="收起导航" title="收起导航">☰</button>
+        <div class="breadcrumb"><strong data-i18n id="page-label">会话空间</strong></div>
         </div>
         <div class="top-actions">
           <div id="topbar-tools" class="topbar-tools"><div class="workspace-tools" id="workspace-tools">
-            <div class="panel-switches" aria-label="工作区布局">
-              <button id="toggle-conversations" type="button" aria-controls="conversation-pane" aria-expanded="true" title="收起会话列表"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg><span class="switch-label">会话列表</span></button>
-              <button id="toggle-activity" type="button" aria-controls="activity-pane" aria-expanded="true" title="收起成员状态"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg><span class="switch-label">成员状态</span></button>
+            <div data-i18n-attr="aria-label" class="panel-switches" aria-label="工作区布局">
+              <button data-i18n-attr="title" id="toggle-conversations" type="button" aria-controls="conversation-pane" aria-expanded="true" title="收起会话列表"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg><span data-i18n class="switch-label">会话列表</span></button>
+              <button data-i18n-attr="title" id="toggle-activity" type="button" aria-controls="activity-pane" aria-expanded="true" title="收起成员状态"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg><span data-i18n class="switch-label">成员状态</span></button>
             </div>
-            <button id="new-chat" class="primary"><span aria-hidden="true">＋</span> 新建会话</button>
+            <button id="new-chat" class="primary"><span data-i18n aria-hidden="true">＋</span> <span data-i18n>新建会话</span></button>
           </div></div>
-          <button id="open-palette" class="palette-trigger" type="button" aria-label="搜索或跳转（Ctrl+K）"><span aria-hidden="true">⌕</span><span class="palette-trigger-label">搜索或跳转</span><kbd>⌘K</kbd></button>
-          <select id="theme-select" class="theme-select" aria-label="外观" title="外观"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
-          <label class="debug-toggle"><input id="debug-mode" type="checkbox" />调试模式</label>
-          <span id="connection" class="status-pill">连接中</span
-          ><button id="refresh" class="quiet refresh-button" title="重新读取本地状态" aria-label="刷新"><span aria-hidden="true">↻</span><span class="refresh-label"> 刷新</span></button>
+          <button data-i18n-attr="aria-label" id="open-palette" class="palette-trigger" type="button" aria-label="搜索或跳转（Ctrl+K）"><span aria-hidden="true">⌕</span><span data-i18n class="palette-trigger-label">搜索或跳转</span><kbd>⌘K</kbd></button>
+          <select data-i18n-attr="aria-label title" id="theme-select" class="theme-select" aria-label="外观" title="外观"><option data-i18n value="system">跟随系统</option><option data-i18n value="light">浅色</option><option data-i18n value="dark">深色</option></select>
+          <select id="lang-select" class="theme-select" aria-label="Language / 语言" title="Language / 语言"><option value="zh">中文</option><option value="en">English</option></select>
+          <label class="debug-toggle"><input id="debug-mode" type="checkbox" /><span data-i18n>调试模式</span></label>
+          <span data-i18n id="connection" class="status-pill">连接中</span
+          ><button data-i18n-attr="title aria-label" id="refresh" class="quiet refresh-button" title="重新读取本地状态" aria-label="刷新"><span aria-hidden="true">↻</span><span data-i18n class="refresh-label"> 刷新</span></button>
 
         </div>
       </header>
-      <div class="notice-stack" aria-label="操作提示">
+      <div data-i18n-attr="aria-label" class="notice-stack" aria-label="操作提示">
         <div id="notice" role="status" class="notice hidden"></div>
         <div id="deleted-notice" role="status" class="notice hidden"></div>
       </div>
       <section id="page-chat" class="page chat-page">
         <div id="chat-workspace"><div class="chat-layout">
-          <section class="conversation-pane panel" id="conversation-pane" aria-label="会话列表">
+          <section data-i18n-attr="aria-label" class="conversation-pane panel" id="conversation-pane" aria-label="会话列表">
             <div id="identity-sessions">
 
             <div id="selected-identity" class="selected-identity"></div>
             <div class="pane-title">
-              <select id="conversation-scope" aria-label="会话列表范围"><option value="recent">最近会话</option><option value="groups">我的群聊</option><option value="all">全部历史</option><option value="hidden">已移除</option></select>
+              <select data-i18n-attr="aria-label" id="conversation-scope" aria-label="会话列表范围"><option data-i18n value="recent">最近会话</option><option data-i18n value="groups">我的群聊</option><option data-i18n value="all">全部历史</option><option data-i18n value="hidden">已移除</option></select>
               <span id="conversation-count" class="muted">0</span>
             </div>
-            <div class="conversation-search"><input
+            <div class="conversation-search"><input data-i18n-attr="placeholder aria-label"
               id="search"
               class="search"
               placeholder="搜索联系人、Agent 或会话"
               aria-label="搜索联系人、Agent 或会话"
-            /><button id="clear-search" class="hidden" type="button" aria-label="清空搜索">×</button></div>
-            <div id="entry-organizer" class="entry-organizer hidden"><button id="organize-entries" class="quiet" type="button">整理会话</button><div id="entry-selection" class="hidden"><label><input id="select-entries" type="checkbox">全选当前结果</label><small id="entry-selected-count"></small><div><button id="hide-entries" class="secondary" type="button">移除所选</button><button id="restore-entries" class="secondary" type="button">恢复所选</button></div></div></div>
-            <div id="history-window" class="history-window hidden"><small id="history-window-text"></small><button id="show-all-history" class="quiet" type="button">查看全部历史 ↗</button></div>
+            /><button data-i18n-attr="aria-label" id="clear-search" class="hidden" type="button" aria-label="清空搜索">×</button></div>
+            <div id="entry-organizer" class="entry-organizer hidden"><button data-i18n id="organize-entries" class="quiet" type="button">整理会话</button><div id="entry-selection" class="hidden"><label><input id="select-entries" type="checkbox"><span data-i18n>全选当前结果</span></label><small id="entry-selected-count"></small><div><button data-i18n id="hide-entries" class="secondary" type="button">移除所选</button><button data-i18n id="restore-entries" class="secondary" type="button">恢复所选</button></div></div></div>
+            <div id="history-window" class="history-window hidden"><small id="history-window-text"></small><button data-i18n id="show-all-history" class="quiet" type="button">查看全部历史 ↗</button></div>
             <div id="conversations" class="conversation-list"></div>
             </div>
           </section>
           <section class="message-pane panel">
-            <div class="chat-head"><button id="back-to-conversations" class="quiet" type="button">‹ 会话</button>
-              <div id="chat-head"><strong>选择一个会话</strong></div>
+            <div class="chat-head"><button data-i18n id="back-to-conversations" class="quiet" type="button">‹ 会话</button>
+              <div id="chat-head"><strong data-i18n>选择一个会话</strong></div>
               <div class="chat-actions hidden">
-                <button id="execute" class="quiet" disabled>继续回复</button>
-                <button id="end-reply" class="stop-button" disabled>停止本群 Agent</button>
-                <button id="chat-tasks" class="secondary" type="button" aria-controls="command-panel" aria-expanded="false">任务</button>
-                <button id="chat-commands" class="secondary" type="button" aria-controls="command-panel" aria-expanded="false" aria-label="展开会话控制" disabled><span aria-hidden="true">/</span> 会话控制</button>
-                <button id="group-info" class="quiet" disabled>群信息</button>
+                <button data-i18n id="execute" class="quiet" disabled>继续回复</button>
+                <button data-i18n id="end-reply" class="stop-button" disabled>停止本群 Agent</button>
+                <button data-i18n id="chat-tasks" class="secondary" type="button" aria-controls="command-panel" aria-expanded="false">任务</button>
+                <button data-i18n-attr="aria-label" id="chat-commands" class="secondary" type="button" aria-controls="command-panel" aria-expanded="false" aria-label="展开会话控制" disabled><span aria-hidden="true">/</span> <span data-i18n>会话控制</span></button>
+                <button data-i18n id="group-info" class="quiet" disabled>群信息</button>
               </div>
             </div>
-            <div id="observe-banner" class="observe-banner hidden">
+            <div data-i18n id="observe-banner" class="observe-banner hidden">
               只读观察模式 · 当前展示此身份可见的会话，不能代替它发言。
             </div>
             <div id="reply-status" class="reply-status hidden" role="status">
               <span id="reply-detail"></span>
               <div class="reply-controls">
-              <button id="pause-reply" class="quiet hidden" type="button">暂停回复</button>
+              <button data-i18n id="pause-reply" class="quiet hidden" type="button">暂停回复</button>
 
               </div>
             </div>
             <div id="messages" class="messages" aria-live="polite">
-              <div class="empty"><h2>正在读取会话…</h2></div>
+              <div class="empty"><h2 data-i18n>正在读取会话…</h2></div>
             </div>
-            <button id="latest-message" class="latest-message hidden" type="button">↓ 回到最新消息</button>
-            <section id="live-replies" class="live-replies hidden" aria-label="Agent 执行与工具记录"></section>
-            <button id="older" class="older hidden">加载更早消息</button>
+            <button data-i18n id="latest-message" class="latest-message hidden" type="button">↓ 回到最新消息</button>
+            <section data-i18n-attr="aria-label" id="live-replies" class="live-replies hidden" aria-label="Agent 执行与工具记录"></section>
+            <button data-i18n id="older" class="older hidden">加载更早消息</button>
             <form id="composer" class="composer">
-              <div id="mention-menu" class="mention-menu hidden" role="listbox" aria-label="选择提及成员"></div>
-              <div id="mention-summary" class="mention-hint" aria-live="polite">输入 @ 选择成员 · @all 提及所有人</div>
-              <textarea
+              <div data-i18n-attr="aria-label" id="mention-menu" class="mention-menu hidden" role="listbox" aria-label="选择提及成员"></div>
+              <div data-i18n id="mention-summary" class="mention-hint" aria-live="polite">输入 @ 选择成员 · @all 提及所有人</div>
+              <textarea data-i18n-attr="placeholder aria-label"
                 id="message-body"
                 rows="2"
                 placeholder="写下消息，@ 邀请成员 · /new 开启新上下文"
@@ -140,145 +143,145 @@
               ></textarea>
               <div class="compose-bottom">
                 <div class="compose-preferences">
-                  <label class="auto-reply-label"><input id="auto-reply" type="checkbox" checked />发送后自动回复</label>
-                  <small id="compose-hint">会调用模型 · Ctrl / ⌘ + Enter 发送</small>
+                  <label class="auto-reply-label"><input id="auto-reply" type="checkbox" checked /><span data-i18n>发送后自动回复</span></label>
+                  <small data-i18n id="compose-hint">会调用模型 · Ctrl / ⌘ + Enter 发送</small>
                 </div
-                ><button id="send" class="primary" type="submit">
+                ><button data-i18n id="send" class="primary" type="submit">
                   发送消息 ↑
                 </button>
               </div>
             </form>
           </section>
           <aside id="command-panel" class="command-panel hidden" aria-labelledby="command-panel-title">
-            <header class="command-panel-head"><div><span id="command-panel-kind" class="tiny-label">会话控制</span><h2 id="command-panel-title">命令</h2></div><button id="close-command-panel" class="icon-button" type="button" aria-label="收起会话控制">×</button></header>
+            <header class="command-panel-head"><div><span data-i18n id="command-panel-kind" class="tiny-label">会话控制</span><h2 data-i18n id="command-panel-title">命令</h2></div><button data-i18n-attr="aria-label" id="close-command-panel" class="icon-button" type="button" aria-label="收起会话控制">×</button></header>
             <p id="command-panel-context" class="command-panel-context"></p>
-            <nav id="command-panel-nav" class="command-panel-nav" aria-label="会话命令"></nav>
+            <nav data-i18n-attr="aria-label" id="command-panel-nav" class="command-panel-nav" aria-label="会话命令"></nav>
             <div id="command-panel-body" class="command-panel-body"></div>
             <div id="command-panel-error" class="form-error hidden" role="alert"></div>
           </aside>
-          <aside class="activity-pane" id="activity-pane" aria-label="成员状态">
+          <aside data-i18n-attr="aria-label" class="activity-pane" id="activity-pane" aria-label="成员状态">
             <div class="activity-heading">
               <span class="tiny-label">PARTICIPATION</span>
-              <h2 id="activity-title">成员状态</h2>
+              <h2 data-i18n id="activity-title">成员状态</h2>
             </div>
             <div class="execution-card">
               <div class="execution-top">
                 <span class="live-dot"></span
-                ><strong id="scheduler-state">准备就绪</strong>
+                ><strong data-i18n id="scheduler-state">准备就绪</strong>
               </div>
               <div id="agent-presence"></div>
-              <p id="scheduler-detail">
+              <p data-i18n id="scheduler-detail">
                 开启自动回复后，发送消息即可开始对话。
               </p>
               <div class="metric-row debug-only">
                 <div>
-                  <strong id="run-count">0</strong><span>最近运行</span>
+                  <strong id="run-count">0</strong><span data-i18n>最近运行</span>
                 </div>
                 <div>
-                  <strong id="failure-count">0</strong><span>工具失败</span>
+                  <strong id="failure-count">0</strong><span data-i18n>工具失败</span>
                 </div>
               </div>
             </div>
             <details class="recent-activity">
-              <summary>最近动态 <small id="activity-hint">点击查看回复状态</small></summary>
+              <summary><span data-i18n>最近动态</span> <small data-i18n id="activity-hint">点击查看回复状态</small></summary>
             <div id="runs" class="run-list"></div>
             <div class="subtle-note debug-only">
-              completed 表示模型已结束，<br />不代表任务或所有工具均成功。
+              <span data-i18n>completed 表示模型已结束，</span><br /><span data-i18n>不代表任务或所有工具均成功。</span>
             </div>
             </details>
           </aside>
         </div></div>
       </section>
       <section id="page-interactions" class="page hidden">
-        <div class="ix-heading section-heading"><div><h1>交互观察</h1><p>查看 Agent 之间的消息、任务委派与执行状态。</p></div><div class="heading-actions"><button id="ix-approvals" class="secondary">权限审批</button><button id="ix-refresh" class="secondary">刷新记录</button></div></div>
+        <div class="ix-heading section-heading"><div><h1 data-i18n>交互观察</h1><p data-i18n>查看 Agent 之间的消息、任务委派与执行状态。</p></div><div class="heading-actions"><button data-i18n id="ix-approvals" class="secondary">权限审批</button><button data-i18n id="ix-refresh" class="secondary">刷新记录</button></div></div>
         <div class="ix-workspace">
-          <details class="ix-filter-drawer"><summary>观察范围与筛选 <span>身份 · Agent · 会话 · 关键词</span></summary><div class="ix-filters">
-            <label>观察身份<select id="ix-viewer" aria-label="观察身份"></select></label>
-            <p class="ix-note">只读查看此身份可访问的会话。切换身份会清空当前记录。</p>
-            <label>搜索内容<input id="ix-query" type="search" placeholder="消息、Agent 或关键词"></label>
-            <label>参与者<select id="ix-agent"><option value="">所有发送者</option></select></label>
-            <label>会话<select id="ix-conversation"><option value="">已载入的会话</option></select></label>
-            <label>内容类型<select id="ix-kind"><option value="">全部交互</option><option value="task">任务委派</option><option value="agent">Agent 消息</option><option value="human">用户消息</option></select></label>
-            <button id="ix-clear" class="secondary">清除筛选</button>
+          <details class="ix-filter-drawer"><summary><span data-i18n>观察范围与筛选</span> <span class="summary-hint" data-i18n>身份 · Agent · 会话 · 关键词</span></summary><div class="ix-filters">
+            <label><span data-i18n>观察身份</span><select data-i18n-attr="aria-label" id="ix-viewer" aria-label="观察身份"></select></label>
+            <p data-i18n class="ix-note">只读查看此身份可访问的会话。切换身份会清空当前记录。</p>
+            <label><span data-i18n>搜索内容</span><input data-i18n-attr="placeholder" id="ix-query" type="search" placeholder="消息、Agent 或关键词"></label>
+            <label><span data-i18n>参与者</span><select id="ix-agent"><option data-i18n value="">所有发送者</option></select></label>
+            <label><span data-i18n>会话</span><select id="ix-conversation"><option data-i18n value="">已载入的会话</option></select></label>
+            <label><span data-i18n>内容类型</span><select id="ix-kind"><option data-i18n value="">全部交互</option><option data-i18n value="task">任务委派</option><option data-i18n value="agent">Agent 消息</option><option data-i18n value="human">用户消息</option></select></label>
+            <button data-i18n id="ix-clear" class="secondary">清除筛选</button>
             </div></details>
-          <section class="ix-stream" aria-label="交互拓扑">
-            <div class="ix-graph-toolbar"><div><strong>协作网络</strong><span id="ix-graph-count"></span></div><div><button id="ix-unfocus" class="secondary">全部关系</button><button id="ix-fit" class="secondary">适应全图</button><button id="ix-layout" class="secondary">重置布局</button></div></div>
+          <section data-i18n-attr="aria-label" class="ix-stream" aria-label="交互拓扑">
+            <div class="ix-graph-toolbar"><div><strong data-i18n>协作网络</strong><span id="ix-graph-count"></span></div><div><button data-i18n id="ix-unfocus" class="secondary">全部关系</button><button data-i18n id="ix-fit" class="secondary">适应全图</button><button data-i18n id="ix-layout" class="secondary">重置布局</button></div></div>
             <div id="ix-canvas">
-              <svg id="ix-graph" viewBox="0 0 960 620" aria-label="Agent 协作拓扑，可拖动节点、平移和缩放" tabindex="0"></svg>
-              <div id="ix-graph-empty">正在读取协作网络…</div>
+              <svg data-i18n-attr="aria-label" id="ix-graph" viewBox="0 0 960 620" aria-label="Agent 协作拓扑，可拖动节点、平移和缩放" tabindex="0"></svg>
+              <div data-i18n id="ix-graph-empty">正在读取协作网络…</div>
               <div id="ix-graph-tip" class="hidden" role="status"></div>
-              <div class="ix-graph-key"><span>● Agent</span><span>◇ 群聊</span><span class="ix-key-live">● 执行中</span><span>虚线：成员关系</span></div>
-              <div class="ix-zoom"><button id="ix-zoom-out" aria-label="缩小拓扑">−</button><output id="ix-zoom-level">100%</output><button id="ix-zoom-in" aria-label="放大拓扑">+</button></div>
-              <p class="ix-graph-hint">拖动节点调整布局 · 拖动画布平移 · 滚轮缩放 · 点击聚焦关系</p>
+              <div class="ix-graph-key"><span>● Agent</span><span data-i18n>◇ 群聊</span><span data-i18n class="ix-key-live">● 执行中</span><span data-i18n>虚线：成员关系</span></div>
+              <div class="ix-zoom"><button data-i18n-attr="aria-label" id="ix-zoom-out" aria-label="缩小拓扑">−</button><output id="ix-zoom-level">100%</output><button data-i18n-attr="aria-label" id="ix-zoom-in" aria-label="放大拓扑">+</button></div>
+              <p data-i18n class="ix-graph-hint">拖动节点调整布局 · 拖动画布平移 · 滚轮缩放 · 点击聚焦关系</p>
             </div>
             <p id="ix-status" role="status"></p>
-            <details class="ix-events"><summary>消息记录 <span>展开查看与筛选结果对应的交流内容</span></summary>
-            <div class="ix-stream-head"><strong>消息流</strong><span id="ix-count"></span></div>
+            <details class="ix-events"><summary><span data-i18n>消息记录</span> <span class="summary-hint" data-i18n>展开查看与筛选结果对应的交流内容</span></summary>
+            <div class="ix-stream-head"><strong data-i18n>消息流</strong><span id="ix-count"></span></div>
 
             <div id="ix-list"></div>
-            <div class="ix-load"><button id="ix-more" class="secondary hidden">载入更多会话</button><button id="ix-tasks-more" class="secondary hidden">载入更多任务</button><button id="ix-earlier" class="secondary hidden">载入更早消息</button></div></details>
+            <div class="ix-load"><button data-i18n id="ix-more" class="secondary hidden">载入更多会话</button><button data-i18n id="ix-tasks-more" class="secondary hidden">载入更多任务</button><button data-i18n id="ix-earlier" class="secondary hidden">载入更早消息</button></div></details>
           </section>
-          <aside id="ix-detail" class="ix-detail" aria-label="交互详情"></aside>
+          <aside data-i18n-attr="aria-label" id="ix-detail" class="ix-detail" aria-label="交互详情"></aside>
         </div>
       </section>
       <section id="page-observer" class="page hidden">
-        <div class="section-heading"><div><h1>Agent 会话</h1><p id="observer-caption">选择 Agent，只读查看它有权访问的对话。</p></div><button id="change-identity" class="secondary hidden">切换 Agent</button><div id="observer-tools"></div></div>
-        <div id="identity-directory"><input id="agent-search" class="search" aria-label="搜索 Agent" placeholder="搜索 Agent 名称或身份…"><div id="identities" class="observer-agents"></div></div>
+        <div class="section-heading"><div><h1 data-i18n>Agent 会话</h1><p data-i18n id="observer-caption">选择 Agent，只读查看它有权访问的对话。</p></div><button data-i18n id="change-identity" class="secondary hidden">切换 Agent</button><div id="observer-tools"></div></div>
+        <div id="identity-directory"><input data-i18n-attr="aria-label placeholder" id="agent-search" class="search" aria-label="搜索 Agent" placeholder="搜索 Agent 名称或身份…"><div id="identities" class="observer-agents"></div></div>
         <div id="observer-workspace" class="hidden"></div>
       </section>
       <section id="page-agents" class="page hidden">
         <div class="section-heading">
           <div>
-            <h1>Agent 团队</h1>
-            <p>每个 Agent 是一份角色配置；启用后它的聊天身份才会按响应策略回复。</p>
+            <h1 data-i18n>Agent 团队</h1>
+            <p data-i18n>每个 Agent 是一份角色配置；启用后它的聊天身份才会按响应策略回复。</p>
           </div>
-          <button id="new-agent" class="primary">＋ 创建 Agent</button>
+          <button data-i18n id="new-agent" class="primary">＋ 创建 Agent</button>
         </div>
-        <div id="team-pulse" class="team-pulse" aria-label="团队状态"></div>
-        <div class="agent-batch-bar" aria-label="批量管理 Agent">
-          <label><input id="select-all-agents" type="checkbox"> 全选</label>
-          <span id="agent-selection-count" role="status">已选 0 位</span>
-          <button id="enable-agents" class="secondary" disabled>启用所选</button>
-          <button id="disable-agents" class="quiet" disabled>停用所选</button>
+        <div data-i18n-attr="aria-label" id="team-pulse" class="team-pulse" aria-label="团队状态"></div>
+        <div data-i18n-attr="aria-label" class="agent-batch-bar" aria-label="批量管理 Agent">
+          <label><input id="select-all-agents" type="checkbox"> <span data-i18n>全选</span></label>
+          <span data-i18n id="agent-selection-count" role="status">已选 0 位</span>
+          <button data-i18n id="enable-agents" class="secondary" disabled>启用所选</button>
+          <button data-i18n id="disable-agents" class="quiet" disabled>停用所选</button>
         </div>
-        <p class="form-note">启用后按响应策略处理消息；停用影响该 Agent 的所有会话，保留身份、历史与运行设置。</p>
+        <p data-i18n class="form-note">启用后按响应策略处理消息；停用影响该 Agent 的所有会话，保留身份、历史与运行设置。</p>
         <div id="agents" class="cards"></div>
       </section>
       <section id="page-resources" class="page hidden">
         <div class="section-heading">
           <div>
-            <h1>资源库</h1>
-            <p>Agent 引用的模型连接、提示词、技能、MCP 工具和外部执行引擎。</p>
+            <h1 data-i18n>资源库</h1>
+            <p data-i18n>Agent 引用的模型连接、提示词、技能、MCP 工具和外部执行引擎。</p>
           </div>
-          <button id="new-resource" class="primary">＋ 新建资源</button>
+          <button data-i18n id="new-resource" class="primary">＋ 新建资源</button>
         </div>
         <div id="resource-tabs" class="tabs"></div>
         <div id="resources" class="resource-list panel"></div>
       </section>
       <section id="page-settings" class="page hidden">
-        <div class="section-heading"><div><h1>运行设置</h1><p>工作空间级的调度容量、权限审批、记忆与本机执行策略。</p></div><div class="heading-actions"><button id="reload-settings" class="secondary" type="button">重新读取</button></div></div>
+        <div class="section-heading"><div><h1 data-i18n>运行设置</h1><p data-i18n>工作空间级的调度容量、权限审批、记忆与本机执行策略。</p></div><div class="heading-actions"><button data-i18n id="reload-settings" class="secondary" type="button">重新读取</button></div></div>
         <div id="runtime-settings" class="runtime-settings" aria-live="polite"></div>
       </section>
     </main>
-    <dialog id="group-drawer" class="group-drawer" aria-labelledby="group-title"><div class="modal-head"><h2 id="group-title">群信息</h2><button id="close-group" class="icon-button" aria-label="关闭群信息">×</button></div><div id="group-content"></div></dialog>
+    <dialog id="group-drawer" class="group-drawer" aria-labelledby="group-title"><div class="modal-head"><h2 data-i18n id="group-title">群信息</h2><button data-i18n-attr="aria-label" id="close-group" class="icon-button" aria-label="关闭群信息">×</button></div><div id="group-content"></div></dialog>
     <dialog id="modal">
       <div class="modal-head">
         <div>
           <h2 id="modal-title"></h2>
         </div>
-        <button id="close-modal" class="icon-button" aria-label="关闭弹窗">
+        <button data-i18n-attr="aria-label" id="close-modal" class="icon-button" aria-label="关闭弹窗">
           ×
         </button>
       </div>
       <div id="modal-body"></div>
       <div id="modal-error" class="form-error hidden" role="alert"></div>
     </dialog>
-    <div id="conversation-menu" class="context-menu hidden" role="menu" aria-label="会话操作"></div>
+    <div data-i18n-attr="aria-label" id="conversation-menu" class="context-menu hidden" role="menu" aria-label="会话操作"></div>
       <dialog id="agent-detail" class="agent-sheet" aria-labelledby="agent-detail-title"></dialog>
-    <dialog id="palette" class="palette" aria-label="命令面板">
-      <div class="palette-search"><span aria-hidden="true">⌕</span><input id="palette-input" type="text" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" placeholder="搜索会话、联系人、页面或操作…" autocomplete="off" /><kbd>Esc</kbd></div>
-      <ul id="palette-list" role="listbox" aria-label="结果"></ul>
-      <p class="palette-foot"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>Enter</kbd> 打开</span><span><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> 随时唤起</span></p>
+    <dialog data-i18n-attr="aria-label" id="palette" class="palette" aria-label="命令面板">
+      <div class="palette-search"><span aria-hidden="true">⌕</span><input data-i18n-attr="placeholder" id="palette-input" type="text" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" placeholder="搜索会话、联系人、页面或操作…" autocomplete="off" /><kbd>Esc</kbd></div>
+      <ul data-i18n-attr="aria-label" id="palette-list" role="listbox" aria-label="结果"></ul>
+      <p class="palette-foot"><span><kbd>↑</kbd><kbd>↓</kbd> <span data-i18n>选择</span></span><span><kbd>Enter</kbd> <span data-i18n>打开</span></span><span><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> <span data-i18n>随时唤起</span></span></p>
     </dialog>
 </body>
 </html>
