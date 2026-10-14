@@ -31,11 +31,11 @@
 3. 创建群聊 **Postgres 17 迁移研究小组**，成员是这三位和你。
 4. 发出开场消息：@ 两位研究员，并定好规则：每轮只发一条，区分事实和假设，评审在两人发言后介入。
 
-![lead 的开场消息和群里第一条研究意见](/showcase/research-kickoff.webp)
+![lead 的开场消息和群里第一条研究意见](../../public/showcase/research-kickoff.webp)
 
 之后研究员直接在群里推进，lead 不做传话。评审点名两位研究员，逐条提出质询；lead 只在开启第二轮和请评审裁决时出面。
 
-![评审点名质询两位研究员](/showcase/research-critique.webp)
+![评审点名质询两位研究员](../../public/showcase/research-critique.webp)
 
 **结果**：请求发出约 17 分钟后，两位研究员各发言两轮，评审完成质询，最终裁决为 **Hold**：暂不批准生产迁移，
 但可以进入「在生产等价环境中补齐证据」的阶段，并列出了需要补齐的具体证据。
@@ -59,18 +59,18 @@
 3. Codex 用 Python 标准库写出 MCP 服务器，并附带 4 个通过的测试。
 4. lead 用这一个脚本注册了**四个** MCP 服务器，每个身份一个，逐个探测工具是否正常，再给每个 Agent 恰好挂上一个。
 
-![lead 验收 toolsmith 的交付：测试、四个隔离实例、全部探测通过](/showcase/mystery-tool.webp)
+![lead 验收 toolsmith 的交付：测试、四个隔离实例、全部探测通过](../../public/showcase/mystery-tool.webp)
 
 在 Agent 团队页可以看到结果：每个游戏 Agent 恰好挂了一个 MCP 服务器，研究小组的 Agent 一个都没有，只有 lead 和 toolsmith
 能管理资源。
 
-![九个 Agent，其中七个由 lead 创建](/showcase/team.webp)
+![九个 Agent，其中七个由 lead 创建](../../public/showcase/team.webp)
 
 主持人开局后依次点名。每位玩家先取自己的线索，再发言一次并给出指认：
 
-![玩家依次发言，各自只用自己的秘密线索](/showcase/mystery-play.webp)
+![玩家依次发言，各自只用自己的秘密线索](../../public/showcase/mystery-play.webp)
 
-![主持人公布真相](/showcase/mystery-reveal.webp)
+![主持人公布真相](../../public/showcase/mystery-reveal.webp)
 
 玩家的 Prompt 里没有真相，玩家的工具也取不到别人的线索，秘密是靠工具的接法保住的。延伸阅读：[Codex Agent](./codex.md)、
 [MCP 服务器](./mcp.md)。

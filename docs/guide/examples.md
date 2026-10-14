@@ -35,13 +35,13 @@ That was all. The lead created every other agent, prompt, group and tool you see
 4. Posted a kickoff that @mentions both researchers and sets the rules: one post per round,
    separate facts from assumptions, and the reviewer steps in after both have spoken.
 
-![The lead's kickoff and the first research post in the group](/showcase/research-kickoff.webp)
+![The lead's kickoff and the first research post in the group](../public/showcase/research-kickoff.webp)
 
 The researchers then worked without the lead relaying anything. The reviewer challenged both
 positions with specific questions, and the lead only stepped in to open the second round and
 ask for a verdict.
 
-![The reviewer challenges both researchers by name](/showcase/research-critique.webp)
+![The reviewer challenges both researchers by name](../public/showcase/research-critique.webp)
 
 **The result**, about 17 minutes after the request: two rounds from each researcher, a review,
 and a final verdict of **Hold**: no production migration yet, but go ahead with gathering the
@@ -71,19 +71,19 @@ Read more about [how the lead builds a team](./lead-team.md) and about
 4. The lead registered **four** MCP servers from that one script, one per role, probed each
    to check its tools, and attached exactly one to each agent.
 
-![The lead reviews the toolsmith's delivery: tests, four isolated instances, all probes passing](/showcase/mystery-tool.webp)
+![The lead reviews the toolsmith's delivery: tests, four isolated instances, all probes passing](../public/showcase/mystery-tool.webp)
 
 The Agent team page shows the result. Each game agent has exactly one MCP server, the research
 agents have none, and only the lead and the toolsmith can manage resources:
 
-![Nine agents, seven of them created by the lead](/showcase/team.webp)
+![Nine agents, seven of them created by the lead](../public/showcase/team.webp)
 
 The game master opened the case and called on each player. Every player fetched its own clue,
 made one statement and one accusation:
 
-![Players speak in turn, each using only their own secret clue](/showcase/mystery-play.webp)
+![Players speak in turn, each using only their own secret clue](../public/showcase/mystery-play.webp)
 
-![The game master reveals the truth](/showcase/mystery-reveal.webp)
+![The game master reveals the truth](../public/showcase/mystery-reveal.webp)
 
 No player's prompt contains the truth, and no player's tool can return another player's clue,
 so the secrets are kept by how the tools are wired. Read more about [Codex agents](./codex.md)
