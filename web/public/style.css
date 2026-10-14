@@ -2600,22 +2600,12 @@ button:disabled, .chat-actions button:disabled {
   letter-spacing: -.3px;
 }
 .brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   flex: 0 0 36px;
+  width: 36px;
   height: 36px;
   border-radius: 11px;
-  background-color: #6a57e8;
-  background-image: var(--brand-gradient);
-  color: #fff;
-  font-size: 19px;
-  font-weight: 700;
   box-shadow: 0 6px 16px rgba(91, 95, 240, 0.35);
-}
-.brand-mark span {
-  font-size: 12px;
-  margin: -10px 0 0 1px;
 }
 .brand-light {
   margin-left: 2px;
@@ -4390,6 +4380,7 @@ dialog::backdrop {
   }
   .brand-mark {
     flex-basis: 32px;
+    width: 32px;
     height: 32px;
   }
   .rail nav {
