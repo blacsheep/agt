@@ -5,7 +5,7 @@ conversations, how agents decide to reply, and how to control a discussion.
 
 ## Direct and group chats
 
-**Web console:** on **会话空间** (Conversations), click **新建会话** (New conversation). Pick one
+**Web console:** on **Conversations** (会话空间), click **New conversation** (新建会话). Pick one
 participant for a direct chat, or several for a group. You can also search for an agent in the
 conversation list and open a direct chat with it.
 
@@ -47,7 +47,7 @@ Codex agents support `mentioned` and `manual`.
 
 ## Auto-reply and discussions
 
-The **发送后自动回复** (Auto-reply after sending) switch under the message box is on by
+The **Auto-reply after sending** (发送后自动回复) switch under the message box is on by
 default. Sending a message with it on starts a **discussion**: it authorizes the agents in
 this conversation to run, which calls your models and costs money. Switch it off to post a
 message without triggering anyone.
@@ -59,7 +59,7 @@ A discussion has limits that keep a group from talking forever:
 - the authorization lasts 30 minutes; work already running finishes, but nothing new starts;
 - at most 3 agents run at once across the workspace.
 
-All three are configurable under **运行设置** (Settings); see
+All three are configurable under **Settings** (运行设置); see
 [Scheduler](../modules/scheduler.md#settings-config-yaml). When an agent contacts another conversation
 during a discussion, that work counts against the same discussion, so agents cannot start
 unlimited new rounds by themselves.
@@ -68,14 +68,14 @@ unlimited new rounds by themselves.
 
 | Action | Web console | CLI |
 | --- | --- | --- |
-| Stop all agents in this conversation | **停止本群 Agent** (Stop agents) next to the title, or `/stop` | `agt schedule end <conversation>` |
-| Pause (running replies finish first) | **暂停回复** (Pause) in the status bar above the messages | `agt schedule pause <conversation>` |
-| Resume, extend the time limit, or answer messages saved without auto-reply | **继续回复** (Continue) next to the title | `agt schedule resume <conversation>` / `agt schedule start <conversation>` |
+| Stop all agents in this conversation | **Stop agents in this group** (停止本群 Agent) next to the title, or `/stop` | `agt schedule end <conversation>` |
+| Pause (running replies finish first) | **Pause replies** (暂停回复) in the status bar above the messages | `agt schedule pause <conversation>` |
+| Resume, extend the time limit, or answer messages saved without auto-reply | **Continue** (继续回复) next to the title | `agt schedule resume <conversation>` / `agt schedule start <conversation>` |
 | Reset the agents' context, keep the history | `/new` or `/clear` | `agt schedule reset <conversation> --actor <you>` |
 
 An ended discussion cannot be resumed; send a new message to start another one. The title bar
-also has **任务** (Tasks) for [tracked tasks](./tasks.md), **会话控制** (Conversation controls)
-for the commands below, and **群信息** (Group info).
+also has **Tasks** (任务) for [tracked tasks](./tasks.md), **Conversation controls** (会话控制)
+for the commands below, and **Group info** (群信息).
 
 ## Commands in the message box
 
@@ -105,15 +105,15 @@ type `//`.
   It opens automatically when an approval is waiting.
 - **Under each reply:** the number of tool calls, the duration and any failures. Click to
   see the calls, or open the full execution record.
-- **Agent 会话** (Agent conversations): pick an agent and read its conversations, read-only.
-- **交互观察** (Interactions): a graph of who talked to whom and which tasks were delegated.
-- **调试模式** (Debug mode, top right): adds run IDs, call counts and error codes.
+- **Agent views** (Agent 会话): pick an agent and read its conversations, read-only.
+- **Interactions** (交互观察): a graph of who talked to whom and which tasks were delegated.
+- **Debug** (调试模式, top right): adds run IDs, call counts and error codes.
 
 ## Managing groups
 
 Open the group's information panel to see members. Group owners and admins can add and remove
 members; any member can leave. The owner can dissolve the group, which keeps a read-only
-history. **移除** (Remove) in the conversation list only hides the entry for you; a new message
+history. **Remove** (移除) in the conversation list only hides the entry for you; a new message
 brings it back.
 
 ## Context and history

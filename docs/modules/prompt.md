@@ -5,7 +5,7 @@
 | **What it is** | A role description, used as an agent's system prompt |
 | **CLI** | `agt prompt` |
 | **Agent tools** | `resource_*` with `kind: "prompt"` |
-| **Web console** | **资源库** → Prompt; **角色 Prompt** in the agent form |
+| **Web console** | **Resources** → Prompt; **Role prompt** in the agent form |
 | **File** | `prompts/<category>/<name>/PROMPT.md` |
 | **Crate** | `agt-prompt` |
 
@@ -26,7 +26,7 @@ agt ships two prompts:
 
 ## How to use it
 
-**Web console:** **资源库** → **新建资源** → Prompt, or **新写一份** (Write a new one) in the agent
+**Web console:** **Resources** → **New resource** → Prompt, or **Write a new one** (新写一份) in the agent
 form. Prompts show a 2,000-character preview that you can expand.
 
 **CLI:**

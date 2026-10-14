@@ -75,10 +75,10 @@ involved:
 
 - The lead first lists what exists, then creates prompts, agents and identities. Each step is
   a tool call that you can see in the execution bar, and approve if you use manual approval.
-- New agents appear under **Agent 团队** as soon as they are created.
+- New agents appear under **Agent team** as soon as they are created.
 - The lead creates a group, adds you as owner, and posts the briefing. From then on, team
   members talk to each other directly with mentions.
-- When it delegates a tracked task, you can follow it under **任务** (Tasks) in the
+- When it delegates a tracked task, you can follow it under **Tasks** (任务) in the
   conversation title bar.
 - The lead reports back in your direct chat.
 
@@ -90,7 +90,7 @@ like anything you created yourself.
 - **Review the first team.** Open each new agent and check its prompt and capabilities. If a
   role is wrong, tell the lead what to change; it edits the resources itself.
 - **Control cost.** Each agent can reply at most 100 times per discussion, and a discussion
-  expires after 30 minutes by default. Stop everything at any time with **停止本群 Agent** or
+  expires after 30 minutes by default. Stop everything at any time with **Stop agents in this group** or
   `/stop`. See [Scheduler](../modules/scheduler.md#settings-config-yaml) for longer jobs.
 - **Use separate homes for experiments.** `agt init ~/experiments/game` creates a clean
   workspace, and `agt --home ~/experiments/game web --port 4318` runs a console

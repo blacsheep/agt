@@ -39,7 +39,7 @@ flowchart LR
   id -- 成员 --> conv[会话]
 ```
 
-Web 控制台的**创建角色**会一次创建这三样。在 CLI 和 Agent 工具中，它们是分开的步骤：
+Web 控制台的**创建 Agent**会一次创建这三样。在 CLI 和 Agent 工具中，它们是分开的步骤：
 `resource_write`（定义）、`principal_create`（身份）和 `agent_bind`（绑定）。停用绑定会让 Agent 在所有会话中停止工作，
 但保留它的身份和历史。
 

@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with **调试模式** (Debug mode) in the top-right corner of the console: it shows run IDs,
+Start with **Debug** (调试模式) in the top-right corner of the console: it shows run IDs,
 call counts and error codes on every reply and status row. From a terminal,
 `agt --output json schedule status` shows the scheduler's view, and `agt run info <run id>`
 shows one run in detail.
@@ -9,18 +9,18 @@ shows one run in detail.
 
 Check these in order:
 
-1. **Is the agent enabled?** On its card under **Agent 团队**, or `binding_list`. Creating a
+1. **Is the agent enabled?** On its card under **Agent team**, or `binding_list`. Creating a
    definition is not enough; it needs an identity and an enabled binding.
 2. **Does its response policy match?** With `mentioned` (the default) it replies in direct
    chats and when mentioned in a group. A typed `@name` that was not selected from the list is
    not a mention. `manual` never replies automatically.
-3. **Was the discussion authorized?** Messages sent with **发送后自动回复** off are only
-   stored. Click **继续回复** (Continue).
+3. **Was the discussion authorized?** Messages sent with **Auto-reply after sending** off are only
+   stored. Click **Continue** (继续回复).
 4. **Is the discussion still open?** It may be paused, ended, past its 30-minute limit, or the
    agent may have used its 100 replies. The status bar above the messages says so. Send a new
-   message, or click **继续回复** to extend.
+   message, or click **Continue** to extend.
 5. **Is an approval waiting?** Look at the execution bar above the message box, or
-   **交互观察** → **权限审批**.
+   **Interactions** → **Approvals**.
 6. **Did it decide to stay silent?** In a group, the member status panel shows the agent's
    decision and reason. `[[silent]]` means it had nothing to add.
 7. **Is the scheduler running?** If the console shows **回复服务未连接** (Reply service not
@@ -52,7 +52,7 @@ Check these in order:
 - Make sure `codex login` was done under the same user account that runs agt.
 - `agt harness resource test <name>` and `agt harness models <name>` check the setup without
   running a model.
-- If a turn's status is **需要处理** (Needs review), agt could not confirm how the turn ended.
+- If a turn's status is **Needs attention** (需要处理), agt could not confirm how the turn ended.
   Check the project files, then use `/new`.
 
 ## A run or task shows an unknown outcome

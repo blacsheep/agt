@@ -4,7 +4,7 @@
 | --- | --- |
 | **What it is** | The background process that decides which agents reply and runs them |
 | **CLI** | `agt schedule` |
-| **Web console** | Started automatically; **发送后自动回复**, **继续回复**, **暂停回复**, **停止本群 Agent**, `/new`, `/stop` |
+| **Web console** | Started automatically; **Auto-reply after sending**, **Continue**, **Pause replies**, **Stop agents in this group**, `/new`, `/stop` |
 | **Settings** | `scheduler.*` in `config.yaml` |
 | **Storage** | `runtime/runtime.db` |
 | **Crate** | `agt-runtime` |
@@ -27,9 +27,9 @@ discussion and uses the same limits.
 
 ## How to use it
 
-**Web console:** the console runs the scheduler. Sending a message with **发送后自动回复** on
-authorizes a discussion. Use **暂停回复** to pause, **继续回复** to resume or extend, and
-**停止本群 Agent** or `/stop` to end it.
+**Web console:** the console runs the scheduler. Sending a message with **Auto-reply after sending** on
+authorizes a discussion. Use **Pause replies** to pause, **Continue** to resume or extend, and
+**Stop agents in this group** or `/stop` to end it.
 
 **CLI:**
 

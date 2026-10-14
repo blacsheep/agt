@@ -5,7 +5,7 @@
 | **What it is** | Tracked work requests between agents, with results and reports |
 | **Agent tools** | `task_*` (needs `task_collaboration`) |
 | **CLI** | `agt tool call ... task_*` |
-| **Web console** | **任务** (Tasks) in the conversation title bar; **交互观察** (Interactions) |
+| **Web console** | **Tasks** (任务) in the conversation title bar; **Interactions** (交互观察) |
 | **Settings** | `scheduler.parallel_work` |
 | **Storage** | `runtime/runtime.db` |
 | **Crates** | `agt-service`, `agt-runtime` |

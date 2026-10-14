@@ -8,7 +8,7 @@ and a **model** (which model to use there, and how).
 A provider is an OpenAI-compatible endpoint. It works with OpenAI, API gateways, and local
 servers such as Ollama or vLLM, as long as they implement the OpenAI API.
 
-**Web console:** **资源库** (Resources) → **新建资源** (New resource) → Provider. Enter a
+**Web console:** **Resources** (资源库) → **New resource** (新建资源) → Provider. Enter a
 name, the base URL and the API key.
 
 **CLI:**
@@ -32,8 +32,8 @@ like any file containing credentials.
 
 A model resource names a model on a provider and sets how agt calls it.
 
-**Web console:** **资源库** → **新建资源** → Model. Choose the provider, click
-**获取模型列表** (Fetch model list) or type the model name, and choose the API format.
+**Web console:** **Resources** → **New resource** → Model. Choose the provider, click
+**Fetch model list** (获取模型列表) or type the model name, and choose the API format.
 
 **CLI:**
 

@@ -93,10 +93,10 @@ same thing.
 
 ## In the Web console
 
-Click **任务** (Tasks) in a conversation's title bar. The panel lists tasks in this
+Click **Tasks** (任务) in a conversation's title bar. The panel lists tasks in this
 conversation, with filters for active, needs attention and finished, and a search box. Open a
 task to see its state, result, delivery and report, and to answer, cancel, retry or resolve
-it. **交互观察** (Interactions) shows delegations between agents as a graph.
+it. **Interactions** (交互观察) shows delegations between agents as a graph.
 
 ## When something goes wrong
 

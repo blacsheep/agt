@@ -46,7 +46,7 @@ Credentials do not belong in the URL; use `bearer_token_env_var`, `http_headers`
 `env_http_headers` (header name to environment variable). Environment variables are read when
 agt connects, so set them in the environment that starts the Web console or the scheduler.
 
-**Web console:** **资源库** → **新建资源** → MCP, then paste the document.
+**Web console:** **Resources** → **New resource** → MCP, then paste the document.
 
 **CLI:**
 
@@ -72,7 +72,7 @@ agt agent update researcher --add-mcp files
 agt agent update researcher --remove-mcp files
 ```
 
-Or tick it under MCP in the agent's **编辑角色** (Edit role) form. Agents connect to their MCP
+Or tick it under MCP in the agent's **Edit role** (编辑角色) form. Agents connect to their MCP
 servers at the start of each run, so changes apply from the next run. When an agent with
 `resource_management` changes its own MCP servers, the change takes effect right after its
 current batch of tool calls.

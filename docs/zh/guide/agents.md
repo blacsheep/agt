@@ -19,7 +19,7 @@ builtin_tools: [task_collaboration]
 
 ## 在 Web 控制台中
 
-打开 **Agent 团队**，点击**创建角色**。表单包含这些部分：
+打开 **Agent 团队**，点击**创建 Agent**。表单包含这些部分：
 
 | 字段 | 含义 |
 | --- | --- |

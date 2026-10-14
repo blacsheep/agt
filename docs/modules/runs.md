@@ -4,7 +4,7 @@
 | --- | --- |
 | **What it is** | The record of each agent execution: model calls, tool calls and result |
 | **CLI** | `agt run`, `agt agent run` |
-| **Web console** | Execution bar, the record under each reply, **调试模式** (Debug mode) |
+| **Web console** | Execution bar, the record under each reply, **Debug** (调试模式) |
 | **Settings** | `scheduler.model_steps` |
 | **Storage** | `runtime/runtime.db` |
 | **Crates** | `agt-runtime`, `agt-inference` |
@@ -26,7 +26,7 @@ automatically, because the call may already have had an effect.
 ## How to use it
 
 **Web console:** each reply shows its tool calls, duration and failures; click to expand or open
-the full record. Turn on **调试模式** for run IDs, call counts and error codes.
+the full record. Turn on **Debug** for run IDs, call counts and error codes.
 
 **CLI:**
 

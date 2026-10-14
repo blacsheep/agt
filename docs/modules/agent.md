@@ -5,7 +5,7 @@
 | **What it is** | An agent definition, plus the identity and binding that let it take part in conversations |
 | **CLI** | `agt agent`; bindings through `agt tool call` |
 | **Agent tools** | `resource_*` with `kind: "agent"`, `principal_create`, `agent_bind`, `agent_set_enabled`, `agent_unbind`, `binding_list` |
-| **Web console** | **Agent 团队** (Agent team) |
+| **Web console** | **Agent team** (Agent 团队) |
 | **File** | `agents/<category>/<name>/agent.yaml` |
 | **Crate** | `agt-agent`, `agt-service` |
 
@@ -20,8 +20,8 @@ running settings. Several identities can be bound to the same definition and run
 
 ## How to use it
 
-**Web console:** **Agent 团队** → **创建角色** creates the definition, the identity and the
-binding in one step. Use **编辑角色** to change the definition and **配置与管理** for the binding.
+**Web console:** **Agent team** → **Create agent** creates the definition, the identity and the
+binding in one step. Use **Edit role** to change the definition and **Configure** for the binding.
 
 **CLI:**
 

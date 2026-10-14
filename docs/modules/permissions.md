@@ -4,7 +4,7 @@
 | --- | --- |
 | **What it is** | Approval of individual tool calls and of Codex's requests |
 | **CLI** | `agt permission` |
-| **Web console** | Execution bar in conversations; **交互观察** → **权限审批**; **运行设置** → **工具权限审批** |
+| **Web console** | Execution bar in conversations; **Interactions** → **Approvals**; **Settings** → **Tool approvals** |
 | **Settings** | `permissions.*` |
 | **Storage** | `runtime/runtime.db` |
 | **Crate** | `agt-runtime` |
@@ -26,9 +26,9 @@ until you choose a reviewer model or another policy.
 
 ## How to use it
 
-**Web console:** open **运行设置** → **工具权限审批**, set **Native 权限审核策略** (Native policy),
-**审核模型** (Reviewer model) and **Harness 权限处理模式** (Codex mode). Approve or deny requests
-in the conversation's execution bar or under **交互观察** → **权限审批**.
+**Web console:** open **Settings** → **Tool approvals**, set **Native approval policy** (Native 权限审核策略),
+**Reviewer model** (审核模型) and **Harness approval mode** (Harness 权限处理模式). Approve or deny requests
+in the conversation's execution bar or under **Interactions** → **Approvals**.
 
 **CLI:**
 

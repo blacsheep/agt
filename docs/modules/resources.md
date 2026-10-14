@@ -5,7 +5,7 @@
 | **What it is** | The shared operations for all seven resource types |
 | **CLI** | `agt provider`, `model`, `prompt`, `skill`, `mcp`, `agent`, `harness resource` |
 | **Agent tools** | `resource_*` (needs `resource_management`) |
-| **Web console** | **资源库** (Resources), **Agent 团队** (Agent team) |
+| **Web console** | **Resources** (资源库), **Agent team** (Agent 团队) |
 | **Crates** | `agt-core`, `agt-storage`, `agt-service` |
 
 ## What it does

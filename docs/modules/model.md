@@ -5,7 +5,7 @@
 | **What it is** | A model on a provider, and how agt calls it |
 | **CLI** | `agt model` |
 | **Agent tools** | `resource_*` with `kind: "model"` |
-| **Web console** | **资源库** → Model |
+| **Web console** | **Resources** → Model |
 | **File** | `models/<category>/<name>/model.yaml` |
 | **Crates** | `agt-model`, `agt-inference` |
 
@@ -21,8 +21,8 @@ automatically when a conversation nears the context window.
 
 ## How to use it
 
-**Web console:** **资源库** → **新建资源** → Model. Choose the provider, click **获取模型列表**
-(Fetch model list) or type the model ID, and choose the API format.
+**Web console:** **Resources** → **New resource** → Model. Choose the provider, click **Fetch model list**
+(获取模型列表) or type the model ID, and choose the API format.
 
 **CLI:**
 

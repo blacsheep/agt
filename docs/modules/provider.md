@@ -5,7 +5,7 @@
 | **What it is** | An OpenAI-compatible endpoint and the API key to reach it |
 | **CLI** | `agt provider` |
 | **Agent tools** | `resource_*` with `kind: "provider"`, `provider_models`, `resource_test` |
-| **Web console** | **资源库** → Provider |
+| **Web console** | **Resources** → Provider |
 | **File** | `providers/<category>/<name>/provider.yaml` |
 | **Crate** | `agt-provider` |
 
@@ -17,7 +17,7 @@ a provider; one provider can serve many models.
 
 ## How to use it
 
-**Web console:** **资源库** → **新建资源** → Provider. Enter a name, the base URL and the API key.
+**Web console:** **Resources** → **New resource** → Provider. Enter a name, the base URL and the API key.
 
 **CLI:**
 

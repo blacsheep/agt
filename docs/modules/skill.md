@@ -5,7 +5,7 @@
 | **What it is** | A reusable instruction package added to an agent's system prompt |
 | **CLI** | `agt skill` |
 | **Agent tools** | `resource_*` with `kind: "skill"` |
-| **Web console** | **资源库** → Skill; Skills in the agent form |
+| **Web console** | **Resources** → Skill; Skills in the agent form |
 | **File** | `skills/<category>/<package>/SKILL.md` |
 | **Crate** | `agt-skill` |
 
@@ -21,7 +21,7 @@ such as `@team/review`.
 
 ## How to use it
 
-**Web console:** **资源库** → **新建资源** → Skill creates a skeleton with a name and description.
+**Web console:** **Resources** → **New resource** → Skill creates a skeleton with a name and description.
 Write the full instructions with the CLI.
 
 **CLI:**

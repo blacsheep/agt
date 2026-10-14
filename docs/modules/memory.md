@@ -4,7 +4,7 @@
 | --- | --- |
 | **What it is** | History search and private notes for each agent |
 | **Agent tools** | `memory_search`, `memory_save`, `memory_read`, `memory_forget` |
-| **Web console** | **运行设置** → **跨会话记忆** (on or off) |
+| **Web console** | **Settings** → **Memory across conversations** (跨会话记忆) |
 | **Settings** | `memory.enabled` |
 | **Storage** | Messages in `im/im.db`; notes in `memory/memory.db` |
 | **Crate** | `agt-service` |

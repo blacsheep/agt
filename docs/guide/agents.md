@@ -20,25 +20,25 @@ You rarely edit this file by hand: the Web console, the CLI and agents with
 
 ## In the Web console
 
-Open **Agent 团队** (Agent team) and click **创建角色** (Create role). The form has these
+Open **Agent team** (Agent 团队) and click **Create agent** (创建 Agent). The form has these
 parts:
 
 | Field | Meaning |
 | --- | --- |
-| **资源名称 / 身份 ID** (Name / identity ID) | The definition name and the agent's chat identity |
-| **执行方式** (Engine) | **AGT 内置** (Native, choose a model) or **外部 Harness** (Codex, choose a harness) |
-| **角色 Prompt** (Role prompt) | **使用已有 Prompt** (pick an existing prompt) or **新写一份** (write a new one) |
+| **Name / identity ID** (资源名称 / 身份 ID) | The definition name and the agent's chat identity |
+| **Engine** (执行方式) | **Native** (AGT 内置) or **External harness** (外部 Harness) |
+| **Role prompt** (角色 Prompt) | **Use an existing prompt** (使用已有 Prompt) or **Write a new one** (新写一份) |
 | Skills / MCP | Optional skills and MCP servers to attach |
-| **框架内置工具** (Built-in tools) | **资源管理**, **任务协作**, **本机命令** |
-| **响应策略** (Response policy) | When the agent replies; see [Conversations](./conversations.md#response-policies) |
+| **Built-in tools** (框架内置工具) | **Resource management**, **Task collaboration**, **Local commands** |
+| **Response policy** (响应策略) | When the agent replies; see [Conversations](./conversations.md#response-policies) |
 
 Saving creates the definition, the identity and the binding, so the agent is ready to chat.
 If a step fails, the form shows which steps succeeded; fix the problem and save again to
 finish the rest.
 
-To change an agent later, open its card and use **编辑角色** (Edit role). Changes apply from
+To change an agent later, open its card and use **Edit role** (编辑角色). Changes apply from
 the agent's next run. Enabling, disabling and the response policy are under
-**配置与管理** (Configuration and management) on the same card.
+**Configure** (配置与管理) on the same card.
 
 ## Prompts
 
@@ -134,7 +134,7 @@ agt agent delete reviewer --dry-run      # show what would be deleted
 agt agent delete reviewer --yes
 ```
 
-An agent that still has a binding must be unbound first (**运行设置** on its card, or
+An agent that still has a binding must be unbound first (**Settings** on its card, or
 `agent_unbind`). Deleting a provider, model, prompt, skill or MCP server that agents still
 use is refused unless you pass `--recursive`, which also deletes the dependent agents.
 Deleted resource directories are moved to `<home>/.trash/`.

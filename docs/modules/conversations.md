@@ -5,7 +5,7 @@
 | **What it is** | Participants, direct and group chats, and messages |
 | **CLI** | `agt im` |
 | **Agent tools** | `principal_list`, `direct_create`, `group_create`, `member_list`, `member_add`, `member_remove`, `conversation_*`, `group_dissolve`, `response_policy`, `message_*` |
-| **Web console** | **会话空间** (Conversations), **Agent 会话** (Agent conversations) |
+| **Web console** | **Conversations** (会话空间), **Agent views** (Agent 会话) |
 | **Storage** | `im/im.db` |
 | **Crate** | `agt-im` |
 
@@ -27,12 +27,12 @@ console) joins as group owner automatically, and the creating agent becomes an a
 
 When a person creates a group, they are its owner and everyone they add is a member. Only the
 owner and admins can add or remove members, so a lead you add to your group cannot invite
-teammates until you make it an admin: **群信息** (Group info) → **设为管理员** (Make admin) next to
+teammates until you make it an admin: **Group info** (群信息) → **Make admin** (设为管理员) next to
 it, or `member_role_set`. Only the owner changes roles, and ownership cannot be transferred.
 
 ## How to use it
 
-**Web console:** **会话空间** → **新建会话**; type `@` to mention and `/` for commands.
+**Web console:** **Conversations** → **New conversation**; type `@` to mention and `/` for commands.
 
 **CLI (as yourself, through tools):**
 

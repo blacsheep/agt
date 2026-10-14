@@ -4,7 +4,7 @@
 | --- | --- |
 | **What it is** | Shell commands run by native agents on the host |
 | **Agent tool** | `local_exec` (needs `local_execution`) |
-| **Web console** | **本机命令** in the agent form; **运行设置** → **本机执行** |
+| **Web console** | **Local commands** in the agent form; **Settings** → **Local execution** |
 | **Settings** | `execution.*` |
 | **Crates** | `agt-service`, `agt-runtime` |
 
@@ -27,7 +27,7 @@ agt config apply config.yaml
 agt agent update builder --add-builtin-tool local_execution
 ```
 
-Or switch on **允许本机命令** under **运行设置** → **本机执行**, and tick **本机命令** in the agent
+Or switch on **Allow local commands** under **Settings** → **Local execution**, and tick **Local commands** in the agent
 form. Every call still goes through the [approval policy](./permissions.md).
 
 ## Common parameters

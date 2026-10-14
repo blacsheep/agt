@@ -5,7 +5,7 @@
 | **What it is** | An MCP server that gives agents tools |
 | **CLI** | `agt mcp` |
 | **Agent tools** | `resource_*` with `kind: "mcp"`, `resource_test`, `mcp_probe`, `agent_mcp_list` |
-| **Web console** | **资源库** → MCP; MCP in the agent form |
+| **Web console** | **Resources** → MCP; MCP in the agent form |
 | **File** | `mcps/<category>/<name>/mcp.json` |
 | **Crate** | `agt-mcp` |
 
@@ -21,7 +21,7 @@ Codex agents do not use these resources; configure MCP in Codex instead.
 
 ## How to use it
 
-**Web console:** **资源库** → **新建资源** → MCP, then paste the configuration.
+**Web console:** **Resources** → **New resource** → MCP, then paste the configuration.
 
 **CLI:**
 

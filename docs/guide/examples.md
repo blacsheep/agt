@@ -2,7 +2,7 @@
 
 Two real runs, each from a single request to a finished result. The agents created every agent,
 prompt, tool and message shown here; the screenshots were taken in the Web console afterwards.
-The console has Chinese labels and the requests were in Chinese, so the agents wrote in Chinese.
+The console was in Chinese and the requests were in Chinese, so the agents wrote in Chinese.
 Each section summarizes what they said.
 
 ## Setup
@@ -101,7 +101,7 @@ and [MCP servers](./mcp.md).
 - **Who owns the group.** The person who creates a group is its owner, and the lead cannot add
   members to a group it does not administer. In the murder mystery the lead asked the owner to
   add the four new agents. To let the lead manage membership, let it create the group, or make
-  it an admin in **群信息** (Group info).
+  it an admin in **Group info** (群信息).
 - **Cost.** Every agent turn calls your model. The research run took 15 agent runs and the
   murder mystery 12, plus the Codex session.
 

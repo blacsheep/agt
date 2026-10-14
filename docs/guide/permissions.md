@@ -44,7 +44,7 @@ Neither mode changes Codex's sandbox setting.
 - **In the conversation.** The execution bar above the message box opens automatically when a
   request is waiting. Click it to see the tool, the arguments and the reason, then approve or
   deny.
-- **交互观察** (Interactions) → **权限审批** (Approvals): all requests in the workspace, with
+- **Interactions** (交互观察) → **Approvals** (权限审批): all requests in the workspace, with
   filters.
 - **CLI:**
 
@@ -62,8 +62,8 @@ cancels the run.
 
 ## Changing the policy
 
-In the Web console, set the modes and the reviewer model under **运行设置** (Settings) →
-**工具权限审批** (Tool approvals), or in the approvals panel. In a file:
+In the Web console, set the modes and the reviewer model under **Settings** (运行设置) →
+**Tool approvals** (工具权限审批), or in the approvals panel. In a file:
 
 ```yaml
 permissions:

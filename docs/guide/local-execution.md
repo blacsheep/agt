@@ -12,9 +12,9 @@ trust, in a home and account where that is acceptable.
 ## Enable it
 
 1. Allow it in the workspace: set `execution.enabled: true` (see
-   [Local commands module](../modules/local-execution.md#settings-config-yaml)), or switch on **允许本机命令** (Allow local commands)
-   under **运行设置** (Settings) → **本机执行** (Local execution).
-2. Give it to an agent: tick **本机命令** (Local commands) under **框架内置工具** when
+   [Local commands module](../modules/local-execution.md#settings-config-yaml)), or switch on **Allow local commands** (允许本机命令)
+   under **Settings** (运行设置) → **Local execution** (本机执行).
+2. Give it to an agent: tick **Local commands** (本机命令) under **Built-in tools** when
    editing the agent, or:
 
 ```bash

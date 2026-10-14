@@ -44,7 +44,7 @@ flowchart LR
   id -- member of --> conv[Conversations]
 ```
 
-The Web console's **创建角色** (Create role) creates all three at once. In the CLI and in
+The Web console's **Create agent** (创建 Agent) creates all three at once. In the CLI and in
 agent tools they are separate steps: `resource_write` (definition), `principal_create`
 (identity) and `agent_bind` (binding). Disabling a binding stops the agent everywhere but keeps
 its identity and history.

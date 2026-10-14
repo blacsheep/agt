@@ -34,8 +34,8 @@ A **harness** resource describes how to start Codex and where it works:
 may write files there. `model` and `reasoning_effort` are optional defaults for new sessions.
 All fields are listed in the [Harness module](../modules/harness.md#all-parameters).
 
-**Web console:** **资源库** → **新建资源** → Harness. After saving, use **读取可用模型**
-(Load models) to see the models and reasoning levels Codex reports, and **检查连接** (Check
+**Web console:** **Resources** → **New resource** → Harness. After saving, use **Load models**
+(读取可用模型) to see the models and reasoning levels Codex reports, and **检查连接** (Check
 connection) to test the setup without running a model.
 
 **CLI:**
@@ -54,7 +54,7 @@ Choose the harness instead of a model:
 agt agent create toolsmith --harness toolsmith --prompt toolsmith
 ```
 
-In the Web form, set **执行方式** (Engine) to **外部 Harness** (External harness) and pick the
+In the Web form, set **Engine** (执行方式) to **External harness** (外部 Harness) and pick the
 harness. Then chat with the agent like any other: in a direct chat, or by mentioning it in a
 group.
 
@@ -93,6 +93,6 @@ From the CLI, `agt harness session list` shows the sessions, and
 - **Files are shared.** Agents using the same working directory edit the same files. Give
   each Codex agent its own directory or git worktree when they work in parallel.
 - **Stopping is not undoing.** Cancelling a turn stops Codex, but file changes already made
-  stay. If a turn's outcome is unclear, its status shows **需要处理** (Needs review): check the
+  stay. If a turn's outcome is unclear, its status shows **Needs attention** (需要处理): check the
   project files, then use `/new`.
 - **Not yet supported:** `/review`, `/diff`, importing or forking existing Codex threads.

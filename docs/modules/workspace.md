@@ -4,7 +4,7 @@
 | --- | --- |
 | **What it is** | The home directory that holds one workspace, and its settings file `config.yaml` |
 | **CLI** | `agt init`, `agt config`, global options |
-| **Web console** | **运行设置** (Settings) |
+| **Web console** | **Settings** (运行设置) |
 | **Crate** | `agt-config` |
 
 ## What it does
@@ -27,7 +27,7 @@ agt --home /tmp/demo agent list    # this command only
 agt init ~/projects/game-night     # create a new home explicitly
 ```
 
-**Change settings.** In the Web console, open **运行设置**. Each setting shows its default and
+**Change settings.** In the Web console, open **Settings**. Each setting shows its default and
 when a change takes effect. From the CLI:
 
 ```bash
@@ -126,4 +126,4 @@ accepted.
 ## Related modules
 
 - [Resources](./resources.md): what the resource directories contain and how to manage them
-- [Web console](./web-console.md): the **运行设置** page
+- [Web console](./web-console.md): the **Settings** page

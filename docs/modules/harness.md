@@ -5,7 +5,7 @@
 | **What it is** | An external execution engine (Codex) and the project directory it works in |
 | **CLI** | `agt harness` |
 | **Agent tools** | `resource_*` with `kind: "harness"`, `harness_models`, `harness_session_*` |
-| **Web console** | **资源库** → Harness; **外部 Harness** in the agent form; `/model`, `/status` and other commands in conversations |
+| **Web console** | **Resources** → Harness; **External harness** in the agent form; `/model`, `/status` and other commands in conversations |
 | **File** | `harnesses/<category>/<name>/harness.yaml` |
 | **Crate** | `agt-harness` |
 
