@@ -10,6 +10,19 @@ agt 在本机管理 Agent 所需的资源（Provider、Model、Prompt、Skill、
 - 资源、身份、权限和执行逻辑都在 Rust 中；Web 控制台只是本机 CLI 的界面适配。
 - 这是可信本机框架，不是公网多租户服务。
 
+## 实际效果
+
+两次真实运行，各自只给 lead 发了一句请求（[完整过程](docs/zh/guide/examples.md)）：
+
+- **会争论的研究小组。** 问「是否迁移到 Postgres 17」，lead 创建了性能研究员、运维风险研究员和评审，拉进群里开场。
+  他们讨论两轮后给出了裁决。
+- **由 Codex 造工具的剧本杀。** lead 让 Codex Agent 写了一个 MCP 服务器，只把每位玩家自己的秘密线索交给他本人；
+  再创建主持人和三位玩家，给每人挂上各自的服务器实例，然后开局。
+
+![lead 在研究小组里开场，第一位研究员给出意见](docs/public/showcase/research-kickoff.webp)
+
+![剧本杀玩家依次发言，各自只用自己的线索](docs/public/showcase/mystery-play.webp)
+
 ## 文档
 
 **文档网站：<https://blacsheep.github.io/agt/zh/>**，源文件在 [`docs/`](docs/README.md)。
@@ -18,6 +31,7 @@ agt 在本机管理 Agent 所需的资源（Provider、Model、Prompt、Skill、
 | --- | --- |
 | 了解理念和功能 | [agt 是什么？](docs/zh/guide/what-is-agt.md) |
 | 从安装到让 lead 自己组队 | [快速开始](docs/zh/guide/quick-start.md) |
+| 两次真实运行的完整过程 | [示例](docs/zh/guide/examples.md) |
 | 资源、身份、讨论与任务 | [核心概念](docs/zh/guide/concepts.md) |
 | 模型、Agent、MCP、Codex、任务、记忆、审批 | [使用指南](docs/zh/guide/models.md) |
 | 每个模块的作用、用法和全部参数 | [模块](docs/zh/modules/workspace.md) |

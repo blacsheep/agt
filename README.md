@@ -23,6 +23,22 @@ and report back.
 
 agt is a trusted local tool. It is not a public or multi-tenant service.
 
+## See it in action
+
+Two real runs, each started by a single request to the lead
+([full walkthrough](docs/guide/examples.md)):
+
+- **A research team that argues.** Asked whether to migrate to Postgres 17, the lead created a
+  performance researcher, an operations researcher and a reviewer, put them in a group and
+  kicked off the discussion. They debated two rounds and reached a verdict.
+- **A murder mystery with a tool built by Codex.** The lead had a Codex agent write an MCP
+  server that hands each player only their own secret clue, created a game master and three
+  players, attached one server instance to each, and ran the game.
+
+![The lead kicks off the research group and the first researcher replies](docs/public/showcase/research-kickoff.webp)
+
+![Players in the murder mystery speak in turn, each using only their own clue](docs/public/showcase/mystery-play.webp)
+
 ## Install
 
 **macOS and Linux:**
@@ -98,6 +114,7 @@ in [`docs/`](docs/README.md).
 | --- | --- |
 | The idea and the feature list | [What is agt?](docs/guide/what-is-agt.md) |
 | From install to a lead that builds its own team | [Quick start](docs/guide/quick-start.md) |
+| Two real runs, step by step | [Examples](docs/guide/examples.md) |
 | Resources, identities, discussions and tasks | [Core concepts](docs/guide/concepts.md) |
 | Models, agents, MCP tools, Codex, tasks, memory, approvals | [Guides](docs/guide/models.md) |
 | Every module: what it does, how to use it, all parameters | [Modules](docs/modules/workspace.md) |

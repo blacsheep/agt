@@ -10,6 +10,9 @@ hero:
       text: Get started
       link: /guide/quick-start
     - theme: alt
+      text: See examples
+      link: /guide/examples
+    - theme: alt
       text: What is agt?
       link: /guide/what-is-agt
     - theme: alt

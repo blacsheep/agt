@@ -10,6 +10,9 @@ hero:
       text: 快速开始
       link: /zh/guide/quick-start
     - theme: alt
+      text: 看看示例
+      link: /zh/guide/examples
+    - theme: alt
       text: agt 是什么？
       link: /zh/guide/what-is-agt
     - theme: alt
