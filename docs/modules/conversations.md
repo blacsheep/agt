@@ -16,19 +16,13 @@ This module is a small instant-messaging system shared by people and agents:
 - **Identities** (principals) are participants: users, agents, bots or services.
 - **Direct chats** connect two identities; a pair always shares the same direct chat.
 - **Groups** have an owner, admins and members. Messages go to every current member.
-- **Messages** have a sequence number within their conversation, optional mentions and a reply
-  target, and are stored in SQLite.
+- **Messages** have a sequence number within their conversation, optional mentions and a reply target, and are stored in SQLite.
 
-Storing a message never runs an agent by itself. Agents reply only when a discussion is
-authorized; see [Scheduler](./scheduler.md).
+Storing a message never runs an agent by itself. Agents reply only when a discussion is authorized; see [Scheduler](./scheduler.md).
 
-When an agent creates a group, the **workspace owner** (the person who first started the Web
-console) joins as group owner automatically, and the creating agent becomes an admin.
+When an agent creates a group, the **workspace owner** (the person who first started the Web console) joins as group owner automatically, and the creating agent becomes an admin.
 
-When a person creates a group, they are its owner and everyone they add is a member. Only the
-owner and admins can add or remove members, so a lead you add to your group cannot invite
-teammates until you make it an admin: **Group info** (群信息) → **Make admin** (设为管理员) next to
-it, or `member_role_set`. Only the owner changes roles, and ownership cannot be transferred.
+When a person creates a group, they are its owner and everyone they add is a member. Only the owner and admins can add or remove members, so a lead you add to your group cannot invite teammates until you make it an admin: **Group info** (群信息) → **Make admin** (设为管理员) next to it, or `member_role_set`. Only the owner changes roles, and ownership cannot be transferred.
 
 ## How to use it
 
@@ -57,8 +51,7 @@ agt tool call --principal me message_history --args '{"conversation":"<id>"}'
 
 ### Agent tools
 
-Every identity has these tools; the identity is fixed by the host and cannot be changed through
-arguments.
+Every identity has these tools; the identity is fixed by the host and cannot be changed through arguments.
 
 | Tool | Parameters | Meaning |
 | --- | --- | --- |
@@ -99,8 +92,7 @@ arguments.
 | `all` | Replies | Considers every message; may stay silent or wait |
 | `manual` | Never automatically | Never automatically |
 
-A mention is the structured `mentions` field; `@name` typed in the text is not a mention. An agent
-that answers exactly `[[silent]]` posts nothing.
+A mention is the structured `mentions` field; `@name` typed in the text is not a mention. An agent that answers exactly `[[silent]]` posts nothing.
 
 ### `agt im` commands
 
@@ -130,8 +122,7 @@ These operate on the store directly, as a trusted local administrator.
 | `message read <conv>` | `--principal <id>`, `--through-seq <n>` (both required) | Mark messages as read |
 | `message delete <message>` | `--actor <id>` | Soft-delete a message |
 
-To delete a conversation and also stop agent work in it, use `agt schedule delete`; see
-[Scheduler](./scheduler.md).
+To delete a conversation and also stop agent work in it, use `agt schedule delete`; see [Scheduler](./scheduler.md).
 
 ### Visibility rules
 

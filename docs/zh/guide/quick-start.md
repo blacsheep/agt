@@ -1,7 +1,6 @@
 # 快速开始
 
-本指南带你从全新安装走到一个会自己组建团队的 lead Agent。主要使用 Web 控制台；
-最后的 [CLI 部分](#用-cli-完成同样的事)展示在终端中的同样步骤。
+本指南带你从全新安装走到一个会自己组建团队的 lead Agent。主要使用 Web 控制台；最后的 [CLI 部分](#用-cli-完成同样的事)展示在终端中的同样步骤。
 
 开始之前，先[安装 agt](./installation.md)，用 `agt web` 启动控制台，并打开它打印的完整链接。
 
@@ -10,15 +9,13 @@
 在左侧栏打开**资源库**，点击**新建资源**。
 
 1. 创建一个 **Provider**：名称、接口的 base URL（例如 `https://api.openai.com/v1`）和 API Key。
-2. 在该 Provider 上创建一个 **Model**。点击**获取模型列表**从 Provider 提供的模型中选择，或直接填写模型名。
-   选择 Provider 对该模型支持的 API：**Chat Completions** 或 **Responses**。保持工具调用开启。
+2. 在该 Provider 上创建一个 **Model**。点击**获取模型列表**从 Provider 提供的模型中选择，或直接填写模型名。选择 Provider 对该模型支持的 API：**Chat Completions** 或 **Responses**。保持工具调用开启。
 
 所有选项见[接入模型](./models.md)。
 
 ## 2. 选择工具调用的审批方式
 
-默认情况下，Agent 的每一次工具调用都要等待审批。打开**运行设置** → **工具权限审批**，设置
-**Native 权限审核策略**：
+默认情况下，Agent 的每一次工具调用都要等待审批。打开**运行设置** → **工具权限审批**，设置 **Native 权限审核策略**：
 
 | 模式 | 适用场景 |
 | --- | --- |
@@ -26,8 +23,7 @@
 | **人工审批** | 每次调用都由你批准。最安全，但 lead 的调用很多。 |
 | **自动放行** | 不审批。只适合在可随时丢弃的 home 中做实验。 |
 
-没有配置审核模型时，模型审核会转为人工审批。待审批的请求显示在会话输入框上方，可以在那里批准或拒绝。
-见[权限审批](./permissions.md)。
+没有配置审核模型时，模型审核会转为人工审批。待审批的请求显示在会话输入框上方，可以在那里批准或拒绝。见[权限审批](./permissions.md)。
 
 ## 3. 创建 lead
 
@@ -58,9 +54,7 @@ lead 会先查看已有资源，然后编写角色 Prompt、创建并启用每�
 
 ## 5. 让它自己造工具
 
-如果有可用的 [Codex Agent](./codex.md)，lead 还能自己造工具。让它做一件需要新工具的事，
-例如为桌游或某个数据源写一个小型 MCP 服务。lead 会把代码交给 Codex Agent 编写，把结果注册为 MCP 服务，
-测试它能正常启动，再挂载给需要它的 Agent。见[让 lead 组建团队](./lead-team.md)。
+如果有可用的 [Codex Agent](./codex.md)，lead 还能自己造工具。让它做一件需要新工具的事，例如为桌游或某个数据源写一个小型 MCP 服务。lead 会把代码交给 Codex Agent 编写，把结果注册为 MCP 服务，测试它能正常启动，再挂载给需要它的 Agent。见[让 lead 组建团队](./lead-team.md)。
 
 ## 用 CLI 完成同样的事
 
@@ -87,9 +81,7 @@ agt schedule start <会话 ID>
 agt schedule run --watch
 ```
 
-在另一个终端用
-`agt tool call --principal me message_history --args '{"conversation":"<会话 ID>"}'` 查看回复。
-所有命令和参数见[模块页](../modules/workspace.md)。
+在另一个终端用 `agt tool call --principal me message_history --args '{"conversation":"<会话 ID>"}'` 查看回复。所有命令和参数见[模块页](../modules/workspace.md)。
 
 ## 下一步
 

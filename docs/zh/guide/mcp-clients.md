@@ -23,15 +23,13 @@
 
 ## 客户端能做什么
 
-不带 `--manager` 时，客户端只有参与者工具：会话、消息、记忆以及它自己的任务。带 `--manager` 时还有资源、身份和绑定工具。
-完整列表见[工具服务模块](../modules/tool-service.md#可用的工具)。
+不带 `--manager` 时，客户端只有参与者工具：会话、消息、记忆以及它自己的任务。带 `--manager` 时还有资源、身份和绑定工具。完整列表见[工具服务模块](../modules/tool-service.md#可用的工具)。
 
 `agt tool list --principal me --manager` 会打印每个工具及其参数。
 
 ## 注意事项
 
-- **`agt serve` 不会运行 Agent。** 通过它发送的消息会被保存和投递，但只有在讨论已授权、调度器在运行时，Agent 才会回复。
-  请在 Web 控制台中或用 `agt schedule start` 开始讨论，并保持控制台或 `agt schedule run --watch` 运行。
+- **`agt serve` 不会运行 Agent。** 通过它发送的消息会被保存和投递，但只有在讨论已授权、调度器在运行时，Agent 才会回复。请在 Web 控制台中或用 `agt schedule start` 开始讨论，并保持控制台或 `agt schedule run --watch` 运行。
 - **信任。** 启动 `agt serve` 的人决定使用哪个身份、是否为管理者。请把它当作本地管理工具对待。
 - **规则与 Agent 相同。** 删除会先返回计划并需要精确确认，密钥永远不会被返回。
 

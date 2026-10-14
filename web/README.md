@@ -7,8 +7,7 @@ agt web                      # installed agt
 node web/server.mjs          # from a clone, after cargo build -p agt-cli
 ```
 
-Open the full link printed in the terminal, including the token after `#`.
-打开终端打印的完整链接（包括 `#` 后的令牌）。
+Open the full link printed in the terminal, including the token after `#`. 打开终端打印的完整链接（包括 `#` 后的令牌）。
 
 - English: [Quick start](../docs/guide/quick-start.md) · [Web console module](../docs/modules/web-console.md)
 - 中文：[快速开始](../docs/zh/guide/quick-start.md) · [Web 控制台模块](../docs/zh/modules/web-console.md)

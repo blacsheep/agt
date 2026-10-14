@@ -11,9 +11,7 @@
 
 ## What it does
 
-A prompt defines an agent's role: what it is responsible for, who it works with, and when it
-should stay quiet. Several agents can share one prompt; editing it changes all of them from their
-next run.
+A prompt defines an agent's role: what it is responsible for, who it works with, and when it should stay quiet. Several agents can share one prompt; editing it changes all of them from their next run.
 
 agt ships two prompts:
 
@@ -26,8 +24,7 @@ agt ships two prompts:
 
 ## How to use it
 
-**Web console:** **Resources** → **New resource** → Prompt, or **Write a new one** (新写一份) in the agent
-form. Prompts show a 2,000-character preview that you can expand.
+**Web console:** **Resources** → **New resource** → Prompt, or **Write a new one** (新写一份) in the agent form. Prompts show a 2,000-character preview that you can expand.
 
 **CLI:**
 
@@ -84,8 +81,7 @@ Plain Markdown. The whole file is the prompt.
 
 - State the role, the people and agents it works with, and what "done" means.
 - In groups, say when to answer exactly `[[silent]]`, so the agent does not reply to everything.
-- Describe the tools it should use for important actions, for example `task_request` for work
-  that must produce a result.
+- Describe the tools it should use for important actions, for example `task_request` for work that must produce a result.
 
 ## Related modules
 

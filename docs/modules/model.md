@@ -11,18 +11,13 @@
 
 ## What it does
 
-A model resource gives a name to one model on a [provider](./provider.md), with the protocol and
-settings to use. Native [agents](./agent.md) refer to a model; changing the model resource changes
-every agent that uses it from its next run. You can define several model resources for the same
-underlying model, for example a `fast` and a `careful` variant.
+A model resource gives a name to one model on a [provider](./provider.md), with the protocol and settings to use. Native [agents](./agent.md) refer to a model; changing the model resource changes every agent that uses it from its next run. You can define several model resources for the same underlying model, for example a `fast` and a `careful` variant.
 
-agt streams responses, retries transient failures up to 10 attempts, and summarizes old context
-automatically when a conversation nears the context window.
+agt streams responses, retries transient failures up to 10 attempts, and summarizes old context automatically when a conversation nears the context window.
 
 ## How to use it
 
-**Web console:** **Resources** → **New resource** → Model. Choose the provider, click **Fetch model list**
-(获取模型列表) or type the model ID, and choose the API format.
+**Web console:** **Resources** → **New resource** → Model. Choose the provider, click **Fetch model list** (获取模型列表) or type the model ID, and choose the API format.
 
 **CLI:**
 
@@ -96,8 +91,7 @@ capabilities:
 
 ### Tool fields (`resource_write`, `kind: "model"`)
 
-On create: `provider` (required), `model` (required), and optional `params` with any of the
-fields below. On update, give the fields directly in `data`.
+On create: `provider` (required), `model` (required), and optional `params` with any of the fields below. On update, give the fields directly in `data`.
 
 | Field | Meaning |
 | --- | --- |

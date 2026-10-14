@@ -11,8 +11,7 @@
 
 ## 作用
 
-Provider 告诉 agt 把模型请求发往哪里。OpenAI、API 网关以及实现了 OpenAI API 的本地服务（如 Ollama、vLLM）都可以。
-[Model](./model.md) 引用 Provider；一个 Provider 可以服务多个 Model。
+Provider 告诉 agt 把模型请求发往哪里。OpenAI、API 网关以及实现了 OpenAI API 的本地服务（如 Ollama、vLLM）都可以。 [Model](./model.md) 引用 Provider；一个 Provider 可以服务多个 Model。
 
 ## 怎么用
 

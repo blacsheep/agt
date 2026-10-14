@@ -21,8 +21,7 @@ agt provider list-models openai     # 列出接口提供的模型
 agt provider update openai --base-url https://gateway.example.com/v1
 ```
 
-密钥保存在 home 中该 Provider 的 `provider.yaml` 里。agt 不会在列表、工具结果或错误中返回密钥，
-但它不是加密保险库：请像保护任何含凭据的文件一样保护 home 目录。
+密钥保存在 home 中该 Provider 的 `provider.yaml` 里。agt 不会在列表、工具结果或错误中返回密钥，但它不是加密保险库：请像保护任何含凭据的文件一样保护 home 目录。
 
 ## Model
 
@@ -54,8 +53,7 @@ agt model info fast
 
 - **流式输出。** 请求使用流式模式，控制台可以在模型生成时显示进度和回复预览。忽略流式参数的 Provider 也能用，只是没有预览。
 - **重试。** 连接错误、服务端错误、无效响应和空回复会自动重试，最多 10 次，间隔逐步增加。配置错误或模型明确拒绝等错误不会重试。
-- **上下文管理。** 对话接近上下文窗口的 90% 时，agt 会自动摘要较早的历史（这会调用模型）。
-  可以在会话中用 `/new` 重置 Agent 的上下文，聊天记录会保留。
+- **上下文管理。** 对话接近上下文窗口的 90% 时，agt 会自动摘要较早的历史（这会调用模型）。可以在会话中用 `/new` 重置 Agent 的上下文，聊天记录会保留。
 - **仅文本。** 暂不支持图片输入。
 
 ## 检查连接
@@ -65,5 +63,4 @@ agt provider test openai          # 校验配置（不访问网络）
 agt provider list-models openai   # 用保存的密钥调用 Provider 的 /models 接口
 ```
 
-最可靠的测试是和使用该模型的 Agent 简短私聊一次。如果失败，在控制台打开调试模式，
-或运行 `agt run info <执行 ID>` 查看 HTTP 状态码和尝试次数。见[常见问题与排错](../help/troubleshooting.md)。
+最可靠的测试是和使用该模型的 Agent 简短私聊一次。如果失败，在控制台打开调试模式，或运行 `agt run info <执行 ID>` 查看 HTTP 状态码和尝试次数。见[常见问题与排错](../help/troubleshooting.md)。

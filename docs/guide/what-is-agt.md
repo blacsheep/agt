@@ -1,17 +1,10 @@
 # What is agt?
 
-agt runs a team of AI agents on your own machine. The idea behind it is that managing
-resources (prompts, tools, agents) is itself a capability you can give an agent. An agent
-that has it can write prompts, register tools, create other agents and put them in a group
-chat, and then work with that team.
+agt runs a team of AI agents on your own machine. The idea behind it is that managing resources (prompts, tools, agents) is itself a capability you can give an agent. An agent that has it can write prompts, register tools, create other agents and put them in a group chat, and then work with that team.
 
-Usually you talk to one agent, the *lead*. You describe the goal. The lead decides which
-roles the job needs, creates each member, asks a coding agent for any tool that is missing,
-and coordinates the work. You can follow along, join in and approve what it does.
+Usually you talk to one agent, the *lead*. You describe the goal. The lead decides which roles the job needs, creates each member, asks a coding agent for any tool that is missing, and coordinates the work. You can follow along, join in and approve what it does.
 
-Most agent frameworks have you define agents, tools and the flow between them in code before
-anything runs. agt leaves that to the lead, and keeps everything it creates as files you can
-read and change.
+Most agent frameworks have you define agents, tools and the flow between them in code before anything runs. agt leaves that to the lead, and keeps everything it creates as files you can read and change.
 
 ## What you can do with it
 
@@ -44,31 +37,22 @@ flowchart LR
   agents -- call --> tools[MCP servers, Codex, shell]
 ```
 
-- **Resources** are the files that describe agents: providers, models, prompts, skills, MCP
-  servers, harnesses and agent definitions.
+- **Resources** are the files that describe agents: providers, models, prompts, skills, MCP servers, harnesses and agent definitions.
 - **Conversations** are direct and group chats between people and agents.
-- The **scheduler** decides which agents should reply to a message, runs them, and keeps
-  pending work across restarts.
-- Agents with the `resource_management` capability can change the resources, which is how a
-  lead builds its own team.
+- The **scheduler** decides which agents should reply to a message, runs them, and keeps pending work across restarts.
+- Agents with the `resource_management` capability can change the resources, which is how a lead builds its own team.
 
 [Core concepts](./concepts.md) explains each of these in more detail.
 
 ## Design principles
 
-- An agent can only do what its attached tools allow. Instructions in a prompt are not a
-  permission system, so agt does not rely on them for that. A new agent does not inherit the
-  tools of the agent that created it.
-- Conversations, runs, tasks and approvals are stored in SQLite. After a restart, pending work
-  continues; work whose outcome cannot be confirmed is flagged for you, never quietly rerun.
-- All logic lives in the Rust core. The Web console is a local UI over the `agt` CLI, so
-  whatever you can do in one, you can do in the other.
+- An agent can only do what its attached tools allow. Instructions in a prompt are not a permission system, so agt does not rely on them for that. A new agent does not inherit the tools of the agent that created it.
+- Conversations, runs, tasks and approvals are stored in SQLite. After a restart, pending work continues; work whose outcome cannot be confirmed is flagged for you, never quietly rerun.
+- All logic lives in the Rust core. The Web console is a local UI over the `agt` CLI, so whatever you can do in one, you can do in the other.
 
 ## What agt is not
 
-agt is a trusted local tool for one operator. The Web console listens on `127.0.0.1` only,
-and whoever holds its link can manage every resource. It is not a hosted or multi-tenant
-service. See [Security model](../help/security.md).
+agt is a trusted local tool for one operator. The Web console listens on `127.0.0.1` only, and whoever holds its link can manage every resource. It is not a hosted or multi-tenant service. See [Security model](../help/security.md).
 
 ## Next steps
 

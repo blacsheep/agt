@@ -11,9 +11,7 @@
 
 ## What it does
 
-Every tool call a native agent makes (built-in, MCP or local command) goes through the workspace
-approval policy before it runs. Codex agents send their own approval requests when they need to
-go beyond their sandbox. Both kinds end up in one approval queue.
+Every tool call a native agent makes (built-in, MCP or local command) goes through the workspace approval policy before it runs. Codex agents send their own approval requests when they need to go beyond their sandbox. Both kinds end up in one approval queue.
 
 | Native policy | Behavior |
 | --- | --- |
@@ -21,14 +19,11 @@ go beyond their sandbox. Both kinds end up in one approval queue.
 | `manual` | Every call waits for a person |
 | `auto_allow` | Every call runs |
 
-With the default settings no reviewer model is configured, so **every call goes to a person**
-until you choose a reviewer model or another policy.
+With the default settings no reviewer model is configured, so **every call goes to a person** until you choose a reviewer model or another policy.
 
 ## How to use it
 
-**Web console:** open **Settings** → **Tool approvals**, set **Native approval policy** (Native 权限审核策略),
-**Reviewer model** (审核模型) and **Harness approval mode** (Harness 权限处理模式). Approve or deny requests
-in the conversation's execution bar or under **Interactions** → **Approvals**.
+**Web console:** open **Settings** → **Tool approvals**, set **Native approval policy** (Native 权限审核策略), **Reviewer model** (审核模型) and **Harness approval mode** (Harness 权限处理模式). Approve or deny requests in the conversation's execution bar or under **Interactions** → **Approvals**.
 
 **CLI:**
 
@@ -78,9 +73,7 @@ Changes apply to requests waiting now and to later ones. Decisions already made 
 
 ### How model review works
 
-The reviewer receives the tool name, the arguments and the request the agent is working on, and
-answers once, with no tools. A deny from the reviewer is final. Errors, timeouts, invalid output
-and uncertain answers go to a person. A person can decide before the reviewer answers.
+The reviewer receives the tool name, the arguments and the request the agent is working on, and answers once, with no tools. A deny from the reviewer is final. Errors, timeouts, invalid output and uncertain answers go to a person. A person can decide before the reviewer answers.
 
 ### What approvals cannot do
 

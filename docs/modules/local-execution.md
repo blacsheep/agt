@@ -10,13 +10,10 @@
 
 ## What it does
 
-`local_exec` runs one Bash command on the machine running agt and returns its exit code,
-duration and output. It is off by default: the workspace must allow it and the agent must be
-granted it.
+`local_exec` runs one Bash command on the machine running agt and returns its exit code, duration and output. It is off by default: the workspace must allow it and the agent must be granted it.
 
 ::: warning Host access
-Commands run as the user running agt. The working directory is not a sandbox, and nothing is
-rolled back.
+Commands run as the user running agt. The working directory is not a sandbox, and nothing is rolled back.
 :::
 
 ## How to use it
@@ -27,8 +24,7 @@ agt config apply config.yaml
 agt agent update builder --add-builtin-tool local_execution
 ```
 
-Or switch on **Allow local commands** under **Settings** → **Local execution**, and tick **Local commands** in the agent
-form. Every call still goes through the [approval policy](./permissions.md).
+Or switch on **Allow local commands** under **Settings** → **Local execution**, and tick **Local commands** in the agent form. Every call still goes through the [approval policy](./permissions.md).
 
 ## Common parameters
 
@@ -60,11 +56,9 @@ Result: exit code, duration, and stdout and stderr truncated to `execution.outpu
 
 - Native agents only; Codex agents use Codex's own shell and sandbox.
 - No interactive input, no background services that outlive the command.
-- Cancelling or stopping the discussion kills the process group. If agt itself is killed, a
-  command may keep running.
+- Cancelling or stopping the discussion kills the process group. If agt itself is killed, a command may keep running.
 - `resource_management` does not include this capability, and created agents do not inherit it.
-- Conversations show only that a command ran; the command and output are in the operator's
-  execution record.
+- Conversations show only that a command ran; the command and output are in the operator's execution record.
 
 ## Related modules
 

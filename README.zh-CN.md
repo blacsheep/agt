@@ -9,8 +9,7 @@
   <a href="README.md">English</a> · 简体中文 · <a href="https://blacsheep.github.io/agt/zh/">文档</a>
 </p>
 
-agt 在你自己的机器上运行一组 AI Agent。你只需要和其中一个对话：lead。告诉它要做什么，它会写好角色 Prompt、创建 Agent、
-让编程 Agent 把缺的工具做出来，再把大家拉进群里推进工作。你可以旁观，随时插话，需要审批的操作由你决定。
+agt 在你自己的机器上运行一组 AI Agent。你只需要和其中一个对话：lead。告诉它要做什么，它会写好角色 Prompt、创建 Agent、让编程 Agent 把缺的工具做出来，再把大家拉进群里推进工作。你可以旁观，随时插话，需要审批的操作由你决定。
 
 ![lead 在研究小组里开场，第一位研究员给出意见](docs/public/showcase/research-kickoff.webp)
 
@@ -18,31 +17,24 @@ agt 在你自己的机器上运行一组 AI Agent。你只需要和其中一个�
 
 大多数 Agent 框架要求你在运行之前就写好有哪些 Agent、各自用什么工具、彼此怎么连接。在 agt 里，组建团队这件事由 Agent 自己完成。
 
-**Agent 用工具管理资源。** Prompt、模型、MCP 服务器和 Agent 定义都是 agt 管理的文件，拥有 `resource_management`
-能力的 Agent 可以通过工具调用创建和修改它们。lead 就是这样从一句话搭出一个能干活的团队；它创建的每样东西都是你能打开、能修改的文件。
+**Agent 用工具管理资源。** Prompt、模型、MCP 服务器和 Agent 定义都是 agt 管理的文件，拥有 `resource_management` 能力的 Agent 可以通过工具调用创建和修改它们。lead 就是这样从一句话搭出一个能干活的团队；它创建的每样东西都是你能打开、能修改的文件。
 
-**团队在聊天里协作。** Agent 之间有私聊和群聊，会互相 @，和人一样。调度器决定谁回复、谁等待、谁保持安静。
-不需要事先设计流程图，对话会按工作需要自然展开。
+**团队在聊天里协作。** Agent 之间有私聊和群聊，会互相 @，和人一样。调度器决定谁回复、谁等待、谁保持安静。不需要事先设计流程图，对话会按工作需要自然展开。
 
-**隔离由工具保证。** Agent 能做的事只取决于挂在它身上的工具，新建的 Agent 也不会继承创建者的工具。下面的剧本杀里，
-每位玩家的工具只能返回他自己的线索，用不着在 Prompt 里叮嘱谁别偷看。
+**隔离由工具保证。** Agent 能做的事只取决于挂在它身上的工具，新建的 Agent 也不会继承创建者的工具。下面的剧本杀里，每位玩家的工具只能返回他自己的线索，用不着在 Prompt 里叮嘱谁别偷看。
 
-**Codex 也是团队成员。** Agent 可以跑在 [Codex](https://github.com/openai/codex) 会话上，而不是内置的模型循环。
-lead 把需求交给它，拿回一个测试过的 MCP 服务器，再挂给需要的 Agent。
+**Codex 也是团队成员。** Agent 可以跑在 [Codex](https://github.com/openai/codex) 会话上，而不是内置的模型循环。 lead 把需求交给它，拿回一个测试过的 MCP 服务器，再挂给需要的 Agent。
 
 **重启不丢工作。** 会话、执行、任务和审批都保存在 SQLite 里。未完成的工作会从中断处继续；结果不确定的工作会标记出来交给你处理，而不是再执行一遍。
 
-**控制权在你手里。** 每次工具调用都可以等你批准、先交给审核模型，或者直接放行。Web 控制台会显示谁在做什么，
-包括你不在其中的 Agent 之间的对话。
+**控制权在你手里。** 每次工具调用都可以等你批准、先交给审核模型，或者直接放行。Web 控制台会显示谁在做什么，包括你不在其中的 Agent 之间的对话。
 
 ## 实际效果
 
 两次真实运行，各自只给 lead 发了一条消息。[示例页](docs/zh/guide/examples.md)有完整过程。
 
-- **会争论的研究小组。** 问「是否迁移到 Postgres 17」，lead 创建了性能研究员、运维风险研究员和评审，建群开场。
-  评审对两位研究员逐一质询，两轮之后小组给出了裁决。
-- **由 Codex 造工具的剧本杀。** lead 让 Codex Agent 写了一个线索服务器，再创建主持人和三位玩家，
-  给每位玩家一个锁定在他本人身份上的服务器实例，然后开局。
+- **会争论的研究小组。** 问「是否迁移到 Postgres 17」，lead 创建了性能研究员、运维风险研究员和评审，建群开场。评审对两位研究员逐一质询，两轮之后小组给出了裁决。
+- **由 Codex 造工具的剧本杀。** lead 让 Codex Agent 写了一个线索服务器，再创建主持人和三位玩家，给每位玩家一个锁定在他本人身份上的服务器实例，然后开局。
 
 ![剧本杀玩家依次发言，各自只用自己的秘密线索](docs/public/showcase/mystery-play.webp)
 
@@ -60,9 +52,7 @@ Windows（PowerShell）：
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.ps1 | iex"
 ```
 
-安装脚本会把预编译的 `agt` 放到 `~/.local/bin`。另外需要 Node.js 22 或更新版本（用于 Web 控制台），以及一个兼容 OpenAI API、
-支持工具调用的模型接口。使用 Codex Agent 还需要安装 [Codex CLI](https://github.com/openai/codex)。其他安装方式、更新和卸载见
-[安装](docs/zh/guide/installation.md)。
+安装脚本会把预编译的 `agt` 放到 `~/.local/bin`。另外需要 Node.js 22 或更新版本（用于 Web 控制台），以及一个兼容 OpenAI API、支持工具调用的模型接口。使用 Codex Agent 还需要安装 [Codex CLI](https://github.com/openai/codex)。其他安装方式、更新和卸载见 [安装](docs/zh/guide/installation.md)。
 
 ## 快速开始
 
@@ -70,8 +60,7 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/rele
 agt web
 ```
 
-打开它打印的链接，包括 `#` 后面的令牌。接入模型、创建 lead、给它一个目标，[快速开始](docs/zh/guide/quick-start.md)会带你走完每一步。
-控制台只监听 `127.0.0.1`；在服务器上使用时，请通过 [SSH 隧道](docs/zh/guide/installation.md#在远程服务器上运行)访问。
+打开它打印的链接，包括 `#` 后面的令牌。接入模型、创建 lead、给它一个目标，[快速开始](docs/zh/guide/quick-start.md)会带你走完每一步。控制台只监听 `127.0.0.1`；在服务器上使用时，请通过 [SSH 隧道](docs/zh/guide/installation.md#在远程服务器上运行)访问。
 
 ## 文档
 
@@ -90,8 +79,7 @@ agt web
 
 ## 数据存放在哪里
 
-所有数据都放在一个目录里，默认是 `~/.agt`，第一次运行 `agt` 时自动创建。设置 `AGT_HOME` 可以换到别的目录；
-运行 `agt init <目录>` 可以为某个项目单独建一个 home：
+所有数据都放在一个目录里，默认是 `~/.agt`，第一次运行 `agt` 时自动创建。设置 `AGT_HOME` 可以换到别的目录；运行 `agt init <目录>` 可以为某个项目单独建一个 home：
 
 ```text
 ~/.agt/

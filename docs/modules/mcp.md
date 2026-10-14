@@ -11,13 +11,9 @@
 
 ## What it does
 
-An MCP resource describes how to start (stdio) or reach (HTTP) one
-[Model Context Protocol](https://modelcontextprotocol.io) server. Attach it to native agents, and
-they can call its tools. Each run connects to the agent's MCP servers at the start, and every
-call is checked against the tool's input schema and the [approval policy](./permissions.md).
+An MCP resource describes how to start (stdio) or reach (HTTP) one [Model Context Protocol](https://modelcontextprotocol.io) server. Attach it to native agents, and they can call its tools. Each run connects to the agent's MCP servers at the start, and every call is checked against the tool's input schema and the [approval policy](./permissions.md).
 
-Registering a server does not give anyone access; only agents it is attached to can use it.
-Codex agents do not use these resources; configure MCP in Codex instead.
+Registering a server does not give anyone access; only agents it is attached to can use it. Codex agents do not use these resources; configure MCP in Codex instead.
 
 ## How to use it
 
@@ -31,9 +27,7 @@ agt mcp probe files                       # start it and list its tools
 agt agent update researcher --add-mcp files
 ```
 
-**Agent tools:** register with `resource_write`, check with `mcp_probe`, attach with
-`resource_write(kind="agent", data={}, add={"mcps":["files"]})`. See
-[MCP tools](../guide/mcp.md#let-agents-build-their-own-tools).
+**Agent tools:** register with `resource_write`, check with `mcp_probe`, attach with `resource_write(kind="agent", data={}, add={"mcps":["files"]})`. See [MCP tools](../guide/mcp.md#let-agents-build-their-own-tools).
 
 ## Common parameters
 
@@ -57,8 +51,7 @@ agt agent update researcher --add-mcp files
 
 ### File: `mcp.json`
 
-The file is an `mcpServers` object with exactly one server, whose key must equal the resource
-name.
+The file is an `mcpServers` object with exactly one server, whose key must equal the resource name.
 
 **stdio server**
 
@@ -106,8 +99,7 @@ name.
 | `env_http_headers` | no | Headers whose values come from environment variables (header name → variable name) |
 | `type` / `transport` | no | `http`. Inferred from `url`. |
 
-Environment variables are read when agt connects, from the environment of the Web console or
-scheduler process.
+Environment variables are read when agt connects, from the environment of the Web console or scheduler process.
 
 ### Agent tools
 
@@ -120,12 +112,9 @@ scheduler process.
 
 ### How tool calls are checked
 
-- Tool arguments are validated against the server's input schema (JSON Schema 2020-12 by
-  default) before anything else. Invalid calls return an error to the model and never reach the
-  server or the approval queue.
+- Tool arguments are validated against the server's input schema (JSON Schema 2020-12 by default) before anything else. Invalid calls return an error to the model and never reach the server or the approval queue.
 - Schemas may not load external references.
-- When an agent with `resource_management` changes its own MCP servers, the new tools load after
-  its current batch of tool calls. If loading fails, it keeps the old tools and is told why.
+- When an agent with `resource_management` changes its own MCP servers, the new tools load after its current batch of tool calls. If loading fails, it keeps the old tools and is told why.
 
 ## Related modules
 

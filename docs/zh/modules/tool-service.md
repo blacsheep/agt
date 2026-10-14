@@ -72,8 +72,7 @@ MCP 客户端配置：
 | `--conversation <id>` | 只看一个会话 |
 | `--after <游标>` | 从之前某个事件的游标之后继续 |
 
-先输出一行 `ready`，之后每个变化（例如新消息或任务更新）输出一行 JSON。事件只是提示：详情请用普通工具读取。
-收到 `resync_required` 时，重新加载你的视图，再从新游标继续。事件保留 7 天。
+先输出一行 `ready`，之后每个变化（例如新消息或任务更新）输出一行 JSON。事件只是提示：详情请用普通工具读取。收到 `resync_required` 时，重新加载你的视图，再从新游标继续。事件保留 7 天。
 
 ### 可用的工具
 
@@ -86,8 +85,7 @@ MCP 客户端配置：
 | 身份与绑定 | | 是 | [Agent](./agent.md#身份与绑定) |
 | Codex 会话 | | 是 | [Harness](./harness.md#agent-工具) |
 
-在 Agent 执行中，工具名带有 `framework_` 前缀，例如 `framework_message_send`。Agent 通过 `resource_management`
-获得资源、身份和 Codex 工具，而不是 `--manager`。
+在 Agent 执行中，工具名带有 `framework_` 前缀，例如 `framework_message_send`。Agent 通过 `resource_management` 获得资源、身份和 Codex 工具，而不是 `--manager`。
 
 ### 错误格式
 

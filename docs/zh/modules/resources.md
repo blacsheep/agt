@@ -53,8 +53,7 @@ agt model delete experiments/cheap --dry-run
 
 ### 通用 CLI 命令
 
-每种资源都支持这些子命令（Harness 为 `agt harness resource ...`）。别名：`add` = `create`、`ls` = `list`、
-`show`/`get` = `info`、`edit` = `update`、`remove` = `delete`。
+每种资源都支持这些子命令（Harness 为 `agt harness resource ...`）。别名：`add` = `create`、`ls` = `list`、 `show`/`get` = `info`、`edit` = `update`、`remove` = `delete`。
 
 | 命令 | 选项 | 含义 |
 | --- | --- | --- |
@@ -70,8 +69,7 @@ agt model delete experiments/cheap --dry-run
 ### 删除规则
 
 - 删除仍被其他资源引用的资源会被拒绝，并列出依赖者。
-- `--recursive` 会一并删除依赖者：删除 Provider 会删除它的 Model 和使用这些 Model 的 Agent；删除 Prompt、Skill、
-  MCP 服务、Harness 或 Model 会删除使用它的 Agent。删除 Agent 不会删除它使用的资源。
+- `--recursive` 会一并删除依赖者：删除 Provider 会删除它的 Model 和使用这些 Model 的 Agent；删除 Prompt、Skill、 MCP 服务、Harness 或 Model 会删除使用它的 Agent。删除 Agent 不会删除它使用的资源。
 - 仍有绑定的 Agent 需要先解除绑定（见 [Agent](./agent.md#身份与绑定)）。
 - `default/default`（Prompt）不能删除。
 - 删除前，agt 会检查全部七种资源是否有损坏的配置和悬空引用，发现不一致就拒绝删除。
@@ -96,13 +94,11 @@ agt model delete experiments/cheap --dry-run
 - 省略的字段保持不变；
 - `expected_revision`（来自 `resource_read`）使更新在他人已修改时失败；
 - `add` / `remove` 增删 Agent 的 `skills`、`mcps` 和 `builtin_tools` 中的单项；
-- `clear` 重置可选字段：Agent 的 `description`、`skills`、`mcps`、`builtin_tools`；Model 的 `max_tokens`、
-  `reasoning_effort`；Harness 的 `model`、`reasoning_effort`。
+- `clear` 重置可选字段：Agent 的 `description`、`skills`、`mcps`、`builtin_tools`；Model 的 `max_tokens`、 `reasoning_effort`；Harness 的 `model`、`reasoning_effort`。
 
 不要在一次调用中同时替换列表、`clear` 以及对同一项 `add`/`remove`。`create: true` 时不能使用 `add`、`remove` 和 `clear`。
 
-**`resource_delete` 详细说明。** 不带 `confirm` 调用以获取删除计划。然后再次调用，把 `confirm` 设为计划中完整、
-有序的条目列表。空列表永远不能确认非空计划。
+**`resource_delete` 详细说明。** 不带 `confirm` 调用以获取删除计划。然后再次调用，把 `confirm` 设为计划中完整、有序的条目列表。空列表永远不能确认非空计划。
 
 ## 相关模块
 

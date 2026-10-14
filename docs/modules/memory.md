@@ -13,17 +13,14 @@
 
 Memory gives each agent two abilities, without an embedding service:
 
-- **Search history**: find messages it can see, across all its conversations, by keyword,
-  conversation and date.
+- **Search history**: find messages it can see, across all its conversations, by keyword, conversation and date.
 - **Keep notes**: save a private topic and summary that cites the messages it is based on.
 
-Notes belong to one identity, and every recall re-checks that the agent can still see the
-source messages. See [Memory](../guide/memory.md) for how agents use it.
+Notes belong to one identity, and every recall re-checks that the agent can still see the source messages. See [Memory](../guide/memory.md) for how agents use it.
 
 ## How to use it
 
-Memory tools are available to every hosted agent (native or Codex) while `memory.enabled` is
-true. People and scripts can call them for their own identity:
+Memory tools are available to every hosted agent (native or Codex) while `memory.enabled` is true. People and scripts can call them for their own identity:
 
 ```bash
 agt tool call --principal me memory_search --args '{"query":"release","kind":"messages"}'

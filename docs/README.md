@@ -1,7 +1,6 @@
 # Docs / 文档
 
-This directory is the source of the documentation site, <https://blacsheep.github.io/agt/>.
-本目录是文档网站的源文件。
+This directory is the source of the documentation site, <https://blacsheep.github.io/agt/>. 本目录是文档网站的源文件。
 
 ## Layout / 目录
 
@@ -36,13 +35,8 @@ npm run build   # fails on dead links
 
 ## Conventions / 维护约定
 
-1. **English and Chinese user docs mirror each other.** Every page under `guide/`, `modules/`
-   and `help/` has a counterpart under `zh/` with the same file name and the same sections.
-   Change both in the same commit. 中英文用户文档逐页对应，修改时同一提交中同步两边。
-2. **User docs describe how to use agt**, not how it is implemented. Guides explain tasks step by
-   step; module pages list every command, file field, tool parameter and setting of one module. Implementation details,
-   invariants and module boundaries go in `zh/architecture/`.
-3. When behavior changes, update the affected docs in the same change. Docs describe current
-   behavior only; test results and change history belong in commit messages.
+1. **English and Chinese user docs mirror each other.** Every page under `guide/`, `modules/` and `help/` has a counterpart under `zh/` with the same file name and the same sections. Change both in the same commit. 中英文用户文档逐页对应，修改时同一提交中同步两边。
+2. **User docs describe how to use agt**, not how it is implemented. Guides explain tasks step by step; module pages list every command, file field, tool parameter and setting of one module. Implementation details, invariants and module boundaries go in `zh/architecture/`.
+3. When behavior changes, update the affected docs in the same change. Docs describe current behavior only; test results and change history belong in commit messages.
 4. Keep code identifiers, commands and protocol fields in their original form.
 5. Register new pages in `.vitepress/config.mts` and run `npm run build` to check for dead links.

@@ -12,20 +12,15 @@
 
 ## What it does
 
-A task is a request from one agent (the requester) to another (the assignee) that agt tracks
-until it ends: it is queued, run, its result is delivered back to the requester, and the
-requester files a report to the original conversation. Tasks survive restarts, can wait for one
-another, and can run in parallel when they declare which shared things they touch.
+A task is a request from one agent (the requester) to another (the assignee) that agt tracks until it ends: it is queued, run, its result is delivered back to the requester, and the requester files a report to the original conversation. Tasks survive restarts, can wait for one another, and can run in parallel when they declare which shared things they touch.
 
-Use messages for conversation and tasks for work whose result matters. See
-[Task collaboration](../guide/tasks.md) for the workflow.
+Use messages for conversation and tasks for work whose result matters. See [Task collaboration](../guide/tasks.md) for the workflow.
 
 ## How to use it
 
 1. Give the requester (usually the lead) `task_collaboration`. Assignees only need to be bound.
 2. Make sure requester and assignee share a conversation (`direct_create` or a group).
-3. The requester calls `task_request`, later reviews the result with `task_get`, and calls
-   `task_report`.
+3. The requester calls `task_request`, later reviews the result with `task_get`, and calls `task_report`.
 
 ```bash
 agt tool call --principal lead task_list --args '{"queued_only":true}'
@@ -74,8 +69,7 @@ Available only while an agent is working on a task.
 | `task_yield` | `not_before`, `reason` | Save a checkpoint and pause until a time |
 | `task_input` | `question`, `deadline` | Ask the requester a question and wait for `task_reply` or the deadline |
 
-Times are Unix milliseconds. While waiting, the agent's slot is free for other work. A deadline
-never cancels the awaited tasks and never invents a result.
+Times are Unix milliseconds. While waiting, the agent's slot is free for other work. A deadline never cancels the awaited tasks and never invents a result.
 
 ### `execution_policy`
 
@@ -107,14 +101,11 @@ never cancels the awaited tasks and never invents a result.
 | `interrupted` | Stopped by a crash or restart, and the stop is confirmed. Can be retried with `task_retry`. |
 | `outcome_unknown` | Cut off; whether the work happened is unknown. Never retried automatically. |
 
-`blocked_reason` explains why a queued task does not start, for example a disabled or `manual`
-assignee, an expired discussion, a deferral or a dependency.
+`blocked_reason` explains why a queued task does not start, for example a disabled or `manual` assignee, an expired discussion, a deferral or a dependency.
 
 ### Ordering
 
-Queued tasks run by priority (`urgent`, `high`, `normal`, `low`), then in the order they were
-queued. A task gains one priority level for every five minutes it waits, up to `high`. Running
-tasks are never preempted.
+Queued tasks run by priority (`urgent`, `high`, `normal`, `low`), then in the order they were queued. A task gains one priority level for every five minutes it waits, up to `high`. Running tasks are never preempted.
 
 ## Related modules
 

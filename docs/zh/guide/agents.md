@@ -82,8 +82,7 @@ agt agent create steward --model fast --builtin-tool resource_management
 agt agent update reviewer --add-builtin-tool task_collaboration
 ```
 
-`resource_management` 权限很大：它覆盖 home 中的所有资源，包括其他 Agent 的定义。只把它交给你信任其管理工作空间的
-Agent，例如 lead。详见 [Agent 模块](../modules/agent.md#内置能力)。
+`resource_management` 权限很大：它覆盖 home 中的所有资源，包括其他 Agent 的定义。只把它交给你信任其管理工作空间的 Agent，例如 lead。详见 [Agent 模块](../modules/agent.md#内置能力)。
 
 ## 在 CLI 中启用 Agent
 
@@ -97,8 +96,7 @@ agt tool call --principal me --manager agent_bind \
   --args '{"principal":"reviewer","agent":"reviewer"}'
 ```
 
-`agent_bind` 可选参数有 `working_directory`（默认是 home）和 `policy`（默认 `mentioned`）。
-用 `agent_set_enabled` 可以停用和重新启用 Agent，而不丢失其设置。
+`agent_bind` 可选参数有 `working_directory`（默认是 home）和 `policy`（默认 `mentioned`）。用 `agent_set_enabled` 可以停用和重新启用 Agent，而不丢失其设置。
 
 ## 单次运行 Agent
 
@@ -118,6 +116,4 @@ agt agent delete reviewer --dry-run      # 查看将删除哪些内容
 agt agent delete reviewer --yes
 ```
 
-仍有绑定的 Agent 需要先解除绑定（卡片上的**运行设置**，或 `agent_unbind`）。Provider、Model、Prompt、Skill 或 MCP
-服务仍被 Agent 使用时，删除会被拒绝，除非传入 `--recursive`，它会一并删除依赖它的 Agent。
-被删除的资源目录会移动到 `<home>/.trash/`。
+仍有绑定的 Agent 需要先解除绑定（卡片上的**运行设置**，或 `agent_unbind`）。Provider、Model、Prompt、Skill 或 MCP 服务仍被 Agent 使用时，删除会被拒绝，除非传入 `--recursive`，它会一并删除依赖它的 Agent。被删除的资源目录会移动到 `<home>/.trash/`。

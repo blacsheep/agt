@@ -11,14 +11,9 @@
 
 ## What it does
 
-A harness lets an agent run on [Codex](https://github.com/openai/codex) instead of agt's own
-model loop. Codex brings file editing, shell commands and its own sandbox, so Codex agents can
-write and test code, including MCP servers for the rest of the team.
+A harness lets an agent run on [Codex](https://github.com/openai/codex) instead of agt's own model loop. Codex brings file editing, shell commands and its own sandbox, so Codex agents can write and test code, including MCP servers for the rest of the team.
 
-agt starts `codex app-server`, keeps one Codex session per agent per conversation, forwards
-Codex's approval requests to the [approval queue](./permissions.md), and publishes Codex's final
-answer as the agent's reply. Codex uses its own login and configuration; agt stores no Codex
-credentials.
+agt starts `codex app-server`, keeps one Codex session per agent per conversation, forwards Codex's approval requests to the [approval queue](./permissions.md), and publishes Codex's final answer as the agent's reply. Codex uses its own login and configuration; agt stores no Codex credentials.
 
 ## How to use it
 
@@ -92,8 +87,7 @@ Unknown fields are rejected.
 
 ### `agt harness session`
 
-Each agent has one session per conversation. Sessions keep the configuration they started with;
-changing the harness affects new sessions only.
+Each agent has one session per conversation. Sessions keep the configuration they started with; changing the harness affects new sessions only.
 
 | Command | Options | Meaning |
 | --- | --- | --- |
@@ -109,8 +103,7 @@ changing the harness affects new sessions only.
 
 ### Conversation commands
 
-`/model`, `/status`, `/permissions`, `/compact`, `/rename`, `/skills`, `/mcp`, `/new`, `/stop`. See
-[Conversations](./web-console.md#message-box-commands).
+`/model`, `/status`, `/permissions`, `/compact`, `/rename`, `/skills`, `/mcp`, `/new`, `/stop`. See [Conversations](./web-console.md#message-box-commands).
 
 ### Agent tools
 
@@ -121,8 +114,7 @@ changing the harness affects new sessions only.
 | `harness_session_models` | `conversation`, `target`, `session` | Choices for that session |
 | `harness_session_configure` | `conversation`, `target`, `session`, `model`, `effort?` | Change that session's model and reasoning level |
 
-These need `resource_management`. The caller and `target` must both be members of the
-conversation. Sessions that are running or need review reject changes.
+These need `resource_management`. The caller and `target` must both be members of the conversation. Sessions that are running or need review reject changes.
 
 ### What Codex agents support
 

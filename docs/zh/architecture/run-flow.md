@@ -47,14 +47,10 @@ flowchart TD
 - Native 工具来源包括 Framework、MCP 和允许名单内的同步 `delegate`；本机命令需管理员配置及 Agent 能力同时开启。
 - Native 工具先做批次校验，再逐项审批和执行。拒绝可作为工具结果返回模型；致命错误或取消终止执行。
 - 模型传输重试只重试模型请求，不重放已完成工具。
-- 成功的 `framework_resource_write` 若修改自身 MCP/Skill 挂载，或当前挂载的 MCP/Skill
-  资源，会标记本批次需要刷新；批次内剩余调用继续使用旧快照，下一次模型请求才使用新能力。
-- 刷新失败不撤销已保存配置，不自动重试；模型和调用审计都会收到独立的加载结果。
-  Skill 单独变化复用现有 MCP 连接；MCP 工具别名由资源引用与远端工具名确定。
-- 刷新不更换当前 Model、Provider、基础 Prompt、Framework 能力或委派配置。
-  管理员实时切换审批策略的既有行为独立保留。MCP 使用范围由 Agent 装配决定，具体调用仍须审批。
-- 其他 Agent、Web/CLI 修改配置不会隐式刷新当前 Run。Harness 不使用这套 Native 刷新路径。
-  详见[资源管理与能力生效](resource-flow.md)。
+- 成功的 `framework_resource_write` 若修改自身 MCP/Skill 挂载，或当前挂载的 MCP/Skill 资源，会标记本批次需要刷新；批次内剩余调用继续使用旧快照，下一次模型请求才使用新能力。
+- 刷新失败不撤销已保存配置，不自动重试；模型和调用审计都会收到独立的加载结果。 Skill 单独变化复用现有 MCP 连接；MCP 工具别名由资源引用与远端工具名确定。
+- 刷新不更换当前 Model、Provider、基础 Prompt、Framework 能力或委派配置。管理员实时切换审批策略的既有行为独立保留。MCP 使用范围由 Agent 装配决定，具体调用仍须审批。
+- 其他 Agent、Web/CLI 修改配置不会隐式刷新当前 Run。Harness 不使用这套 Native 刷新路径。详见[资源管理与能力生效](resource-flow.md)。
 - 普通聊天 Native 可在安全边界接纳 steering，在当前回合完成后处理 follow-up；Harness 后续普通消息使用独立 Run。
 - 有限模型步数由当前运行配置控制；不要把保留的 legacy `max_steps` 字段当作生效限制。
 - Harness 当前使用 Codex app-server，桥接框架工具和审批；不支持将 AGT MCP 挂载或显式 delegate 允许名单直接传入该执行路径。

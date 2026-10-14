@@ -19,8 +19,7 @@ agt 中的 Agent 有两种记忆，都不需要向量服务或额外配置：
 - `conversation`：限定一个会话；
 - `day`：一个 UTC 日期；按本地时间查一段范围时，使用 Unix 毫秒的 `since`（含）和 `until`（不含）。
 
-结果分页返回：把 `next_cursor` 作为 `before` 传回即可继续。这样，Agent 不需要任何人预先做摘要，就能找到之前的决定。
-要读取整个会话，Agent 使用 `message_history`。
+结果分页返回：把 `next_cursor` 作为 `before` 传回即可继续。这样，Agent 不需要任何人预先做摘要，就能找到之前的决定。要读取整个会话，Agent 使用 `message_history`。
 
 ## 保存笔记
 
@@ -58,5 +57,4 @@ agt 中的 Agent 有两种记忆，都不需要向量服务或额外配置：
 
 ## 关闭记忆
 
-设置 `memory.enabled: false`（见[记忆模块](../modules/memory.md#设置)），或在**运行设置** → **跨会话记忆**中关闭
-**历史记忆检索**。之后的调用会立即被拒绝；新的执行不再提供记忆工具。
+设置 `memory.enabled: false`（见[记忆模块](../modules/memory.md#设置)），或在**运行设置** → **跨会话记忆**中关闭 **历史记忆检索**。之后的调用会立即被拒绝；新的执行不再提供记忆工具。

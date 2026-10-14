@@ -3,14 +3,12 @@
 `local_execution` 能力让 Native Agent 在运行 agt 的机器上执行 Shell 命令。它默认关闭，需要打开两个开关。
 
 ::: warning 这是宿主机权限
-命令以运行 agt 的用户权限执行。工作目录不是沙箱，命令做的任何事都不会回滚。只在你信任的 Agent 和模型上开启，
-并且只在可以接受这种风险的 home 和账号中使用。
+命令以运行 agt 的用户权限执行。工作目录不是沙箱，命令做的任何事都不会回滚。只在你信任的 Agent 和模型上开启，并且只在可以接受这种风险的 home 和账号中使用。
 :::
 
 ## 开启
 
-1. 在工作空间中允许：设置 `execution.enabled: true`（见[本机命令模块](../modules/local-execution.md#设置-config-yaml)），
-   或在**运行设置** → **本机执行**中打开**允许本机命令**。
+1. 在工作空间中允许：设置 `execution.enabled: true`（见[本机命令模块](../modules/local-execution.md#设置-config-yaml)），或在**运行设置** → **本机执行**中打开**允许本机命令**。
 2. 交给某个 Agent：编辑 Agent 时在**框架内置工具**中勾选**本机命令**，或：
 
 ```bash

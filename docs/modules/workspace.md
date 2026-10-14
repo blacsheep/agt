@@ -9,17 +9,13 @@
 
 ## What it does
 
-A workspace is one *home* directory. Everything agt knows lives there: resources, conversations,
-runs, tasks and settings. Different homes are completely independent, so you can keep one per
-project or use a throwaway home for experiments.
+A workspace is one *home* directory. Everything agt knows lives there: resources, conversations, runs, tasks and settings. Different homes are completely independent, so you can keep one per project or use a throwaway home for experiments.
 
-`config.yaml` holds the workspace settings: scheduling limits, approval policy, memory and local
-commands. Only the operator changes it; agents cannot, even with `resource_management`.
+`config.yaml` holds the workspace settings: scheduling limits, approval policy, memory and local commands. Only the operator changes it; agents cannot, even with `resource_management`.
 
 ## How to use it
 
-**Choose the home.** agt uses, in order: the `--home` option of the command, the `AGT_HOME`
-environment variable, then `~/.agt`. The default home is created automatically on first use.
+**Choose the home.** agt uses, in order: the `--home` option of the command, the `AGT_HOME` environment variable, then `~/.agt`. The default home is created automatically on first use.
 
 ```bash
 export AGT_HOME=/data/agt          # lasting change, in ~/.bashrc or ~/.zshrc
@@ -27,8 +23,7 @@ agt --home /tmp/demo agent list    # this command only
 agt init ~/projects/game-night     # create a new home explicitly
 ```
 
-**Change settings.** In the Web console, open **Settings**. Each setting shows its default and
-when a change takes effect. From the CLI:
+**Change settings.** In the Web console, open **Settings**. Each setting shows its default and when a change takes effect. From the CLI:
 
 ```bash
 agt config show > config.yaml      # current settings
@@ -68,10 +63,7 @@ Accepted by every command.
 
 ### `agt init <dir>`
 
-Initializes a home: creates the resource directories, the conversation database, the default
-`config.yaml` and the built-in prompts `default/default` and `default/lead`. The other databases
-are created when first needed. Running it again on an existing
-home adds anything missing without overwriting existing files.
+Initializes a home: creates the resource directories, the conversation database, the default `config.yaml` and the built-in prompts `default/default` and `default/lead`. The other databases are created when first needed. Running it again on an existing home adds anything missing without overwriting existing files.
 
 ### `agt config`
 
@@ -82,9 +74,7 @@ home adds anything missing without overwriting existing files.
 | `config apply <file>` | | Validate a YAML file and replace the whole configuration |
 | `config update` | `--value <json>` `--expected <json>` | Replace the configuration with `value`, only if the current configuration still equals `expected` (used by the Web console to avoid overwriting concurrent changes) |
 
-`apply` replaces the whole file: fields you leave out return to their defaults. Unknown fields
-and invalid values are rejected. Where a setting allows "unlimited", write `null`; `0` is not
-accepted.
+`apply` replaces the whole file: fields you leave out return to their defaults. Unknown fields and invalid values are rejected. Where a setting allows "unlimited", write `null`; `0` is not accepted.
 
 ### `config.yaml`
 

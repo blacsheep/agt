@@ -11,11 +11,9 @@
 
 ## 作用
 
-Agent 定义把执行引擎（[Model](./model.md) 或 [Harness](./harness.md)）与 [Prompt](./prompt.md)、[Skill](./skill.md)、
-[MCP 服务](./mcp.md)和内置能力组合在一起。
+Agent 定义把执行引擎（[Model](./model.md) 或 [Harness](./harness.md)）与 [Prompt](./prompt.md)、[Skill](./skill.md)、 [MCP 服务](./mcp.md)和内置能力组合在一起。
 
-只有定义什么也不会发生。要参与对话，Agent 还需要一个**身份**（会话中的参与者）和一个**绑定**：
-绑定把身份和定义连接起来，并保存运行设置。多个身份可以绑定同一个定义，并行运行。
+只有定义什么也不会发生。要参与对话，Agent 还需要一个**身份**（会话中的参与者）和一个**绑定**：绑定把身份和定义连接起来，并保存运行设置。多个身份可以绑定同一个定义，并行运行。
 
 ## 怎么用
 
@@ -30,8 +28,7 @@ agt tool call --principal me --manager agent_bind --args '{"principal":"reviewer
 agt agent update reviewer --add-builtin-tool task_collaboration
 ```
 
-**Agent 工具：** `resource_write`（定义）、`principal_create`（身份）、`agent_bind`（绑定）。`resource_write`
-会返回 `activation` 摘要，说明 Agent 是否已绑定和启用，以及下一步该做什么。
+**Agent 工具：** `resource_write`（定义）、`principal_create`（身份）、`agent_bind`（绑定）。`resource_write` 会返回 `activation` 摘要，说明 Agent 是否已绑定和启用，以及下一步该做什么。
 
 ## 常用参数
 
@@ -69,8 +66,7 @@ agt agent update reviewer --add-builtin-tool task_collaboration
 | `--add-builtin-tool`、`--remove-builtin-tool <能力>` | 授予或收回能力（可重复） |
 | `--category <c>` | 要更新的 Agent 所在分类 |
 
-修改从 Agent 的下一次执行开始生效。正在进行的执行保留原配置；例外是 Agent 修改自己的 MCP 和 Skill 时，
-会在当前这批工具调用结束后加载。
+修改从 Agent 的下一次执行开始生效。正在进行的执行保留原配置；例外是 Agent 修改自己的 MCP 和 Skill 时，会在当前这批工具调用结束后加载。
 
 ### `agt agent run <名称>`
 
@@ -117,8 +113,7 @@ builtin_tools: [task_collaboration]
 | `model` 或 `harness` | 创建时二选一 |
 | `prompt`、`skills`、`mcps`、`builtin_tools`、`description` | 可选。列表会替换当前列表；空列表表示全部移除。 |
 
-用 `add` / `remove`（适用于 `skills`、`mcps`、`builtin_tools`）修改单项，用 `clear` 重置 `description`、`skills`、
-`mcps` 或 `builtin_tools`。
+用 `add` / `remove`（适用于 `skills`、`mcps`、`builtin_tools`）修改单项，用 `clear` 重置 `description`、`skills`、 `mcps` 或 `builtin_tools`。
 
 ### 内置能力
 

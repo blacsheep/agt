@@ -9,11 +9,9 @@
 
 ## 作用
 
-一个工作空间就是一个 *home* 目录。agt 的所有数据都在里面：资源、会话、执行、任务和设置。不同的 home 完全独立，
-可以每个项目一个，也可以用临时 home 做实验。
+一个工作空间就是一个 *home* 目录。agt 的所有数据都在里面：资源、会话、执行、任务和设置。不同的 home 完全独立，可以每个项目一个，也可以用临时 home 做实验。
 
-`config.yaml` 保存工作空间设置：调度限制、审批策略、记忆和本机命令。只有操作者能修改它；Agent 即使拥有
-`resource_management` 也不能修改。
+`config.yaml` 保存工作空间设置：调度限制、审批策略、记忆和本机命令。只有操作者能修改它；Agent 即使拥有 `resource_management` 也不能修改。
 
 ## 怎么用
 
@@ -65,8 +63,7 @@ agt config apply config.yaml       # 校验并替换整个文件
 
 ### `agt init <目录>`
 
-初始化一个 home：创建资源目录、会话数据库、默认 `config.yaml`，以及内置 Prompt `default/default` 和 `default/lead`。
-其他数据库在首次需要时创建。对已有 home 再次运行会补齐缺少的内容，不覆盖已有文件。
+初始化一个 home：创建资源目录、会话数据库、默认 `config.yaml`，以及内置 Prompt `default/default` 和 `default/lead`。其他数据库在首次需要时创建。对已有 home 再次运行会补齐缺少的内容，不覆盖已有文件。
 
 ### `agt config`
 

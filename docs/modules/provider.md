@@ -11,9 +11,7 @@
 
 ## What it does
 
-A provider tells agt where to send model requests. It works with OpenAI, API gateways, and
-local servers such as Ollama or vLLM that implement the OpenAI API. [Models](./model.md) refer to
-a provider; one provider can serve many models.
+A provider tells agt where to send model requests. It works with OpenAI, API gateways, and local servers such as Ollama or vLLM that implement the OpenAI API. [Models](./model.md) refer to a provider; one provider can serve many models.
 
 ## How to use it
 
@@ -55,8 +53,7 @@ agt provider update openai --base-url https://gateway.example.com/v1
 | `--type <type>` | no | `openai-compatible` | Provider type; currently only `openai-compatible` |
 | `--category <c>` | no | `default` | Category |
 
-The key is read once, when the command runs, and stored in `provider.yaml`. Changing the
-environment variable later does not change the stored key.
+The key is read once, when the command runs, and stored in `provider.yaml`. Changing the environment variable later does not change the stored key.
 
 ### `agt provider update <name>`
 

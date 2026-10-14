@@ -1,15 +1,12 @@
 # Connect models
 
-Native agents talk to models through two resources: a **provider** (where to send requests)
-and a **model** (which model to use there, and how).
+Native agents talk to models through two resources: a **provider** (where to send requests) and a **model** (which model to use there, and how).
 
 ## Providers
 
-A provider is an OpenAI-compatible endpoint. It works with OpenAI, API gateways, and local
-servers such as Ollama or vLLM, as long as they implement the OpenAI API.
+A provider is an OpenAI-compatible endpoint. It works with OpenAI, API gateways, and local servers such as Ollama or vLLM, as long as they implement the OpenAI API.
 
-**Web console:** **Resources** (资源库) → **New resource** (新建资源) → Provider. Enter a
-name, the base URL and the API key.
+**Web console:** **Resources** (资源库) → **New resource** (新建资源) → Provider. Enter a name, the base URL and the API key.
 
 **CLI:**
 
@@ -24,16 +21,13 @@ agt provider list-models openai     # list the models the endpoint offers
 agt provider update openai --base-url https://gateway.example.com/v1
 ```
 
-The key is saved in the provider's `provider.yaml` inside your home. agt never returns it in
-lists, tool results or errors, but it is not an encrypted vault: protect the home directory
-like any file containing credentials.
+The key is saved in the provider's `provider.yaml` inside your home. agt never returns it in lists, tool results or errors, but it is not an encrypted vault: protect the home directory like any file containing credentials.
 
 ## Models
 
 A model resource names a model on a provider and sets how agt calls it.
 
-**Web console:** **Resources** → **New resource** → Model. Choose the provider, click
-**Fetch model list** (获取模型列表) or type the model name, and choose the API format.
+**Web console:** **Resources** → **New resource** → Model. Choose the provider, click **Fetch model list** (获取模型列表) or type the model name, and choose the API format.
 
 **CLI:**
 
@@ -46,29 +40,20 @@ agt model info fast
 
 The options that matter most:
 
-- `--api-format`: `chat-completions` (default) or `responses`. It must match what the provider
-  supports for this model; agt does not switch automatically.
+- `--api-format`: `chat-completions` (default) or `responses`. It must match what the provider supports for this model; agt does not switch automatically.
 - `--tool-call true`: required for agents that use any tool.
 - `--reasoning-effort`: the thinking level of reasoning models.
-- `--context-window`: the input tokens the model accepts (default 272000). Set it from your
-  provider's documentation; agt uses it to decide when to summarize old context.
+- `--context-window`: the input tokens the model accepts (default 272000). Set it from your provider's documentation; agt uses it to decide when to summarize old context.
 
 Every option, its default and the file format are in the [Model module](../modules/model.md).
 
-Several model resources can point to the same provider model with different settings, for
-example a `fast` and a `careful` variant.
+Several model resources can point to the same provider model with different settings, for example a `fast` and a `careful` variant.
 
 ## How agt calls the model
 
-- **Streaming.** Requests use streaming, so the console can show progress and a preview of the
-  reply while the model is generating. Providers that ignore streaming still work, without
-  the preview.
-- **Retries.** Connection errors, server errors, invalid responses and empty replies are
-  retried, up to 10 attempts with backoff. Errors such as invalid configuration or an explicit
-  refusal are not retried.
-- **Context management.** When a conversation approaches 90% of the context window, agt
-  summarizes older history automatically (this calls the model). You can reset an agent's
-  context in a conversation with `/new`; chat history is kept.
+- **Streaming.** Requests use streaming, so the console can show progress and a preview of the reply while the model is generating. Providers that ignore streaming still work, without the preview.
+- **Retries.** Connection errors, server errors, invalid responses and empty replies are retried, up to 10 attempts with backoff. Errors such as invalid configuration or an explicit refusal are not retried.
+- **Context management.** When a conversation approaches 90% of the context window, agt summarizes older history automatically (this calls the model). You can reset an agent's context in a conversation with `/new`; chat history is kept.
 - **Text only.** Image input is not supported yet.
 
 ## Checking a connection
@@ -78,6 +63,4 @@ agt provider test openai          # validates the configuration (no network call
 agt provider list-models openai   # calls the provider's /models endpoint with the stored key
 ```
 
-The surest test is a short direct chat with an agent that uses the model. If it fails, turn
-on debug mode in the console, or run `agt run info <run id>` to see the HTTP status and the
-number of attempts. See [Troubleshooting](../help/troubleshooting.md).
+The surest test is a short direct chat with an agent that uses the model. If it fails, turn on debug mode in the console, or run `agt run info <run id>` to see the HTTP status and the number of attempts. See [Troubleshooting](../help/troubleshooting.md).

@@ -11,9 +11,7 @@
 
 ## 作用
 
-Model 资源为 [Provider](./provider.md) 上的一个模型命名，并指定使用的协议和设置。Native [Agent](./agent.md) 引用 Model；
-修改 Model 资源后，所有使用它的 Agent 从下一次执行开始生效。同一个底层模型可以定义多个 Model 资源，例如 `fast`
-和 `careful` 两个版本。
+Model 资源为 [Provider](./provider.md) 上的一个模型命名，并指定使用的协议和设置。Native [Agent](./agent.md) 引用 Model；修改 Model 资源后，所有使用它的 Agent 从下一次执行开始生效。同一个底层模型可以定义多个 Model 资源，例如 `fast` 和 `careful` 两个版本。
 
 agt 以流式方式接收响应，对临时故障最多重试 10 次，并在对话接近上下文窗口时自动摘要旧的上下文。
 

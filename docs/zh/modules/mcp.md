@@ -11,9 +11,7 @@
 
 ## 作用
 
-MCP 资源描述如何启动（stdio）或连接（HTTP）一个 [Model Context Protocol](https://modelcontextprotocol.io) 服务。
-把它挂载到 Native Agent 上，Agent 就能调用它的工具。每次执行开始时，Agent 会连接自己的 MCP 服务；
-每次调用都会按工具的输入 schema 和[审批策略](./permissions.md)检查。
+MCP 资源描述如何启动（stdio）或连接（HTTP）一个 [Model Context Protocol](https://modelcontextprotocol.io) 服务。把它挂载到 Native Agent 上，Agent 就能调用它的工具。每次执行开始时，Agent 会连接自己的 MCP 服务；每次调用都会按工具的输入 schema 和[审批策略](./permissions.md)检查。
 
 注册服务不会让任何人获得使用权；只有挂载了它的 Agent 才能使用。Codex Agent 不使用这些资源，请在 Codex 中配置 MCP。
 
@@ -29,8 +27,7 @@ agt mcp probe files                       # 启动服务并列出工具
 agt agent update researcher --add-mcp files
 ```
 
-**Agent 工具：** 用 `resource_write` 注册，用 `mcp_probe` 检查，用
-`resource_write(kind="agent", data={}, add={"mcps":["files"]})` 挂载。见 [MCP 工具](../guide/mcp.md#让-agent-自己造工具)。
+**Agent 工具：** 用 `resource_write` 注册，用 `mcp_probe` 检查，用 `resource_write(kind="agent", data={}, add={"mcps":["files"]})` 挂载。见 [MCP 工具](../guide/mcp.md#让-agent-自己造工具)。
 
 ## 常用参数
 

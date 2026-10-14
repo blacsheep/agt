@@ -11,22 +11,15 @@
 
 ## What it does
 
-Every time an agent replies to a message or works on a task, agt records a **run**: its input,
-status, model calls, tool calls and output. Runs let you see what an agent did, why it failed,
-and what it cost in calls.
+Every time an agent replies to a message or works on a task, agt records a **run**: its input, status, model calls, tool calls and output. Runs let you see what an agent did, why it failed, and what it cost in calls.
 
-A native run loops between the model and tools until the model gives a final answer. Messages
-that arrive meanwhile are delivered at the next tool boundary (`steering`) or after the current
-work (`follow_up`). Codex runs are a Codex turn, with Codex's own tool loop.
+A native run loops between the model and tools until the model gives a final answer. Messages that arrive meanwhile are delivered at the next tool boundary (`steering`) or after the current work (`follow_up`). Codex runs are a Codex turn, with Codex's own tool loop.
 
-`completed` means the model finished normally, not that the goal was achieved; check the tool
-failures and the output. A run cut off during a model or tool call is never retried
-automatically, because the call may already have had an effect.
+`completed` means the model finished normally, not that the goal was achieved; check the tool failures and the output. A run cut off during a model or tool call is never retried automatically, because the call may already have had an effect.
 
 ## How to use it
 
-**Web console:** each reply shows its tool calls, duration and failures; click to expand or open
-the full record. Turn on **Debug** for run IDs, call counts and error codes.
+**Web console:** each reply shows its tool calls, duration and failures; click to expand or open the full record. Turn on **Debug** for run IDs, call counts and error codes.
 
 **CLI:**
 
@@ -58,8 +51,7 @@ agt run tool-detail <run> --activity <activity>
 
 ### `agt agent run`
 
-Runs an agent once, outside any conversation. Options are listed in
-[Agent](./agent.md#agt-agent-run-name).
+Runs an agent once, outside any conversation. Options are listed in [Agent](./agent.md#agt-agent-run-name).
 
 ### Settings
 

@@ -11,25 +11,19 @@
 
 ## What it does
 
-Messages are only stored until a person authorizes a **discussion**. Within an authorized
-discussion, the scheduler:
+Messages are only stored until a person authorizes a **discussion**. Within an authorized discussion, the scheduler:
 
 1. delivers each message to the other members;
-2. for each agent, applies its response policy: replies to direct messages and mentions, and for
-   other messages (policy `all`) first lets the agent decide whether to take part;
+2. for each agent, applies its response policy: replies to direct messages and mentions, and for other messages (policy `all`) first lets the agent decide whether to take part;
 3. lets agents reply one at a time per identity, with at most `scheduler.concurrency` runs at once;
 4. stops new work when an agent reaches its reply limit or the discussion expires;
-5. keeps its state on disk, so waiting work resumes after a restart. Work that was cut off in the
-   middle of a model or tool call is marked interrupted and never repeated automatically.
+5. keeps its state on disk, so waiting work resumes after a restart. Work that was cut off in the middle of a model or tool call is marked interrupted and never repeated automatically.
 
-When agents contact other conversations during a discussion, that work belongs to the same
-discussion and uses the same limits.
+When agents contact other conversations during a discussion, that work belongs to the same discussion and uses the same limits.
 
 ## How to use it
 
-**Web console:** the console runs the scheduler. Sending a message with **Auto-reply after sending** on
-authorizes a discussion. Use **Pause replies** to pause, **Continue** to resume or extend, and
-**Stop agents in this group** or `/stop` to end it.
+**Web console:** the console runs the scheduler. Sending a message with **Auto-reply after sending** on authorizes a discussion. Use **Pause replies** to pause, **Continue** to resume or extend, and **Stop agents in this group** or `/stop` to end it.
 
 **CLI:**
 

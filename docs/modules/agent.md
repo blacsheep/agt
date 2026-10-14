@@ -11,17 +11,13 @@
 
 ## What it does
 
-An agent definition combines an engine (a [model](./model.md) or a [harness](./harness.md)) with
-a [prompt](./prompt.md), [skills](./skill.md), [MCP servers](./mcp.md) and built-in capabilities.
+An agent definition combines an engine (a [model](./model.md) or a [harness](./harness.md)) with a [prompt](./prompt.md), [skills](./skill.md), [MCP servers](./mcp.md) and built-in capabilities.
 
-A definition alone does nothing. To chat, an agent also needs an **identity** (a participant in
-conversations) and a **binding** that connects the identity to the definition and holds its
-running settings. Several identities can be bound to the same definition and run in parallel.
+A definition alone does nothing. To chat, an agent also needs an **identity** (a participant in conversations) and a **binding** that connects the identity to the definition and holds its running settings. Several identities can be bound to the same definition and run in parallel.
 
 ## How to use it
 
-**Web console:** **Agent team** → **Create agent** creates the definition, the identity and the
-binding in one step. Use **Edit role** to change the definition and **Configure** for the binding.
+**Web console:** **Agent team** → **Create agent** creates the definition, the identity and the binding in one step. Use **Edit role** to change the definition and **Configure** for the binding.
 
 **CLI:**
 
@@ -32,9 +28,7 @@ agt tool call --principal me --manager agent_bind --args '{"principal":"reviewer
 agt agent update reviewer --add-builtin-tool task_collaboration
 ```
 
-**Agent tools:** `resource_write` (definition), `principal_create` (identity), `agent_bind`
-(binding). `resource_write` returns an `activation` summary that says whether the agent is
-bound and enabled, and what to do next.
+**Agent tools:** `resource_write` (definition), `principal_create` (identity), `agent_bind` (binding). `resource_write` returns an `activation` summary that says whether the agent is bound and enabled, and what to do next.
 
 ## Common parameters
 
@@ -72,8 +66,7 @@ bound and enabled, and what to do next.
 | `--add-builtin-tool`, `--remove-builtin-tool <capability>` | Grant or revoke a capability (repeatable) |
 | `--category <c>` | Category of the agent to update |
 
-Changes apply from the agent's next run. A run in progress keeps its configuration, except that
-an agent's own MCP and skill changes load after its current batch of tool calls.
+Changes apply from the agent's next run. A run in progress keeps its configuration, except that an agent's own MCP and skill changes load after its current batch of tool calls.
 
 ### `agt agent run <name>`
 
@@ -120,8 +113,7 @@ builtin_tools: [task_collaboration]
 | `model` or `harness` | Exactly one on create |
 | `prompt`, `skills`, `mcps`, `builtin_tools`, `description` | Optional. Lists replace the current list; an empty list removes everything. |
 
-Use `add` / `remove` (for `skills`, `mcps`, `builtin_tools`) to change single items, and
-`clear` to reset `description`, `skills`, `mcps` or `builtin_tools`.
+Use `add` / `remove` (for `skills`, `mcps`, `builtin_tools`) to change single items, and `clear` to reset `description`, `skills`, `mcps` or `builtin_tools`.
 
 ### Built-in capabilities
 
@@ -131,8 +123,7 @@ Use `add` / `remove` (for `skills`, `mcps`, `builtin_tools`) to change single it
 | `task_collaboration` | 任务协作 | The [task](./tasks.md) tools |
 | `local_execution` | 本机命令 | The [local command](./local-execution.md) tool (native only; also needs `execution.enabled`) |
 
-Capabilities are not inherited by agents an agent creates. Messaging and
-[memory](./memory.md) tools are always available.
+Capabilities are not inherited by agents an agent creates. Messaging and [memory](./memory.md) tools are always available.
 
 ### Identities and bindings
 

@@ -23,9 +23,7 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/blacsheep/agt/releases/
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.ps1 | iex"
 ```
 
-安装脚本会识别你的平台，从 [GitHub Releases](https://github.com/blacsheep/agt/releases) 下载对应的 `agt` 程序，
-校验 SHA-256，然后放到 `~/.local/bin`（Windows 为 `%USERPROFILE%\.local\bin`）。它还会把该目录加入 `PATH`；
-打开一个新终端，或运行它打印的 `source` 命令，然后检查：
+安装脚本会识别你的平台，从 [GitHub Releases](https://github.com/blacsheep/agt/releases) 下载对应的 `agt` 程序，校验 SHA-256，然后放到 `~/.local/bin`（Windows 为 `%USERPROFILE%\.local\bin`）。它还会把该目录加入 `PATH`；打开一个新终端，或运行它打印的 `source` 命令，然后检查：
 
 ```bash
 agt --version
@@ -40,8 +38,7 @@ less agt-installer.sh
 sh agt-installer.sh
 ```
 
-也可以从 [Releases 页面](https://github.com/blacsheep/agt/releases)下载对应平台的压缩包，用 `sha256.sum` 校验后，
-把 `agt` 放到 `PATH` 中的任意位置。
+也可以从 [Releases 页面](https://github.com/blacsheep/agt/releases)下载对应平台的压缩包，用 `sha256.sum` 校验后，把 `agt` 放到 `PATH` 中的任意位置。
 :::
 
 ### 其他安装方式
@@ -66,8 +63,7 @@ cargo build -p agt-cli        # target/debug/agt
 agt web
 ```
 
-命令会打印一个链接，例如 `http://127.0.0.1:4317/#<令牌>`。请打开**完整**链接，包括 `#` 后面的令牌，浏览器靠它获得授权。
-控制台同时运行调度器，配置好的 Agent 可以立即回复。按 Ctrl+C 停止。
+命令会打印一个链接，例如 `http://127.0.0.1:4317/#<令牌>`。请打开**完整**链接，包括 `#` 后面的令牌，浏览器靠它获得授权。控制台同时运行调度器，配置好的 Agent 可以立即回复。按 Ctrl+C 停止。
 
 | 选项 | 默认值 | 用途 |
 | --- | --- | --- |
@@ -106,8 +102,7 @@ agt 把所有数据放在一个 *home* 目录中，默认是 `~/.agt`，首次�
 export AGT_HOME=/data/agt
 ```
 
-home 的选择顺序是：`--home` > `AGT_HOME` > `~/.agt`。`--home` 只对传入它的那条命令生效，长期切换请用
-`AGT_HOME`。要为某个项目单独建立 home，运行 `agt init <目录>`。
+home 的选择顺序是：`--home` > `AGT_HOME` > `~/.agt`。`--home` 只对传入它的那条命令生效，长期切换请用 `AGT_HOME`。要为某个项目单独建立 home，运行 `agt init <目录>`。
 
 ## 更新
 
@@ -115,8 +110,7 @@ home 的选择顺序是：`--home` > `AGT_HOME` > `~/.agt`。`--home` 只对传�
 
 ## 卸载
 
-删除程序（`~/.local/bin/agt`）以及安装脚本创建的 `PATH` 配置（`~/.config/agt-cli/`，以及 shell 配置文件中引用它的那一行）。
-数据会保留在 `~/.agt`（或 `$AGT_HOME`）中，直到你自己删除。
+删除程序（`~/.local/bin/agt`）以及安装脚本创建的 `PATH` 配置（`~/.config/agt-cli/`，以及 shell 配置文件中引用它的那一行）。数据会保留在 `~/.agt`（或 `$AGT_HOME`）中，直到你自己删除。
 
 ## 下一步
 

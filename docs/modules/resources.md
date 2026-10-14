@@ -22,8 +22,7 @@ Resources are the files that describe agents. There are seven types, each with i
 | Harness | An external engine (Codex) and its project | [Harness](./harness.md) |
 | Agent | A model or harness plus prompt, skills, MCP servers and capabilities | [Agent](./agent.md) |
 
-All seven share the same naming, categories, deletion rules and agent tools, described here.
-People and agents edit resources through the same code path, with the same validation and locks.
+All seven share the same naming, categories, deletion rules and agent tools, described here. People and agents edit resources through the same code path, with the same validation and locks.
 
 ## How to use it
 
@@ -54,9 +53,7 @@ An agent with `resource_management` does the same through tools:
 
 ### Shared CLI commands
 
-Every resource type supports these subcommands (for harnesses: `agt harness resource ...`).
-Aliases: `add` = `create`, `ls` = `list`, `show`/`get` = `info`, `edit` = `update`,
-`remove` = `delete`.
+Every resource type supports these subcommands (for harnesses: `agt harness resource ...`). Aliases: `add` = `create`, `ls` = `list`, `show`/`get` = `info`, `edit` = `update`, `remove` = `delete`.
 
 | Command | Options | Meaning |
 | --- | --- | --- |
@@ -72,15 +69,11 @@ Aliases: `add` = `create`, `ls` = `list`, `show`/`get` = `info`, `edit` = `updat
 ### Deletion rules
 
 - Deleting a resource that others still reference is refused, with the list of dependents.
-- `--recursive` deletes the dependents too: deleting a provider deletes its models and the agents
-  using them; deleting a prompt, skill, MCP server, harness or model deletes the agents using it.
-  Resources an agent uses are never deleted because the agent is deleted.
+- `--recursive` deletes the dependents too: deleting a provider deletes its models and the agents using them; deleting a prompt, skill, MCP server, harness or model deletes the agents using it. Resources an agent uses are never deleted because the agent is deleted.
 - An agent that is still bound must be unbound first (see [Agent](./agent.md#identities-and-bindings)).
 - `default/default` (prompt) cannot be deleted.
-- Before deleting, agt checks all seven types for broken configuration and dangling references,
-  and refuses if anything is inconsistent.
-- Deleted directories are moved to `<home>/.trash/`. In a terminal you are asked to confirm;
-  elsewhere pass `--yes`.
+- Before deleting, agt checks all seven types for broken configuration and dangling references, and refuses if anything is inconsistent.
+- Deleted directories are moved to `<home>/.trash/`. In a terminal you are asked to confirm; elsewhere pass `--yes`.
 
 ### Agent tools
 
@@ -96,22 +89,16 @@ Aliases: `add` = `create`, `ls` = `list`, `show`/`get` = `info`, `edit` = `updat
 
 `kind` is one of `provider`, `model`, `prompt`, `skill`, `mcp`, `agent`, `harness`.
 
-**`resource_write` details.** The fields of `data` depend on the type and are listed on each
-type's page. On update:
+**`resource_write` details.** The fields of `data` depend on the type and are listed on each type's page. On update:
 
 - omitted fields stay unchanged;
-- `expected_revision` (from `resource_read`) makes the update fail if someone changed the
-  resource in the meantime;
+- `expected_revision` (from `resource_read`) makes the update fail if someone changed the resource in the meantime;
 - `add` / `remove` add or remove items of an agent's `skills`, `mcps` and `builtin_tools`;
-- `clear` resets optional fields: an agent's `description`, `skills`, `mcps`, `builtin_tools`;
-  a model's `max_tokens`, `reasoning_effort`; a harness's `model`, `reasoning_effort`.
+- `clear` resets optional fields: an agent's `description`, `skills`, `mcps`, `builtin_tools`; a model's `max_tokens`, `reasoning_effort`; a harness's `model`, `reasoning_effort`.
 
-Do not combine replacing a list, `clear`, and `add`/`remove` of the same item in one call.
-`add`, `remove` and `clear` are not allowed with `create: true`.
+Do not combine replacing a list, `clear`, and `add`/`remove` of the same item in one call. `add`, `remove` and `clear` are not allowed with `create: true`.
 
-**`resource_delete` details.** Call it without `confirm` to get the deletion plan. Then call it
-again with `confirm` set to the exact, ordered list of items in the plan. An empty list never
-confirms a non-empty plan.
+**`resource_delete` details.** Call it without `confirm` to get the deletion plan. Then call it again with `confirm` set to the exact, ordered list of items in the plan. An empty list never confirms a non-empty plan.
 
 ## Related modules
 

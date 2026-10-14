@@ -1,7 +1,6 @@
 # MCP 工具
 
-[Model Context Protocol](https://modelcontextprotocol.io) 服务为 Agent 提供工具：文件访问、网页搜索、数据库、游戏状态，
-或任何你自己写的功能。在 agt 中，MCP 服务是一种资源，可以挂载到 Native Agent 上。
+[Model Context Protocol](https://modelcontextprotocol.io) 服务为 Agent 提供工具：文件访问、网页搜索、数据库、游戏状态，或任何你自己写的功能。在 agt 中，MCP 服务是一种资源，可以挂载到 Native Agent 上。
 
 ## 注册服务
 
@@ -39,8 +38,7 @@ MCP 资源是一个只包含一个服务的 `mcpServers` 文档，格式与许�
 }
 ```
 
-凭据不要写在 URL 里；使用 `bearer_token_env_var`、`http_headers` 或 `env_http_headers`（请求头名到环境变量名的映射）。
-环境变量在 agt 连接时读取，因此要在启动 Web 控制台或调度器的环境中设置。
+凭据不要写在 URL 里；使用 `bearer_token_env_var`、`http_headers` 或 `env_http_headers`（请求头名到环境变量名的映射）。环境变量在 agt 连接时读取，因此要在启动 Web 控制台或调度器的环境中设置。
 
 **Web 控制台：** **资源库** → **新建资源** → MCP，然后粘贴文档。
 
@@ -67,16 +65,13 @@ agt agent update researcher --add-mcp files
 agt agent update researcher --remove-mcp files
 ```
 
-也可以在 Agent 的**编辑角色**表单的 MCP 部分勾选。Agent 在每次执行开始时连接其 MCP 服务，所以修改从下一次执行开始生效。
-拥有 `resource_management` 的 Agent 修改自己的 MCP 服务时，改动在当前这批工具调用结束后立即生效。
+也可以在 Agent 的**编辑角色**表单的 MCP 部分勾选。Agent 在每次执行开始时连接其 MCP 服务，所以修改从下一次执行开始生效。拥有 `resource_management` 的 Agent 修改自己的 MCP 服务时，改动在当前这批工具调用结束后立即生效。
 
 Agent 只能使用挂载给它的服务。在 home 中注册服务并不会让任何人获得使用权。
 
 ## 让 Agent 自己造工具
 
-拥有 `resource_management` 的 Agent 可以通过工具完成上述所有操作：用 `resource_write(kind="mcp")` 注册服务，
-用 `resource_test` 和 `mcp_probe` 检查，再用 `resource_write(kind="agent", create=false, data={}, add={mcps:[...]})` 挂载。
-配合一个编写服务代码的 [Codex Agent](./codex.md)，lead 就能造出团队缺少的工具。见[让 lead 组建团队](./lead-team.md)。
+拥有 `resource_management` 的 Agent 可以通过工具完成上述所有操作：用 `resource_write(kind="mcp")` 注册服务，用 `resource_test` 和 `mcp_probe` 检查，再用 `resource_write(kind="agent", create=false, data={}, add={mcps:[...]})` 挂载。配合一个编写服务代码的 [Codex Agent](./codex.md)，lead 就能造出团队缺少的工具。见[让 lead 组建团队](./lead-team.md)。
 
 让 Agent 编写 MCP 服务时，建议要求：
 
@@ -86,8 +81,7 @@ Agent 只能使用挂载给它的服务。在 home 中注册服务并不会让�
 
 ## 工具调用如何校验
 
-Agent 的每次调用在执行任何操作前，都会先按工具的输入 schema 校验。参数无效时，错误会返回给模型让它修正，
-不会到达服务，也不会进入审批队列。有效的调用再经过[审批策略](./permissions.md)。
+Agent 的每次调用在执行任何操作前，都会先按工具的输入 schema 校验。参数无效时，错误会返回给模型让它修正，不会到达服务，也不会进入审批队列。有效的调用再经过[审批策略](./permissions.md)。
 
 ## 限制
 

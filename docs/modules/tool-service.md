@@ -8,8 +8,7 @@
 
 ## What it does
 
-The tools agents use (messages, resources, tasks, memory and so on) are provided by one tool
-service. The same service is available outside agents in three ways:
+The tools agents use (messages, resources, tasks, memory and so on) are provided by one tool service. The same service is available outside agents in three ways:
 
 | Command | Use it for |
 | --- | --- |
@@ -17,8 +16,7 @@ service. The same service is available outside agents in three ways:
 | `agt serve` | Exposing the tools to an MCP client over stdio |
 | `agt events watch` | Following changes as a stream of JSON lines |
 
-The caller's identity is fixed by whoever starts the command (`--principal`), never by tool
-arguments. `--manager` adds the resource and binding tools for a trusted local process.
+The caller's identity is fixed by whoever starts the command (`--principal`), never by tool arguments. `--manager` adds the resource and binding tools for a trusted local process.
 
 ## How to use it
 
@@ -64,8 +62,7 @@ See [Use agt from MCP clients](../guide/mcp-clients.md).
 | `--principal <id>` | Required. The identity of every call made through this server. |
 | `--manager` | Add resource and binding tools |
 
-`agt serve` stores and delivers messages but does not run agents. Agents reply only when a
-discussion is authorized (Web console or `agt schedule start`) and a scheduler is running.
+`agt serve` stores and delivers messages but does not run agents. Agents reply only when a discussion is authorized (Web console or `agt schedule start`) and a scheduler is running.
 
 ### `agt events watch`
 
@@ -75,9 +72,7 @@ discussion is authorized (Web console or `agt schedule start`) and a scheduler i
 | `--conversation <id>` | Only one conversation |
 | `--after <cursor>` | Resume after a cursor from an earlier event |
 
-Prints one JSON line per change, such as a new message or a task update, after an initial
-`ready` line. Events are hints: read the details with the normal tools. If you receive
-`resync_required`, reload your view and continue from the new cursor. Events are kept for 7 days.
+Prints one JSON line per change, such as a new message or a task update, after an initial `ready` line. Events are hints: read the details with the normal tools. If you receive `resync_required`, reload your view and continue from the new cursor. Events are kept for 7 days.
 
 ### Which tools are available
 
@@ -90,9 +85,7 @@ Prints one JSON line per change, such as a new message or a task update, after a
 | Identities and bindings | | yes | [Agent](./agent.md#identities-and-bindings) |
 | Codex sessions | | yes | [Harness](./harness.md#agent-tools) |
 
-Inside agent runs, tool names carry a `framework_` prefix, for example `framework_message_send`.
-Agents get the resource, identity and Codex tools from `resource_management` instead of
-`--manager`.
+Inside agent runs, tool names carry a `framework_` prefix, for example `framework_message_send`. Agents get the resource, identity and Codex tools from `resource_management` instead of `--manager`.
 
 ### Error format
 

@@ -12,9 +12,7 @@ cargo test --workspace
 node --test web/test/*.test.mjs     # needs target/debug/agt
 ```
 
-No test needs a model API key. The browser tests (`web/test/*.browser.mjs`) need a local Chrome
-and run separately; see [Web console architecture](docs/zh/architecture/web-console.md)
-(Chinese).
+No test needs a model API key. The browser tests (`web/test/*.browser.mjs`) need a local Chrome and run separately; see [Web console architecture](docs/zh/architecture/web-console.md) (Chinese).
 
 To run the console from your working tree instead of the copy built into `agt`:
 
@@ -25,11 +23,8 @@ node web/server.mjs                 # uses target/debug/agt
 ## Where tests go
 
 - Short unit tests go in the file they test, in `#[cfg(test)] mod tests {}`.
-- Longer unit tests that need private items go in `<module>/tests.rs`, split into
-  `<module>/tests/<topic>.rs` by topic. Declare them with plain `mod`; do not use `#[path]` or
-  `include!`.
-- Integration tests that only use the public API go in `crates/<crate>/tests/`: one file as
-  `<suite>.rs`, or several as `<suite>/main.rs` with submodules. They do not reach into `src/`.
+- Longer unit tests that need private items go in `<module>/tests.rs`, split into `<module>/tests/<topic>.rs` by topic. Declare them with plain `mod`; do not use `#[path]` or `include!`.
+- Integration tests that only use the public API go in `crates/<crate>/tests/`: one file as `<suite>.rs`, or several as `<suite>/main.rs` with submodules. They do not reach into `src/`.
 
 ## Crates
 
@@ -51,35 +46,23 @@ agt-runtime    model/tool loop, persistent runs, delivery scheduling, delegation
 agt-cli        the agt command-line interface, with the Web console built in
 ```
 
-The Web console lives in `web/`: a Node.js server and plain HTML, CSS and JavaScript, with no
-npm dependencies. `crates/agt-cli/build.rs` embeds it into the `agt` binary, so a change under
-`web/public/` reaches `agt web` only after a rebuild.
+The Web console lives in `web/`: a Node.js server and plain HTML, CSS and JavaScript, with no npm dependencies. `crates/agt-cli/build.rs` embeds it into the `agt` binary, so a change under `web/public/` reaches `agt web` only after a rebuild.
 
 ### Console text
 
-Write console text in Chinese and wrap it in `$t()`; the Chinese text is the message key.
-Values go in as arguments, not by joining strings, so each language can order the sentence:
+Write console text in Chinese and wrap it in `$t()`; the Chinese text is the message key. Values go in as arguments, not by joining strings, so each language can order the sentence:
 
 ```js
 $t('已载入 {0}/{1} 个会话', [loaded, total])
 ```
 
-Add the English to `web/public/locales/en.js`. For counts, use a plural form there:
-`'{0, plural, one {# message} other {# messages}}'`. Write one message per case instead of
-passing a word such as a verb in as an argument. In `index.html`, mark text with `data-i18n`
-and translated attributes with `data-i18n-attr="title aria-label"`. Text that the server or
-the CLI sends to the page is translated where it is shown, so it needs an entry too.
+Add the English to `web/public/locales/en.js`. For counts, use a plural form there: `'{0, plural, one {# message} other {# messages}}'`. Write one message per case instead of passing a word such as a verb in as an argument. In `index.html`, mark text with `data-i18n` and translated attributes with `data-i18n-attr="title aria-label"`. Text that the server or the CLI sends to the page is translated where it is shown, so it needs an entry too.
 
-`node --test web/test/i18n.test.mjs` fails when a key has no English or when Chinese text in
-the console is not wrapped. Messages, prompts and tool output come from people and agents and
-are never translated.
+`node --test web/test/i18n.test.mjs` fails when a key has no English or when Chinese text in the console is not wrapped. Messages, prompts and tool output come from people and agents and are never translated.
 
 ## Documentation
 
-User docs live in `docs/` and are published with VitePress. Every page under `docs/guide`,
-`docs/modules` and `docs/help` has a Chinese counterpart under `docs/zh/` with the same file
-name and sections; change both in the same commit. Check the site builds and has no dead
-links:
+User docs live in `docs/` and are published with VitePress. Every page under `docs/guide`, `docs/modules` and `docs/help` has a Chinese counterpart under `docs/zh/` with the same file name and sections; change both in the same commit. Write each paragraph and list item on a single line; a line break inside a paragraph shows up as a space, which breaks Chinese text. Check the site builds and has no dead links:
 
 ```bash
 cd docs && npm ci && npm run build
@@ -87,12 +70,9 @@ cd docs && npm ci && npm run build
 
 ## Releasing
 
-Releases are built by [dist](https://opensource.axo.dev/cargo-dist/), configured in
-`dist-workspace.toml`. To publish version `X.Y.Z`:
+Releases are built by [dist](https://opensource.axo.dev/cargo-dist/), configured in `dist-workspace.toml`. To publish version `X.Y.Z`:
 
 1. Set `version` in the workspace `Cargo.toml` and in `CITATION.cff`, and commit.
 2. Push the commit, then the tag: `git push && git tag vX.Y.Z && git push origin vX.Y.Z`.
 
-The Release workflow builds every platform, the installers and the checksums, and publishes
-the GitHub Release with the `GH_RELEASES_TOKEN` secret. Do not edit
-`.github/workflows/release.yml` by hand: change `dist-workspace.toml` and run `dist generate`.
+The Release workflow builds every platform, the installers and the checksums, and publishes the GitHub Release with the `GH_RELEASES_TOKEN` secret. Do not edit `.github/workflows/release.yml` by hand: change `dist-workspace.toml` and run `dist generate`.

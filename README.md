@@ -9,55 +9,32 @@
   English · <a href="README.zh-CN.md">简体中文</a> · <a href="https://blacsheep.github.io/agt/">Documentation</a>
 </p>
 
-agt runs a team of AI agents on your own machine. You talk to one of them, the lead. Tell it
-what you want done, and it writes the role prompts, creates the agents, has a coding agent
-build any tool that is missing, puts everyone in a group chat and runs the work. You watch,
-step in when you want to, and approve what needs approving.
+agt runs a team of AI agents on your own machine. You talk to one of them, the lead. Tell it what you want done, and it writes the role prompts, creates the agents, has a coding agent build any tool that is missing, puts everyone in a group chat and runs the work. You watch, step in when you want to, and approve what needs approving.
 
 ![The lead opens a research group; the first researcher replies](docs/public/showcase/research-kickoff.webp)
 
 ## What is different about it
 
-In most agent frameworks you define the agents, their tools and how they connect before
-anything runs. In agt, setting up the team is work the agents do themselves.
+In most agent frameworks you define the agents, their tools and how they connect before anything runs. In agt, setting up the team is work the agents do themselves.
 
-**Agents manage resources with tools.** Prompts, models, MCP servers and agent definitions
-are files that agt manages, and an agent given the `resource_management` capability can
-create and change them through tool calls. That is how the lead gets from one sentence to a
-working team, and everything it creates is a file you can read and edit.
+**Agents manage resources with tools.** Prompts, models, MCP servers and agent definitions are files that agt manages, and an agent given the `resource_management` capability can create and change them through tool calls. That is how the lead gets from one sentence to a working team, and everything it creates is a file you can read and edit.
 
-**Teams work in chats.** Agents have direct and group chats and @mention each other, the same
-way people do. A scheduler decides who replies, who waits and who stays quiet. There is no
-graph to design: the conversation takes whatever shape the work needs.
+**Teams work in chats.** Agents have direct and group chats and @mention each other, the same way people do. A scheduler decides who replies, who waits and who stays quiet. There is no graph to design: the conversation takes whatever shape the work needs.
 
-**Isolation is enforced by tools.** An agent can only do what its attached tools allow, and a
-new agent does not inherit the tools of the agent that created it. In the murder mystery
-below, each player's tool can only ever return that player's own clue. No prompt has to ask
-anyone not to look.
+**Isolation is enforced by tools.** An agent can only do what its attached tools allow, and a new agent does not inherit the tools of the agent that created it. In the murder mystery below, each player's tool can only ever return that player's own clue. No prompt has to ask anyone not to look.
 
-**Codex works on the same team.** An agent can run on a [Codex](https://github.com/openai/codex)
-session instead of the built-in model loop. The lead can hand it a spec, get back a tested MCP
-server, and attach that server to the agents that need it.
+**Codex works on the same team.** An agent can run on a [Codex](https://github.com/openai/codex) session instead of the built-in model loop. The lead can hand it a spec, get back a tested MCP server, and attach that server to the agents that need it.
 
-**Work survives restarts.** Conversations, runs, tasks and approvals are stored in SQLite.
-Pending work picks up where it stopped, and work whose outcome is unclear is flagged for you
-instead of being run twice.
+**Work survives restarts.** Conversations, runs, tasks and approvals are stored in SQLite. Pending work picks up where it stopped, and work whose outcome is unclear is flagged for you instead of being run twice.
 
-**You keep control.** Every tool call can wait for you, go to a reviewer model first, or run
-freely. The Web console shows who is working on what, including chats between agents that you
-are not part of.
+**You keep control.** Every tool call can wait for you, go to a reviewer model first, or run freely. The Web console shows who is working on what, including chats between agents that you are not part of.
 
 ## See it work
 
-Two real runs, each started by a single message to the lead. The
-[examples page](docs/guide/examples.md) walks through both, step by step.
+Two real runs, each started by a single message to the lead. The [examples page](docs/guide/examples.md) walks through both, step by step.
 
-- **A research team that argues.** Asked whether to migrate to Postgres 17, the lead created a
-  performance researcher, an operations researcher and a reviewer, and opened a group chat.
-  The reviewer challenged both researchers, and after two rounds the group reached a verdict.
-- **A murder mystery with a tool built by Codex.** The lead had a Codex agent write a clue
-  server, then created a game master and three players, gave each player a copy of the server
-  locked to that player, and ran the game.
+- **A research team that argues.** Asked whether to migrate to Postgres 17, the lead created a performance researcher, an operations researcher and a reviewer, and opened a group chat. The reviewer challenged both researchers, and after two rounds the group reached a verdict.
+- **A murder mystery with a tool built by Codex.** The lead had a Codex agent write a clue server, then created a game master and three players, gave each player a copy of the server locked to that player, and ran the game.
 
 ![Players take turns, each using only their own secret clue](docs/public/showcase/mystery-play.webp)
 
@@ -75,10 +52,7 @@ Windows (PowerShell):
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.ps1 | iex"
 ```
 
-The installer puts a prebuilt `agt` in `~/.local/bin`. You also need Node.js 22 or newer for
-the Web console, and a model endpoint that speaks the OpenAI API and supports tool calls.
-Codex agents also need the [Codex CLI](https://github.com/openai/codex). Other ways to install,
-updating and uninstalling are in [Installation](docs/guide/installation.md).
+The installer puts a prebuilt `agt` in `~/.local/bin`. You also need Node.js 22 or newer for the Web console, and a model endpoint that speaks the OpenAI API and supports tool calls. Codex agents also need the [Codex CLI](https://github.com/openai/codex). Other ways to install, updating and uninstalling are in [Installation](docs/guide/installation.md).
 
 ## Quick start
 
@@ -86,10 +60,7 @@ updating and uninstalling are in [Installation](docs/guide/installation.md).
 agt web
 ```
 
-Open the link it prints, including the token after `#`. Connect a model, create the lead, and
-send it a goal; the [Quick start](docs/guide/quick-start.md) takes you through each step. The
-console only listens on `127.0.0.1`. To reach it on a server, use an
-[SSH tunnel](docs/guide/installation.md#running-on-a-remote-server).
+Open the link it prints, including the token after `#`. Connect a model, create the lead, and send it a goal; the [Quick start](docs/guide/quick-start.md) takes you through each step. The console only listens on `127.0.0.1`. To reach it on a server, use an [SSH tunnel](docs/guide/installation.md#running-on-a-remote-server).
 
 ## Documentation
 
@@ -108,9 +79,7 @@ The [documentation site](https://blacsheep.github.io/agt/) is in English and Chi
 
 ## Where your data lives
 
-Everything is kept in one directory, `~/.agt`, created the first time you run `agt`. Set
-`AGT_HOME` to keep it somewhere else, or run `agt init <dir>` to start a separate home for a
-project:
+Everything is kept in one directory, `~/.agt`, created the first time you run `agt`. Set `AGT_HOME` to keep it somewhere else, or run `agt init <dir>` to start a separate home for a project:
 
 ```text
 ~/.agt/
@@ -124,11 +93,8 @@ agt is meant for one person on a trusted machine. It is not a hosted or multi-us
 
 ## Contributing
 
-Build and test instructions, the crate layout and the release process are in
-[CONTRIBUTING.md](CONTRIBUTING.md). The internal design is documented in
-[Architecture](docs/zh/architecture/index.md) (Chinese).
+Build and test instructions, the crate layout and the release process are in [CONTRIBUTING.md](CONTRIBUTING.md). The internal design is documented in [Architecture](docs/zh/architecture/index.md) (Chinese).
 
 ## Citation and license
 
-If you use agt in research, cite it with [CITATION.cff](CITATION.cff). agt is released under
-the [MIT License](LICENSE).
+If you use agt in research, cite it with [CITATION.cff](CITATION.cff). agt is released under the [MIT License](LICENSE).
