@@ -87,7 +87,6 @@ agt web
 | 查某个命令或配置项 | [模块](docs/zh/modules/workspace.md) |
 | Agent 不回复怎么办 | [常见问题与排错](docs/zh/help/troubleshooting.md) |
 | 了解哪些地方不能对外暴露 | [安全模型](docs/zh/help/security.md) |
-| 了解内部设计 | [架构图与执行流程](docs/zh/architecture/index.md) |
 
 ## 数据存放在哪里
 
@@ -106,7 +105,7 @@ agt 面向在可信机器上使用的单个用户，不是托管服务，也不�
 
 ## 参与开发
 
-构建与测试方法、crate 结构和发布流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+构建与测试方法、crate 结构和发布流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。内部设计见[架构文档](docs/zh/architecture/index.md)。
 
 ## 引用与许可证
 

@@ -720,7 +720,7 @@ function renderMessages() {
   const timeline=[...state.messages.map(m=>({seq:m.seq, message:m})), ...(state.contextResets || []).map(r=>({seq:r.through_seq,reset:r}))].sort((a,b)=>a.seq-b.seq || (a.reset?1:0)-(b.reset?1:0) || (a.reset?.id||0)-(b.reset?.id||0));
   let lastDay = null;
   $('#messages').innerHTML = timeline.map(entry => {
-    if(entry.reset) return `<div class="context-divider" role="separator" aria-label="${$t('上下文已重置')}"><span><strong>${$t('新上下文')}</strong><time>${esc(new Date(entry.reset.created_at).toLocaleString())}</time><small>${$t('从这里重新开始 · 聊天记录保留')}</small></span></div>`;
+    if(entry.reset) return `<div class="context-divider" role="separator" aria-label="${$t('上下文已重置')}"><span><strong>${$t('新上下文')}</strong><time>${esc(new Date(entry.reset.created_at).toLocaleString(AgtI18n.locale))}</time><small>${$t('从这里重新开始 · 聊天记录保留')}</small></span></div>`;
     const m=entry.message;
     const own = m.sender_id === state.boot.principal;
     const day = new Date(m.created_at).toDateString();

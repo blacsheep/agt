@@ -34,7 +34,7 @@
         const forms = rest.join(',');
         const pick = form => { const at = forms.search(new RegExp(`(^|\\s)${form}\\s*\\{`)); return at < 0 ? null : forms.slice(forms.indexOf('{', at) + 1, closing(forms, forms.indexOf('{', at))); };
         const form = (Number(value) === 1 ? pick('one') : null) ?? pick('other') ?? '';
-        out += format(form, args).replace(/#/g, String(value));
+        out += format(form.replace(/#/g, String(value)), args);
       } else {
         out += value === undefined ? message.slice(open, end + 1) : String(value);
       }

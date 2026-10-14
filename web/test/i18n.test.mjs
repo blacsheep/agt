@@ -76,6 +76,8 @@ test('$t fills arguments and plural forms, and Chinese needs no catalog', () => 
   assert.equal(en.t('{0} 条消息', [1]), '1 message');
   assert.equal(en.t('{0} 条消息', [3]), '3 messages');
   assert.equal(en.t('为「{0}」移除 {1} 个会话入口。', ['Lead', 2]), 'Remove 2 entries for "Lead".');
+  en.add('en', { '{0} 条消息在 {1}': '{0, plural, one {# message in {1}} other {# messages in {1}}}' });
+  assert.equal(en.t('{0} 条消息在 {1}', [2, '#general']), '2 messages in #general', 'arguments keep their own #');
   assert.equal(en.t('不存在的键'), '不存在的键');
   assert.deepEqual([...en.missing()], ['不存在的键']);
 
