@@ -109,6 +109,63 @@ fn explicit_work_is_separate_and_result_wakes_only_requester() {
 }
 
 #[test]
+fn task_run_that_posts_its_result_is_told_to_answer_instead() {
+    struct PostThenAnswer {
+        chat: String,
+        step: usize,
+    }
+    impl ModelClient for PostThenAnswer {
+        fn complete(
+            &mut self,
+            _: &ResolvedAgent,
+            messages: &[Value],
+            _: &[Value],
+        ) -> crate::Result<Value> {
+            self.step += 1;
+            if self.step == 1 {
+                let args =
+                    json!({"conversation":self.chat,"body":"my findings","request_key":"post"});
+                return Ok(
+                    json!({"role":"assistant","tool_calls":[{"id":"post","type":"function","function":{"name":"framework_message_send","arguments":args.to_string()}}]}),
+                );
+            }
+            let result: Value =
+                serde_json::from_str(messages.last().unwrap()["content"].as_str().unwrap())
+                    .unwrap();
+            assert_eq!(result["code"], "task_result_required", "{result}");
+            Ok(json!({"role":"assistant","content":"my findings"}))
+        }
+    }
+    let (home, user, chat) = fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let id = delegate(&mut scheduler, &chat);
+    let task = claim_work(&mut scheduler, &id);
+    execute(
+        home.path(),
+        task,
+        &mut PostThenAnswer {
+            chat: chat.clone(),
+            step: 0,
+        },
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    let published = results(home.path(), &chat);
+    assert_eq!(published.len(), 1);
+    assert!(published[0].body.contains("my findings"));
+    assert!(matches!(
+        WorkLedger::open(home.path())
+            .unwrap()
+            .get(&id)
+            .unwrap()
+            .state,
+        WorkState::Succeeded { .. }
+    ));
+}
+
+#[test]
 fn publication_ack_failure_replays_message_without_reexecuting() {
     let (home, user, chat) = fixture();
     let mut scheduler = begin(home.path(), &user, &chat);

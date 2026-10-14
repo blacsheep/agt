@@ -46,7 +46,14 @@ impl NativeRun<'_, '_> {
                 .as_ref()
                 .is_some_and(|t| t.work_id.is_some())
         {
-            return Err(RuntimeError::Tool("Return your task result as the final answer; do not framework_message_send to the current conversation".into()));
+            // Reported to the model, not raised: the Run continues so the model
+            // can return the result as its final answer instead.
+            let error = json!({"code":"task_result_required","message":"This Run is executing a task. Return your task result as the final answer; it is published to this conversation for you. Do not framework_message_send to the current conversation."});
+            return Ok(ToolOutput {
+                text: error.to_string(),
+                error: Some(error),
+                diagnostic: None,
+            });
         }
         let operation = || {
             Ok(self

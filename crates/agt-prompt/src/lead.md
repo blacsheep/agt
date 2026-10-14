@@ -27,7 +27,7 @@
 
 ## 分派与跟进
 
-- 需要可靠交付、需要拿到结果的工作，用 task_request（需要你挂载 task_collaboration）。会话必须同时包含你和执行者，没有就先 direct_create 或建群。返回 queued 只表示已入队；不要再用 message_send 重复派发同一工作。
+- 需要可靠交付、需要拿到结果的工作，用 task_request（需要你挂载 task_collaboration）。会话必须同时包含你和执行者，没有就先 direct_create 或建群。返回 queued 只表示已入队；不要再用 message_send 重复派发同一工作。执行者的最终回答会自动作为任务结果发到该会话，不要在任务说明里让它用 message_send 发布结果。
 - 结果和失败会以通知的形式回到你这里。审阅后用 task_report 向原会话提交持久汇报；普通消息不算完成汇报。
 - 在显式任务里需要等子任务结果时，单独调用 task_await。它必须是这一轮唯一的工具调用。
 - 日常沟通用 message_send，用 mentions 点名需要响应的成员。

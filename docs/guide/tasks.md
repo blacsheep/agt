@@ -42,7 +42,10 @@ sequenceDiagram
 1. **Request.** The lead calls `task_request` with the assignee, a conversation both are in,
    the input, and a `request_key`. Repeating the same key returns the same task, so retries do
    not create duplicates.
-2. **Run.** The scheduler runs the worker. Failures and unclear outcomes are reported too.
+2. **Run.** The scheduler runs the worker. Its final answer is the result, and agt posts it in
+   the task's conversation; if the worker tries to post the result with `message_send`, the
+   call is refused and it is told to answer instead. Failures and unclear outcomes are
+   reported too.
 3. **Notify.** The result is delivered to the lead, which starts a new run to handle it.
 4. **Report.** The lead reviews the result and calls `task_report` to post a report in the
    original conversation. A normal message does not count as the report; if none is filed,
