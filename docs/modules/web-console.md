@@ -129,6 +129,11 @@ A graph of messages and task delegations between agents, with filters. Click a n
 for details. **权限审批** (Approvals) opens the approvals queue for the whole workspace; see
 [Permissions](./permissions.md).
 
+The page opens in **全局视角** (Global view), which shows every conversation any identity can
+see, including chats between agents that you are not in, such as the lead briefing a Codex
+agent. It refreshes every few seconds. To see exactly what one agent sees, pick it under
+**观察范围与筛选** (Scope and filters).
+
 ### 资源库 (Resources)
 
 Tabs for each resource type. **新建资源** (New resource) creates one; click a resource to view

@@ -1,6 +1,9 @@
 /* Read-only projection of identity-scoped messages and current execution snapshots. */
 (() => {
   const batchSize = 6;
+  // The global view merges what every identity can see. Each conversation and
+  // task is read as one identity that can see it (its `via`).
+  const GLOBAL = '*';
   const recent = new Map();
   const graph = createInteractionGraph((id, node) => {
     if(id?.kind==='task'){selected=null;selectedTask=id.id;render();showTask(id.id,node.taskIds);return;}
@@ -15,7 +18,15 @@
   });
   let epoch = 0, viewer, entries = [], loaded = new Map(), selected = null;
   let workTasks=[], approvals=[], taskPages=1, tasksMore=false, selectedTask=null;
-  let busy = false, refreshPending = false, detailEpoch = 0, detailSignature = '', status = '';
+  let busy = false, refreshPending = false, detailEpoch = 0, detailSignature = '', status = '', poll = null;
+  const identities = () => state.boot.principals.filter(p => !p.deleted && (p.kind === 'agent' || p.id === state.boot.principal)).map(p => p.id);
+  const viewers = () => viewer === GLOBAL ? [state.boot.principal, ...identities().filter(id => id !== state.boot.principal)] : [viewer];
+  // Reads one identity at a time per slot so large teams do not flood the CLI.
+  async function eachViewer(read) {
+    const list = viewers(), results = [];
+    for (let i = 0; i < list.length; i += 3) results.push(...await Promise.all(list.slice(i, i + 3).map(async id => [id, await read(id)])));
+    return results;
+  }
   const stamp = value => new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   const active = generation => generation === epoch && state.page === 'interactions';
   const title = item => item.conversation.title || (item.conversation.kind === 'direct' ? '私聊' : '未命名群聊');
@@ -76,8 +87,8 @@
   async function fetchConversation(entry, generation, earlier = false, live = false) {
     const id = entry.conversation.id, existing = loaded.get(id);
     const [history, members] = await Promise.all([
-      read('message_history', { conversation: id, limit: 30, ...(earlier ? { before: existing.cursor } : {}) }, viewer),
-      existing ? Promise.resolve(existing.members) : read('member_list', { conversation: id }, viewer)
+      read('message_history', { conversation: id, limit: 30, ...(earlier ? { before: existing.cursor } : {}) }, entry.via),
+      existing ? Promise.resolve(existing.members) : read('member_list', { conversation: id }, entry.via)
     ]);
     if (!active(generation)) return;
     const messages = new Map((existing?.messages || []).map(m => [m.id, m]));
@@ -95,26 +106,38 @@
     busy = true; const generation = epoch; status = '';  render();
     try {
       if (mode === 'initial' || mode === 'refresh' || mode==='tasks') {
-        const next=new Map();let before;
+        const next=new Map();
         try {
-          for(let page=0;page<taskPages;page++) {
-            const rows=await read('task_list',{limit:100,...(before?{before}:{})},viewer);
-            if(!active(generation))return;
-            rows.forEach(t=>next.set(t.id,t));tasksMore=rows.length===100;before=rows.at(-1)?.list_cursor;
-            if(!tasksMore||!before)break;
-          }
+          tasksMore=false;
+          await eachViewer(async as => {
+            let before;
+            for(let page=0;page<taskPages;page++) {
+              const rows=await read('task_list',{limit:100,...(before?{before}:{})},as);
+              if(!active(generation))return;
+              rows.forEach(t=>{if(!next.has(t.id))next.set(t.id,{...t,via:as});});
+              const more=rows.length===100;before=rows.at(-1)?.list_cursor;
+              if(more&&before)tasksMore=true; else break;
+            }
+          });
+          if(!active(generation))return;
           workTasks=[...next.values()];
         } catch(e) {if(!active(generation))return;workTasks=[];status='任务读取失败：'+e.message;}
         try {
-          const nextApprovals=await api('approvals?'+new URLSearchParams({viewer}));
+          const nextApprovals=await api('approvals?'+new URLSearchParams({viewer:state.viewer}));
           if(!active(generation))return;approvals=nextApprovals;
         } catch(e) {if(!active(generation))return;approvals=[];status+=' 审批读取失败：'+e.message;}
         if(selectedTask&&!workTasks.some(t=>t.id===selectedTask)){selectedTask=null;detailSignature='';++detailEpoch;}
       }
       if (mode === 'initial' || mode === 'refresh') {
-        const result = await read('conversation_list', { include_hidden: true }, viewer);
+        const merged = new Map();
+        for (const [as, result] of await eachViewer(as => read('conversation_list', { include_hidden: true }, as)))
+          for (const entry of result) {
+            // Prefer an identity that is still a member; it sees the latest messages.
+            const known = merged.get(entry.conversation.id);
+            if (!known || (known.left_message_seq != null && entry.left_message_seq == null)) merged.set(entry.conversation.id, { ...entry, via: as });
+          }
         if (!active(generation)) return;
-        entries = result.sort((a, b) => b.conversation.updated_at - a.conversation.updated_at);
+        entries = [...merged.values()].sort((a, b) => b.conversation.updated_at - a.conversation.updated_at);
         const ids = new Set(entries.map(x => x.conversation.id));
         for (const id of loaded.keys()) if (!ids.has(id)) loaded.delete(id);
         if (!rows().some(x => x.message.id === selected)) { selected = null; ++detailEpoch; }
@@ -147,7 +170,7 @@
         <section class="ix-execution"><h3>当前执行与公开理由</h3><p class="ix-note">这是此会话的近期状态快照，不代表这条消息发送时的状态，也不是模型内部思维链。</p><div id="ix-execution-body">读取中…</div></section>`;
     }
     try {
-      const data = await api('activity?' + new URLSearchParams({ conversation: item.conversation.id, viewer }));
+      const data = await api('activity?' + new URLSearchParams({ conversation: item.conversation.id, viewer: item.via }));
       if (!active(generation) || request !== detailEpoch) return;
       // Global activity responses must be restricted to the authorized selected conversation.
       const tasks = (data.scheduler.tasks || []).filter(t => t.conversation === item.conversation.id).sort((a, b) => b.due_at - a.due_at);
@@ -167,7 +190,7 @@
   async function showTask(id,related=[id]) {
     const generation=epoch,request=++detailEpoch;
     try {
-      const t=await read('task_get',{task_id:id},viewer);
+      const t=await read('task_get',{task_id:id},workTasks.find(x=>x.id===id)?.via||state.viewer);
       if(!active(generation)||request!==detailEpoch||selectedTask!==id)return;
       const relevant=approvals.filter(a=>a.work_id===id);
       $('#ix-detail').innerHTML=`<div class="ix-detail-heading"><span class="eyebrow">TASK DELEGATION</span><h2>${esc(nameOf(t.request.requester))} → ${esc(nameOf(t.request.assignee))}</h2><p>${esc(t.execution_status||t.state)}${t.execution_engine ? ' · 执行引擎：'+esc(t.execution_engine) : ''}</p></div><section class="ix-message"><pre class="ix-body">${esc(t.request.input)}</pre><p class="ix-note">任务 ${esc(t.id)} · Run ${esc(t.run_id||'尚未执行')}</p>${t.output?`<h3>结果</h3><pre class="ix-body">${esc(t.output)}</pre>`:''}${related.length>1?related.map(other=>`<button class="secondary" data-related-task="${esc(other)}">${esc(other.slice(0,8))}</button>`).join(''):''}<h3>权限审批</h3>${relevant.map(a=>`<button class="secondary" data-task-approval="${esc(a.id)}">${esc(a.source==='harness'?'引擎原生':'Native')} · ${esc(AgtApprovals.labels[a.state]||a.state)}</button>`).join('')||'<p>当前已载入范围无审批记录。</p>'}</section>`;
@@ -182,8 +205,10 @@
     render();
   }
   function changeViewer() {
-    reset(); viewer = $('#ix-viewer').value; state.viewer = viewer;
+    reset(); viewer = $('#ix-viewer').value; state.viewer = viewer === GLOBAL ? state.boot.principal : viewer;
     state.conversations = []; clearConversation(); AgtApprovals.refresh(); ensureEvents(); load();
+    // Live events follow one identity; poll so chats you are not in stay current.
+    clearInterval(poll); poll = viewer === GLOBAL ? setInterval(() => { if (state.page === 'interactions' && !document.hidden) load(loaded.size ? 'refresh' : 'initial'); }, 5000) : null;
   }
   $('#ix-viewer').onchange = changeViewer;
   $('#ix-approvals').onclick=()=>AgtApprovals.open();
@@ -198,10 +223,10 @@
   $('#ix-earlier').onclick = () => load('earlier');
   window.AgtInteractions = {
     open() {
-      $('#ix-viewer').innerHTML = state.boot.principals.filter(p => !p.deleted && (p.kind === 'agent' || p.id === state.boot.principal)).map(p => option(p.id, nameOf(p.id))).join('');
-      $('#ix-viewer').value = state.boot.principal; changeViewer();
+      $('#ix-viewer').innerHTML = option(GLOBAL, '全局视角（所有身份）') + identities().map(id => option(id, nameOf(id))).join('');
+      $('#ix-viewer').value = GLOBAL; changeViewer();
     },
-    close() { reset(); },
+    close() { clearInterval(poll); poll = null; reset(); },
     statusChanged() { if (state.page === 'interactions') render(); },
     refresh() { return load(loaded.size ? 'refresh' : 'initial'); }
   };
