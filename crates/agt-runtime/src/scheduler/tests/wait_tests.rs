@@ -27,10 +27,12 @@ pub(super) fn setup() -> (tempfile::TempDir, Scheduler, String, String) {
     (home, scheduler, chat, parent)
 }
 pub(super) fn claim_work(s: &mut Scheduler, id: &str) -> ScheduledTask {
+    let id = format!("work:{id}");
+    let now = now_ms();
     s.store
-        .claim(&format!("work:{id}"), &s.owner, now_ms())
+        .claim(&id, &s.owner, now)
         .unwrap()
-        .unwrap()
+        .unwrap_or_else(|| panic!("{}", s.store.claim_state(&id, &s.owner, now)))
 }
 pub(super) fn tool(name: &str, args: Value) -> Value {
     json!({"role":"assistant","tool_calls":[{"id":name,"type":"function","function":{"name":format!("framework_{name}"),"arguments":args.to_string()}}]})

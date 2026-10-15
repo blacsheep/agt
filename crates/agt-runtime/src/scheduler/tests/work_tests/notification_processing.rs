@@ -22,11 +22,19 @@ fn completed_work() -> (tempfile::TempDir, Scheduler, String, ScheduledTask) {
         .into_iter()
         .find(|t| t.work_notification)
         .unwrap();
+    let now = now_ms();
     let notice = scheduler
         .store
-        .claim(&notice.id, &scheduler.owner, now_ms())
+        .claim(&notice.id, &scheduler.owner, now)
         .unwrap()
-        .unwrap();
+        .unwrap_or_else(|| {
+            panic!(
+                "{}",
+                scheduler
+                    .store
+                    .claim_state(&notice.id, &scheduler.owner, now)
+            )
+        });
     (home, scheduler, id, notice)
 }
 

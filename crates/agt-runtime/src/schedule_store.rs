@@ -316,6 +316,27 @@ impl ScheduleStore {
         Ok(true)
     }
 
+    /// Why `claim` would refuse a task: lease, task and round state, for test failures.
+    #[cfg(test)]
+    pub(crate) fn claim_state(&self, id: &str, owner: &str, now: i64) -> String {
+        let lease = self
+            .connection
+            .query_row("SELECT owner,expires FROM coordinator", [], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })
+            .optional();
+        let task = self.get(id);
+        let round = task
+            .as_ref()
+            .ok()
+            .and_then(|t| self.discussion(&t.discussion).ok().flatten());
+        format!(
+            "claim refused at {now} by {owner}: lease {lease:?}; task {:?}; round {:?}",
+            task.map(|t| (t.state, t.due_at, t.work_id, t.work_notification)),
+            round.map(|r| (r.state, r.expires_at)),
+        )
+    }
+
     pub(crate) fn heartbeat(&self, owner: &str, now: i64) -> Result<bool> {
         Ok(self.connection.execute(
             "UPDATE coordinator SET expires=?2 WHERE id=1 AND owner=?1 AND expires>?3",
