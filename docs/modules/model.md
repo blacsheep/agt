@@ -55,7 +55,7 @@ agt model update fast --clear-reasoning-effort
 | `--api-format <f>` | no | `chat-completions` | `chat-completions` or `responses`. agt never switches automatically. |
 | `--temperature <t>` | no | `0.7` | 0 to 2. Not sent when a reasoning effort is set. |
 | `--max-tokens <n>` | no | not sent | Output token limit |
-| `--timeout <s>` | no | `60` | Seconds per request |
+| `--timeout <s>` | no | `60` | Seconds to wait for the response to start, for each read, and between output chunks once the reply is streaming; a stalled reply is retried |
 | `--reasoning-effort <level>` | no | not sent | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or any value the provider accepts |
 | `--tool-call <bool>` | no | | `true` if the model supports function calling |
 | `--context-window <n>` | no | `272000` | Input token window, 4096 to 2000000. Used for automatic compaction; does not limit output. |
