@@ -27,3 +27,18 @@ jobs:
       - run: cargo build -p agt-cli
       - run: node --test test/*.test.mjs
         working-directory: web
+
+  # Released binaries also run on macOS and Windows. The web tests stay on
+  # Linux: their scripted CLI is a Node script started as an executable.
+  platforms:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
