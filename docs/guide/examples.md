@@ -21,6 +21,10 @@ That was all. The lead created every other agent, prompt, group and tool you see
 
 > Build a three-person research group on "Should we migrate to Postgres 17?": one researcher for performance, one for operational risk, and a reviewer who challenges both. Put them in a group with me, at most two rounds each, and send me a one-page summary at the end.
 
+![Sped-up recording of the research run](../public/showcase/research-run.webp)
+
+The recording above is a later run of the same request, sped up. In that run the lead stopped twice after collecting results, and a one-line nudge in the group got it going again. The steps and screenshots below are from the first run.
+
 **What the lead did:**
 
 1. Listed the existing agents, prompts and models to see what it could reuse.
@@ -43,6 +47,10 @@ Read more about [how the lead builds a team](./lead-team.md) and about [group ch
 **The request**, sent in a group with the lead:
 
 > We want to play a murder mystery. Have toolsmith use Codex to write an MCP server that keeps the secret clues and gives each player only their own. Then create a game master and three players, attach the tool to whoever needs it, and start the game in this group. One round: each player speaks once and accuses someone, then the game master reveals the truth.
+
+![Sped-up recording of the murder-mystery run](../public/showcase/mystery-run.webp)
+
+The recording above is a later run of the same request, sped up. There, Codex's first server failed when the game started: the game master reported the error, the lead found the cause and had Codex fix it, and the game was replayed. Long waits, a second repair round and one stuck reply are cut. The steps and screenshots below are from the first run.
 
 **What the lead did:**
 

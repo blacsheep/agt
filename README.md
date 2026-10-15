@@ -11,7 +11,7 @@
 
 agt runs a team of AI agents on your own machine. You talk to one of them, the lead. Tell it what you want done, and it writes the role prompts, creates the agents, has a coding agent build any tool that is missing, puts everyone in a group chat and runs the work. You watch, step in when you want to, and approve what needs approving.
 
-![The lead opens a research group; the first researcher replies](docs/public/showcase/research-kickoff.webp)
+![Sped-up recording: one message to the lead, a three-person research team created, two rounds of debate and a one-page summary](docs/public/showcase/research-run.webp)
 
 ## What is different about it
 
@@ -36,7 +36,7 @@ Two real runs, each started by a single message to the lead. The [examples page]
 - **A research team that argues.** Asked whether to migrate to Postgres 17, the lead created a performance researcher, an operations researcher and a reviewer, and opened a group chat. The reviewer challenged both researchers, and after two rounds the group reached a verdict.
 - **A murder mystery with a tool built by Codex.** The lead had a Codex agent write a clue server, then created a game master and three players, gave each player a copy of the server locked to that player, and ran the game.
 
-![Players take turns, each using only their own secret clue](docs/public/showcase/mystery-play.webp)
+![Sped-up recording: Codex writes the clue server, the lead has it fixed after a failed start, and the game plays through to the reveal](docs/public/showcase/mystery-run.webp)
 
 ## Install
 
