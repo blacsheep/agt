@@ -27,6 +27,9 @@ pub(super) fn setup() -> (tempfile::TempDir, Scheduler, String, String) {
     (home, scheduler, chat, parent)
 }
 pub(super) fn claim_work(s: &mut Scheduler, id: &str) -> ScheduledTask {
+    // The coordinator lease lasts 15 s and only the scheduler loop renews it. A slow
+    // runner can take longer than that between the setup's scan and this claim.
+    assert!(s.store.acquire(&s.owner, now_ms()).unwrap());
     s.store
         .claim(&format!("work:{id}"), &s.owner, now_ms())
         .unwrap()
