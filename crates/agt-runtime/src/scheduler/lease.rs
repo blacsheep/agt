@@ -26,12 +26,18 @@ impl HomeLease {
         let path = home.to_path_buf();
         let name = owner.clone();
         let heartbeat = thread::spawn(move || {
+            let mut store = None;
             while rx.recv_timeout(Duration::from_secs(2)) == Err(mpsc::RecvTimeoutError::Timeout) {
-                if !ScheduleStore::open(&path)
-                    .and_then(|s| s.heartbeat(&name, now_ms()))
-                    .unwrap_or(false)
-                {
-                    break;
+                // Only a refused renewal means the lease is gone. Errors (a busy database,
+                // a configuration file being replaced) are retried on the next beat, with
+                // a fresh connection; the lease expires on its own if they persist.
+                if store.is_none() {
+                    store = ScheduleStore::open(&path).ok();
+                }
+                match store.as_ref().map(|s| s.heartbeat(&name, now_ms())) {
+                    Some(Ok(true)) | None => {}
+                    Some(Ok(false)) => break,
+                    Some(Err(_)) => store = None,
                 }
             }
         });
@@ -53,5 +59,35 @@ impl Drop for HomeLease {
         if self.release {
             let _ = ScheduleStore::open(&self.home).and_then(|s| s.release(&self.owner));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn expires(home: &Path) -> i64 {
+        ScheduleStore::open(home)
+            .unwrap()
+            .connection
+            .query_row("SELECT expires FROM coordinator", [], |r| r.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn heartbeat_survives_a_transient_error() {
+        let home = tempfile::tempdir().unwrap();
+        agt_config::initialize_home(Some(home.path().to_path_buf())).unwrap();
+        let _lease = HomeLease::acquire(home.path()).unwrap();
+        let acquired = expires(home.path());
+        // An unreadable configuration makes the first beat (after 2 s) fail.
+        let config = home.path().join("config.yaml");
+        let saved = std::fs::read(&config).unwrap();
+        std::fs::write(&config, "scheduler: [unclosed").unwrap();
+        thread::sleep(Duration::from_millis(3_000));
+        std::fs::write(&config, saved).unwrap();
+        // The beat after it must renew the lease again.
+        thread::sleep(Duration::from_millis(2_500));
+        assert!(expires(home.path()) > acquired + 3_000);
     }
 }
