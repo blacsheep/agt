@@ -12,11 +12,12 @@ A lead is an ordinary agent with three things:
 
 The `default/lead` prompt (created by `agt init` and on first start) teaches the agent to:
 
+- **work in your language**: reply, brief teammates and write their prompts in the language of your request;
 - **check before creating**: list existing models, prompts, MCP servers and agents, and reuse them;
 - **build working teammates**: write a role prompt, define the agent, create its identity, bind it, confirm it is enabled, and add it to a conversation;
 - **grant the minimum**: new agents do not inherit the lead's capabilities, and the lead adds only what each role needs;
-- **have Codex build missing tools**: delegate an MCP server to a Codex agent with contract tests, register it, probe it, and attach it to the agents that need it;
-- **delegate and follow up**: use tracked tasks for work that must produce a result, and report back to the original conversation;
+- **have Codex build missing tools**: delegate an MCP server to a Codex agent with contract tests, register it, probe it, and attach it to the agents that need it. When each role may only see its own data, it registers one instance per role, locked to that role by environment variables, instead of telling roles apart by tool arguments or shared tokens;
+- **delegate and follow up**: use tracked tasks for work that must produce a result, report back to the original conversation, and start the next step as soon as the results it waits for arrive;
 - **let the team run itself**: give standing rules once (who does what, who talks to whom, when to escalate) instead of relaying every step;
 - **join groups properly**: in a group someone else created, the lead is a plain member and cannot invite anyone, so it asks the owner to make it an admin or to add the members;
 - **report honestly**: confirm the setup and deliver results in the conversation where you asked, base every claim on what the tools actually returned, and ask you before deleting things, overwriting others' configuration or making expensive decisions.
