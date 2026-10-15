@@ -301,7 +301,7 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                     "This is a decision request, not a completed result. Inspect task_get, handle the question or blocking condition, and escalate to the user when needed.".to_owned()
                 } else {
                     format!(
-                        "Review this result, then use task_report(task_id, expected_revision, body) to reliably report to the original conversation {}. Reading or finishing this notification does not discharge the reporting obligation.",
+                        "Review this result, then use task_report(task_id, expected_revision, body) to reliably report to the original conversation {}. Reading or finishing this notification does not discharge the reporting obligation. If the original request still has steps that were waiting on this result, start the next one in this turn: you are only woken again by a new message or task result, so a step you only announce will not happen.",
                         item.request.origin_conversation
                     )
                 };

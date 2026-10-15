@@ -55,7 +55,7 @@ agt model update fast --clear-reasoning-effort
 | `--api-format <格式>` | 否 | `chat-completions` | `chat-completions` 或 `responses`。agt 从不自动切换。 |
 | `--temperature <t>` | 否 | `0.7` | 0 到 2。设置推理强度时不发送。 |
 | `--max-tokens <n>` | 否 | 不发送 | 输出 token 上限 |
-| `--timeout <秒>` | 否 | `60` | 每次请求的秒数 |
+| `--timeout <秒>` | 否 | `60` | 等待响应开始、每次读取，以及回复开始输出后相邻两段输出之间的最长秒数；卡住的回复会自动重试 |
 | `--reasoning-effort <档位>` | 否 | 不发送 | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`，或 Provider 接受的任何值 |
 | `--tool-call <bool>` | 否 | | 模型支持函数调用时为 `true` |
 | `--context-window <n>` | 否 | `272000` | 输入 token 窗口，4096 到 2000000。用于自动压缩，不限制输出。 |

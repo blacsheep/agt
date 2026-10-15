@@ -18,7 +18,12 @@ fn context_errors_in_both_stream_protocols_are_not_generic_retryable_errors() {
     ] {
         let frame = format!("data: {event}\n\n");
         assert!(matches!(
-            read(frame.as_bytes(), responses, &mut |_| Ok(())),
+            read(
+                frame.as_bytes(),
+                responses,
+                std::time::Duration::from_secs(60),
+                &mut |_| Ok(())
+            ),
             Err(RuntimeError::ContextWindowRejected)
         ));
     }

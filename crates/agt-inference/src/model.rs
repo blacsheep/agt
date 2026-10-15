@@ -250,7 +250,12 @@ impl ModelClient for ChatCompletions {
                     .eq_ignore_ascii_case("text/event-stream")
             })
         {
-            return crate::model_stream::read(response, responses, progress);
+            return crate::model_stream::read(
+                response,
+                responses,
+                Duration::from_secs(u64::from(params.timeout)),
+                progress,
+            );
         }
         // Compatible providers may ignore stream=true and return a single JSON response.
         const MAX_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
