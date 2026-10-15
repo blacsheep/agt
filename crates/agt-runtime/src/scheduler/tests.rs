@@ -120,11 +120,17 @@ fn claim(scheduler: &mut Scheduler, principal: &str) -> ScheduledTask {
         .into_iter()
         .find(|t| t.principal == principal)
         .unwrap();
+    let now = now_ms();
     scheduler
         .store
-        .claim(&task.id, &scheduler.owner, now_ms())
+        .claim(&task.id, &scheduler.owner, now)
         .unwrap()
-        .unwrap()
+        .unwrap_or_else(|| {
+            panic!(
+                "{}",
+                scheduler.store.claim_state(&task.id, &scheduler.owner, now)
+            )
+        })
 }
 struct Answer(Value);
 impl ModelClient for Answer {

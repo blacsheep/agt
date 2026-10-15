@@ -27,11 +27,18 @@ fn delegate(scheduler: &mut Scheduler, chat: &str) -> String {
     item["id"].as_str().unwrap().into()
 }
 fn claim_work(scheduler: &mut Scheduler, id: &str) -> ScheduledTask {
+    let id = format!("work:{id}");
+    let now = now_ms();
     scheduler
         .store
-        .claim(&format!("work:{id}"), &scheduler.owner, now_ms())
+        .claim(&id, &scheduler.owner, now)
         .unwrap()
-        .unwrap()
+        .unwrap_or_else(|| {
+            panic!(
+                "{}",
+                scheduler.store.claim_state(&id, &scheduler.owner, now)
+            )
+        })
 }
 fn results(home: &Path, chat: &str) -> Vec<agt_im::Message> {
     im(home)
