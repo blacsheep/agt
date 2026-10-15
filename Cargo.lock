@@ -10,7 +10,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agt-agent"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-config",
  "agt-core",
@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "agt-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-agent",
  "agt-config",
@@ -60,7 +60,7 @@ dependencies = [
 
 [[package]]
 name = "agt-config"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-core",
  "agt-storage",
@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "agt-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "jsonschema",
  "serde",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "agt-harness"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-config",
  "agt-core",
@@ -99,7 +99,7 @@ dependencies = [
 
 [[package]]
 name = "agt-im"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-storage",
  "rusqlite",
@@ -113,7 +113,7 @@ dependencies = [
 
 [[package]]
 name = "agt-inference"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-agent",
  "agt-config",
@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "agt-mcp"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-config",
  "agt-core",
@@ -156,7 +156,7 @@ dependencies = [
 
 [[package]]
 name = "agt-model"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-config",
  "agt-core",
@@ -169,7 +169,7 @@ dependencies = [
 
 [[package]]
 name = "agt-prompt"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-config",
  "agt-core",
@@ -182,7 +182,7 @@ dependencies = [
 
 [[package]]
 name = "agt-provider"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-config",
  "agt-core",
@@ -196,7 +196,7 @@ dependencies = [
 
 [[package]]
 name = "agt-runtime"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-agent",
  "agt-config",
@@ -225,7 +225,7 @@ dependencies = [
 
 [[package]]
 name = "agt-service"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-agent",
  "agt-config",
@@ -249,7 +249,7 @@ dependencies = [
 
 [[package]]
 name = "agt-skill"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-config",
  "agt-core",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "agt-storage"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "agt-core",
  "rusqlite",
