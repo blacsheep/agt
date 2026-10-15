@@ -1,6 +1,6 @@
 #![cfg(unix)]
 use serde_json::{Value, json};
-use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+use std::{fs, process::Command};
 fn call(home: &std::path::Path, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_agt"))
         .args(["--home", home.to_str().unwrap(), "--output", "json"])
@@ -18,18 +18,36 @@ fn ok(home: &std::path::Path, args: &[&str]) -> Value {
     );
     serde_json::from_slice(&out.stdout).unwrap()
 }
+
+/// Writes an executable script from a child process. Were this process to hold
+/// the file open for writing, a child forked meanwhile by a parallel test could
+/// inherit the descriptor, and running the script would fail with ETXTBSY.
+fn write_executable(path: &std::path::Path, script: &str) {
+    use std::io::Write;
+    let mut child = Command::new("sh")
+        .args(["-c", "cat > \"$0\" && chmod 700 \"$0\""])
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(script.as_bytes())
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+}
 #[test]
 fn external_agent_crud_execution_permissions_and_dependency_protection() {
     let dir = tempfile::tempdir().unwrap();
     let home = dir.path();
     ok(home, &["init", home.to_str().unwrap()]);
     let exe = home.join("codex");
-    fs::write(
+    write_executable(
         &exe,
         include_str!("../../agt-harness/tests/fixtures/codex.py"),
-    )
-    .unwrap();
-    fs::set_permissions(&exe, fs::Permissions::from_mode(0o700)).unwrap();
+    );
     let config =
         json!({"engine":"codex","executable":exe,"working_directory":home,"sandbox":"read_only"});
     let file = home.join("harness.json");
@@ -140,12 +158,10 @@ fn terminating_cli_reaps_unresponsive_process_without_claiming_confirmed_cancel(
     let home = dir.path();
     ok(home, &["init", home.to_str().unwrap()]);
     let exe = home.join("codex");
-    fs::write(
+    write_executable(
         &exe,
         include_str!("../../agt-harness/tests/fixtures/codex.py"),
-    )
-    .unwrap();
-    fs::set_permissions(&exe, fs::Permissions::from_mode(0o700)).unwrap();
+    );
     let file = home.join("harness.json");
     fs::write(
         &file,

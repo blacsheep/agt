@@ -1,12 +1,30 @@
 #![cfg(unix)]
 use agt_harness::{Codex, Event, Execution, HarnessConfig, Sandbox, Tool};
 use serde_json::json;
-use std::os::unix::fs::PermissionsExt;
+
+/// Writes an executable script from a child process. Were this process to hold
+/// the file open for writing, a child forked meanwhile by a parallel test could
+/// inherit the descriptor, and running the script would fail with ETXTBSY.
+fn write_executable(path: &std::path::Path, script: &str) {
+    use std::io::Write;
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "cat > \"$0\" && chmod 700 \"$0\""])
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(script.as_bytes())
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+}
 fn fixture() -> (tempfile::TempDir, HarnessConfig) {
     let dir = tempfile::tempdir().unwrap();
     let exe = dir.path().join("codex");
-    std::fs::write(&exe, include_str!("../fixtures/codex.py")).unwrap();
-    std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
+    write_executable(&exe, include_str!("../fixtures/codex.py"));
     let config = HarnessConfig {
         engine: "codex".into(),
         executable: exe,
