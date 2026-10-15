@@ -26,18 +26,14 @@ impl HomeLease {
         let path = home.to_path_buf();
         let name = owner.clone();
         let heartbeat = thread::spawn(move || {
-            let mut store = None;
             while rx.recv_timeout(Duration::from_secs(2)) == Err(mpsc::RecvTimeoutError::Timeout) {
                 // Only a refused renewal means the lease is gone. Errors (a busy database,
-                // a configuration file being replaced) are retried on the next beat, with
-                // a fresh connection; the lease expires on its own if they persist.
-                if store.is_none() {
-                    store = ScheduleStore::open(&path).ok();
-                }
-                match store.as_ref().map(|s| s.heartbeat(&name, now_ms())) {
-                    Some(Ok(true)) | None => {}
-                    Some(Ok(false)) => break,
-                    Some(Err(_)) => store = None,
+                // a configuration file being replaced) are retried on the next beat; the
+                // lease expires on its own if they persist.
+                if let Ok(false) =
+                    ScheduleStore::open(&path).and_then(|s| s.heartbeat(&name, now_ms()))
+                {
+                    break;
                 }
             }
         });
