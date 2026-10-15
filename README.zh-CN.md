@@ -11,7 +11,7 @@
 
 agt 在你自己的机器上运行一组 AI Agent。你只需要和其中一个对话：lead。告诉它要做什么，它会写好角色 Prompt、创建 Agent、让编程 Agent 把缺的工具做出来，再把大家拉进群里推进工作。你可以旁观，随时插话，需要审批的操作由你决定。
 
-![加速录屏：给 lead 发一条消息，它创建三人研究小组，两轮讨论后给出一页纸总结](docs/public/showcase/research-run.webp)
+![加速录屏：给 lead 发一条消息，它创建三人研究小组，两轮讨论后给出结论，全程无人干预](docs/public/showcase/research-run.webp)
 
 ## 和其他框架有什么不同
 
@@ -36,7 +36,7 @@ agt 在你自己的机器上运行一组 AI Agent。你只需要和其中一个�
 - **会争论的研究小组。** 问「是否迁移到 Postgres 17」，lead 创建了性能研究员、运维风险研究员和评审，建群开场。评审对两位研究员逐一质询，两轮之后小组给出了裁决。
 - **由 Codex 造工具的剧本杀。** lead 让 Codex Agent 写了一个线索服务器，再创建主持人和三位玩家，给每位玩家一个锁定在他本人身份上的服务器实例，然后开局。
 
-![加速录屏：Codex 写出线索服务器，开局失败后 lead 让它修好，游戏一直进行到公布真相](docs/public/showcase/mystery-run.webp)
+![加速录屏：Codex 写出线索服务器，每个角色挂载各自锁定的实例，游戏一直进行到公布真相](docs/public/showcase/mystery-run.webp)
 
 ## 安装
 

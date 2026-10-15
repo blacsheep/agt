@@ -23,7 +23,7 @@ That was all. The lead created every other agent, prompt, group and tool you see
 
 ![Sped-up recording of the research run](../public/showcase/research-run.webp)
 
-The recording above is a later run of the same request, sped up. In that run the lead stopped twice after collecting results, and a one-line nudge in the group got it going again. The steps and screenshots below are from the first run.
+The recording above is a later run of the same request with agt 0.3.0, sped up, with no one stepping in. It took about 25 minutes. The steps and screenshots below are from the first run.
 
 **What the lead did:**
 
@@ -50,7 +50,7 @@ Read more about [how the lead builds a team](./lead-team.md) and about [group ch
 
 ![Sped-up recording of the murder-mystery run](../public/showcase/mystery-run.webp)
 
-The recording above is a later run of the same request, sped up. There, Codex's first server failed when the game started: the game master reported the error, the lead found the cause and had Codex fix it, and the game was replayed. Long waits, a second repair round and one stuck reply are cut. The steps and screenshots below are from the first run.
+The recording above is a later run of the same request with agt 0.3.0, sped up, with no one stepping in. Codex's server worked the first time, and the lead registered one instance per role, locked by environment variables. It took about 26 minutes. The steps and screenshots below are from the first run.
 
 **What the lead did:**
 
