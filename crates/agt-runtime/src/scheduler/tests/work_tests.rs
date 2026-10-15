@@ -598,6 +598,7 @@ fn codex_assignee_completes_work_and_reports_to_human_requester() {
     assert_eq!(run.execution.as_ref().unwrap()["engine"], "codex");
 }
 
+#[cfg(unix)]
 #[test]
 fn disconnected_codex_work_is_unknown_and_cannot_be_retried() {
     let (home, user, chat) = external_fixture();
@@ -678,6 +679,7 @@ fn task_listing_filters_before_pagination_and_exposes_safe_timeline() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn completed_codex_without_durable_result_requires_verification() {
     let (home, user, chat) = external_fixture();
@@ -737,6 +739,7 @@ fn binding_changes_wake_and_project_without_exposing_configuration() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn title_metadata_failure_does_not_reclassify_successful_codex_execution() {
     let (home, user, _chat) = external_fixture();
@@ -786,6 +789,7 @@ mod execution_policy_tools;
 
 mod expiry;
 
+#[cfg(unix)]
 mod termination;
 
 mod notification_processing;

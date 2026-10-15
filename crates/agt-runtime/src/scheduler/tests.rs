@@ -1538,10 +1538,12 @@ mod triage_tests;
 
 mod input_tests;
 
+#[cfg(unix)]
 mod harness_session_lock_tests;
 
 mod reset_history_tests;
 
+#[cfg(unix)]
 mod harness_tool_tests;
 
 mod run_input_tests;
