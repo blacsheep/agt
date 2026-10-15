@@ -72,7 +72,8 @@ cd docs && npm ci && npm run build
 
 Releases are built by [dist](https://opensource.axo.dev/cargo-dist/), configured in `dist-workspace.toml`. To publish version `X.Y.Z`:
 
-1. Set `version` in the workspace `Cargo.toml` and in `CITATION.cff`, and commit.
-2. Push the commit, then the tag: `git push && git tag vX.Y.Z && git push origin vX.Y.Z`.
+1. Set `version` in the workspace `Cargo.toml` and in `CITATION.cff`, and add a `## X.Y.Z - <date>` section to `CHANGELOG.md`; the release notes are taken from it.
+2. `main` only accepts pull requests that pass CI, so open a pull request with these changes and merge it.
+3. Tag the merged commit and push the tag: `git checkout main && git pull && git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 The Release workflow builds every platform, the installers and the checksums, and publishes the GitHub Release with the `GH_RELEASES_TOKEN` secret. Do not edit `.github/workflows/release.yml` by hand: change `dist-workspace.toml` and run `dist generate`.
