@@ -2,6 +2,10 @@ import json
 import os
 import sys
 
+# MCP speaks UTF-8; on Windows, piped stdio would otherwise use the ANSI code page.
+sys.stdin.reconfigure(encoding="utf-8")
+sys.stdout.reconfigure(encoding="utf-8")
+
 for line in sys.stdin:
     request = json.loads(line)
     method = request.get("method")
