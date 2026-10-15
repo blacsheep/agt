@@ -494,9 +494,11 @@ mod tests {
                     .unwrap(),
             )
             .unwrap();
+        // Absolute on every platform: without a drive, `/srv/...` is relative on Windows.
+        let root = if cfg!(windows) { "C:" } else { "" };
         let candidates = parse_codex_config(
             Path::new("config.toml"),
-            "[mcp_servers.existing]\ncommand='new'\ncwd='/srv/new'\n[mcp_servers.fresh]\ncommand='fresh'\ncwd='/srv/fresh'\n",
+            &format!("[mcp_servers.existing]\ncommand='new'\ncwd='{root}/srv/new'\n[mcp_servers.fresh]\ncommand='fresh'\ncwd='{root}/srv/fresh'\n"),
         )
         .unwrap();
 

@@ -718,6 +718,8 @@ fn completed_codex_without_durable_result_requires_verification() {
     assert!(control.call("task_retry",json!({"task_id":id,"expected_revision":result["revision"],"request_key":"unsafe-retry","reason":"retry"})).is_err());
 }
 
+// Prompt wake-ups use Unix datagram hints; elsewhere listeners poll storage.
+#[cfg(unix)]
 #[test]
 fn binding_changes_wake_and_project_without_exposing_configuration() {
     let (home, _user, _chat) = fixture();

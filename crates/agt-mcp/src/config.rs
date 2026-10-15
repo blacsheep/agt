@@ -592,6 +592,17 @@ fn lexically_normalize(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    // Absolute on every platform: without a drive, `/srv/...` is relative on Windows.
+    const ABSOLUTE_TOOLS: &str = if cfg!(windows) {
+        "C:/srv/tools"
+    } else {
+        "/srv/tools"
+    };
+    const ABSOLUTE_FS: &str = if cfg!(windows) {
+        "C:/srv/fs"
+    } else {
+        "/srv/fs"
+    };
     use serde_json::json;
 
     use super::*;
@@ -707,7 +718,7 @@ mod tests {
                 "不是绝对路径",
             ),
             (
-                json!({"command": "./server", "cwd": "/srv/tools"}),
+                json!({"command": "./server", "cwd": ABSOLUTE_TOOLS}),
                 "命令名（从 PATH 查找）或绝对路径",
             ),
         ] {
@@ -728,7 +739,11 @@ mod tests {
             "python3",
             Vec::new(),
             [],
-            Path::new("/nonexistent/agt-mcp-cwd"),
+            Path::new(if cfg!(windows) {
+                "C:/nonexistent/agt-mcp-cwd"
+            } else {
+                "/nonexistent/agt-mcp-cwd"
+            }),
         )
         .expect("absolute cwd is valid to write");
         assert!(
@@ -787,7 +802,7 @@ mod tests {
             "npx",
             vec!["-y".to_string(), "pkg".to_string()],
             [("TOKEN".to_string(), "secret".to_string())],
-            Path::new("/srv/fs"),
+            Path::new(ABSOLUTE_FS),
         )
         .unwrap();
 
@@ -795,6 +810,6 @@ mod tests {
         assert_eq!(config.command, "npx");
         assert_eq!(config.args, ["-y", "pkg"]);
         assert_eq!(config.env, [("TOKEN".to_string(), "secret".to_string())]);
-        assert_eq!(config.cwd.as_deref(), Some("/srv/fs"));
+        assert_eq!(config.cwd.as_deref(), Some(ABSOLUTE_FS));
     }
 }
