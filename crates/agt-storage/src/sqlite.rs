@@ -22,6 +22,12 @@ thread_local! {
 /// Runtime state shared by runs, scheduling, work, approvals, sessions, bindings and events.
 pub const RUNTIME_DB: (&str, &str) = ("runtime", "runtime.db");
 
+/// How long a connection waits for another process's write lock before failing
+/// with "database is locked". The console, the scheduler and CLI commands are
+/// separate processes on the same databases; no write holds the lock for long,
+/// but slow disks (Windows in particular) can stretch a short wait past seconds.
+pub const BUSY_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Generic invalidation outbox drained by the event projection. Modules write it
 /// through triggers; it carries no message text or private Run data.
 pub const OUTBOX: Schema = Schema {
@@ -70,7 +76,7 @@ pub fn open(
         Some(connection) => connection,
         None => {
             let connection = Connection::open(&path)?;
-            connection.busy_timeout(Duration::from_secs(5))?;
+            connection.busy_timeout(BUSY_TIMEOUT)?;
             connection.pragma_update(None, "foreign_keys", "ON")?;
             let connection = Rc::new(connection);
             SHARED.with(|shared| {

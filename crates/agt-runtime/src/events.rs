@@ -3,10 +3,7 @@ use agt_im::{ConversationId, ImStore, PrincipalId};
 use anyhow::{Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
-use std::{
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::path::{Path, PathBuf};
 
 pub(crate) const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Schema {
     module: "events",
@@ -67,7 +64,7 @@ impl Events {
             ("runtime", agt_storage::sqlite::RUNTIME_DB),
         ] {
             let db = Connection::open(agt_storage::database_path(&self.home, directory, name)?)?;
-            db.busy_timeout(Duration::from_secs(5))?;
+            db.busy_timeout(agt_storage::sqlite::BUSY_TIMEOUT)?;
             let tx = agt_storage::sqlite::write(&self.connection)?;
             let cursor = tx
                 .query_row("SELECT seq FROM cursors WHERE source=?1", [source], |r| {
