@@ -10,7 +10,7 @@ W = 140
 d.band(X, 12, 512, 92, '入口')
 d.node(c1, 40, W, 50, '外部 MCP 客户端', 'Claude、IDE 等')
 d.node(c2, 40, W, 50, '浏览器', 'Web 控制台')
-d.node(c3, 40, W, 50, 'Node Web 服务', '静态页面、HTTP、SSE')
+d.node(c3, 40, W, 50, 'agt web 服务', '静态页面、HTTP、SSE')
 d.node(c1, 132, W, 44, 'agt serve')
 d.node(c3, 132, W, 44, 'agt CLI')
 

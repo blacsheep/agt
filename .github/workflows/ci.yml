@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Web unit tests drive the CLI built at target/debug/agt.
+      # Web tests start `agt web` and drive the CLI built at target/debug/agt.
       - run: cargo build -p agt-cli
       - run: node --test test/*.test.mjs
         working-directory: web

@@ -4,8 +4,8 @@
 | --- | --- |
 | **是什么** | AGT Studio，agt 的本地浏览器界面 |
 | **启动** | `agt web` |
-| **依赖** | Node.js 22 或更新 |
-| **代码** | `web/`（Node.js 服务和原生 HTML/CSS/JavaScript，无 npm 依赖），内置在 `agt` 中 |
+| **依赖** | 只需要 `agt`：控制台内置在其中 |
+| **代码** | `web/public/`（原生 HTML/CSS/JavaScript，无需构建）和 `crates/agt-cli/src/web/`（本地服务），都内置在 `agt` 中 |
 
 ## 作用
 
@@ -36,16 +36,15 @@ agt web
 | --- | --- | --- |
 | `--port <n>` | `4317` | 端口。控制台只监听 `127.0.0.1`。 |
 | `--principal <id>` | `web-operator` | 你的身份。第一个在某个 home 上启动控制台的身份会成为工作空间负责人；之后启动必须使用同一身份。 |
-| `--node <路径>` | `node` | Node.js 程序（22 或更新） |
 | `--home <目录>`（全局） | `$AGT_HOME`，否则 `~/.agt` | home 目录；写在 `web` 前面 |
 
-`agt web` 首次启动时把控制台文件写入 `<home>/.web/<版本哈希>/`，删除其他版本留下的副本，然后用 Node.js 运行，并传入自身路径，确保控制台和调度器使用同一个 `agt`。按 Ctrl+C 会同时停止控制台和调度器。
+`agt web` 直接从 `agt` 程序本身提供页面，每个操作都以同一个 home 执行一条 `agt` 命令，因此控制台和调度器始终使用同一个版本。按 Ctrl+C 会同时停止控制台和调度器。
 
 首次启动时，控制台会创建你的用户身份。启动时不会为旧消息调用模型。
 
 ### 从源码运行
 
-在克隆的仓库中，`node web/server.mjs` 直接从 `web/` 运行控制台。它接受 `--home`、`--port`、`--principal`，以及 `--binary <路径>`（要调用的 `agt`，默认 `target/debug/agt`）。
+在克隆的仓库中，`cargo run -p agt-cli -- web` 从工作区源码启动控制台。`web/public/` 下的文件在构建时嵌入，修改其中任何文件后 Cargo 都会重新构建 `agt`。
 
 ### 页面
 

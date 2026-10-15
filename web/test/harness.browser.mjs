@@ -1,4 +1,4 @@
-import { createConsole, cliRunner } from '../server.mjs';
+import { cliRunner, startConsole } from './support/console.mjs';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, rm, writeFile, readFile, chmod } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
@@ -15,9 +15,8 @@ try {
   await run(['im', 'principal', 'create', 'operator']);
   await run(['im', 'principal', 'create', 'tech-lead', '--kind', 'agent']);
   await run(['im', 'principal', 'create', 'designer']);
-  ({ server } = createConsole({ run, home, principal: 'operator', token: 'browser-test-token' }));
-  await new Promise(ok => server.listen(0, '127.0.0.1', ok));
-  const url = `http://127.0.0.1:${server.address().port}`;
+  server = await startConsole({ run, principal: 'operator', token: 'browser-test-token' });
+  const url = server.url;
   chrome = spawn(process.env.CHROME_BINARY || '/opt/google/chrome/chrome', ['--headless=new', '--accept-lang=zh-CN', '--no-sandbox', '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   const endpoint = await new Promise((ok, fail) => { let log = ''; chrome.stderr.on('data', chunk => { log += chunk; const match = log.match(/DevTools listening on (ws:\/\/\S+)/); if (match) ok(match[1]); }); chrome.on('error', fail); });
   socket = new WebSocket(endpoint);
@@ -176,7 +175,7 @@ try {
   assert.deepEqual(errors,[]);
   console.log('Harness browser passed: create/edit harness and external Agent without Model, enabled binding, execution controls, desktop/mobile overflow.');
 } finally {
-  socket?.close(); chrome?.kill('SIGTERM'); run.close(); server?.closeAllConnections(); server?.close();
+  socket?.close(); chrome?.kill('SIGTERM'); run.close(); await server?.close();
   await new Promise(ok=>setTimeout(ok,500));
   await rm(home,{recursive:true,force:true}); await rm(profile,{recursive:true,force:true});
 }

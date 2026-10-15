@@ -4,13 +4,18 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import http from 'node:http';
-import { createConsole, cliRunner } from '../server.mjs';
+import { agtBinary as binary, cliRunner, startConsole } from './support/console.mjs';
 
+// The page shares its command parser with these checks; labels are not shown here.
+globalThis.$t ??= text => text;
+await import('../public/commands.js');
+
+// `agt web` as the fixed operator. `run` is a real cliRunner or a scripted
+// fake that receives every CLI call the console makes.
 async function fixture(t, run) {
-  const { server, token } = createConsole({ run, home: '/isolated', principal: 'operator' });
-  await new Promise(ok => server.listen(0, '127.0.0.1', ok));
-  t.after(() => { server.closeAllConnections(); server.close(); });
-  const url = `http://127.0.0.1:${server.address().port}`;
+  const web = await startConsole({ run, principal: 'operator' });
+  t.after(web.close);
+  const { url, token } = web;
   const request = (path, data, headers = {}) => fetch(`${url}${path}`, { method: data === undefined ? 'GET' : 'POST', headers: { 'X-AGT-Token': token, ...(data === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers }, body: data === undefined ? undefined : JSON.stringify(data) });
   return { request, url };
 }
@@ -39,8 +44,9 @@ test('malformed inputs and internal failures do not expose host details', async 
   assert.equal((await request('/api/tool', [])).status, 400);
   assert.equal((await request('/api/tool', { name: 'group_create', args: [] })).status, 400);
   assert.equal((await request('/api/calls', { id: 'run', after: -1 })).status, 400);
+  // A failing CLI call is reported as a generic, safe 400.
   const failed = await request('/api/bootstrap');
-  assert.equal(failed.status, 500);
+  assert.equal(failed.status, 400);
   assert.doesNotMatch(await failed.text(), /private-host-secret/);
 });
 
@@ -99,7 +105,6 @@ test('deletion uses runtime-fenced operation and fixed operator identity', async
 
 test('real CLI: resources, binding, chat, observation, safe errors, persistent scheduler', async t => {
   const home = await mkdtemp(resolve(tmpdir(), 'agt-web-test-'));
-  const binary = resolve(import.meta.dirname, '../../target/debug/agt');
   const run = cliRunner(binary, home);
   t.after(async () => { await run.close(); await rm(home, { recursive: true, force: true }); });
   await run(['init', home]);
@@ -200,7 +205,7 @@ test('resource endpoint fixes identity, prevents cascading and requires a confir
 
 test('real CLI: all six Web resources create, readable details, protected deletion and safe credentials', async t => {
   const home = await mkdtemp(resolve(tmpdir(), 'agt-web-resources-'));
-  const run = cliRunner(resolve(import.meta.dirname, '../../target/debug/agt'), home);
+  const run = cliRunner(binary, home);
   t.after(async () => { await run.close(); await rm(home, { recursive: true, force: true }); });
   await run(['init', home]);
   await run(['im', 'principal', 'create', 'operator']);
@@ -268,7 +273,7 @@ test('provider model discovery validates input and hides remote failures', async
 
 test('real CLI: discovers provider models with stored credentials and creates models without a token cap', async t => {
   const home = await mkdtemp(resolve(tmpdir(), 'agt-web-models-'));
-  const run = cliRunner(resolve(import.meta.dirname, '../../target/debug/agt'), home);
+  const run = cliRunner(binary, home);
   t.after(async () => { await run.close(); await rm(home, { recursive: true, force: true }); });
   const calls = [];
   let result = { data: [{ id: 'vendor/model-b' }, { id: 'model-a' }] };
@@ -314,7 +319,7 @@ test('real CLI: discovers provider models with stored credentials and creates mo
 
 test('real CLI: personal entries, supervised groups and retained departure history', async t => {
   const home = await mkdtemp(resolve(tmpdir(), 'agt-web-sessions-'));
-  const run = cliRunner(resolve(import.meta.dirname, '../../target/debug/agt'), home);
+  const run = cliRunner(binary, home);
   t.after(async () => { await run.close(); await rm(home, { recursive: true, force: true }); });
   await run(['init', home]);
   await run(['im', 'principal', 'create', 'operator']);
@@ -387,7 +392,7 @@ test('live drafts are allowlisted and scoped to current membership and task vers
 
 test('real scheduler streams a draft before publishing and hides it when stopped', {timeout: 30000}, async t => {
   const home = await mkdtemp(resolve(tmpdir(), 'agt-web-stream-'));
-  const run = cliRunner(resolve(import.meta.dirname, '../../target/debug/agt'), home);
+  const run = cliRunner(binary, home);
   let finish;
   const model = http.createServer(async (req, res) => {
     let body = ''; for await (const chunk of req) body += chunk;
@@ -440,7 +445,7 @@ test('real scheduler streams a draft before publishing and hides it when stopped
 
 test('explicit history visits persist via CLI without changing messages or another identity', async t => {
   const home = await mkdtemp(resolve(tmpdir(),'agt-history-window-'));
-  const run = cliRunner(resolve(import.meta.dirname,'../../target/debug/agt'), home);
+  const run = cliRunner(binary, home);
   t.after(async()=>{await run.close();await rm(home,{recursive:true,force:true});});
   await run(['init',home]); await run(['im','principal','create','operator']); await run(['im','principal','create','other']);
   const {request} = await fixture(t,run);
@@ -461,7 +466,7 @@ test('explicit history visits persist via CLI without changing messages or anoth
 
 test('reading a conversation clears only the operator unread count', async t => {
   const home = await mkdtemp(resolve(tmpdir(),'agt-read-cursor-'));
-  const run = cliRunner(resolve(import.meta.dirname,'../../target/debug/agt'), home);
+  const run = cliRunner(binary, home);
   t.after(async()=>{await run.close();await rm(home,{recursive:true,force:true});});
   await run(['init',home]); await run(['im','principal','create','operator']); await run(['im','principal','create','other']);
   const {request} = await fixture(t,run);
@@ -561,19 +566,21 @@ test('event streams require a valid operator/agent viewer and release the subscr
   assert.equal((await request('/api/events?viewer=deleted')).status, 403);
   const response = await request('/api/events?viewer=agent&after=scope-cursor');
   assert.match(response.headers.get('content-type'), /text\/event-stream/);
+  // The subscription is a separate CLI process; wait until it has started.
+  for (let i = 0; i < 200 && !onPage; i++) await new Promise(resolve => setTimeout(resolve, 10));
   assert.deepEqual(options, { principal: 'agent', after: 'scope-cursor' });
   const reader = response.body.getReader();
   onPage({ event: 'change', cursor: 'next', changes: [{ conversation: 'visible', kind: 'work' }] });
   const { value } = await reader.read();
   assert.match(new TextDecoder().decode(value), /event: change/);
   await reader.cancel();
-  for (let i = 0; i < 50 && !stopped; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  for (let i = 0; i < 500 && !stopped; i++) await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal(stopped, 1);
 });
 
 test('real JSONL watch delivers committed changes and replays a reconnect cursor', async t => {
   const home = await mkdtemp(resolve(tmpdir(), 'agt-events-'));
-  const run = cliRunner(resolve(import.meta.dirname, '../../target/debug/agt'), home);
+  const run = cliRunner(binary, home);
   t.after(async () => { await run.close(); await rm(home, { recursive: true, force: true }); });
   await run(['init', home]);
   await run(['im', 'principal', 'create', 'operator', '--name', 'Operator', '--kind', 'user']);

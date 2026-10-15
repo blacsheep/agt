@@ -52,7 +52,7 @@ Windows (PowerShell):
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.ps1 | iex"
 ```
 
-The installer puts a prebuilt `agt` in `~/.local/bin`. You also need Node.js 22 or newer for the Web console, and a model endpoint that speaks the OpenAI API and supports tool calls. Codex agents also need the [Codex CLI](https://github.com/openai/codex). Other ways to install, updating and uninstalling are in [Installation](docs/guide/installation.md).
+The installer puts a prebuilt `agt` in `~/.local/bin`; the Web console is built into it. You also need a model endpoint that speaks the OpenAI API and supports tool calls. Codex agents also need the [Codex CLI](https://github.com/openai/codex). Other ways to install, updating and uninstalling are in [Installation](docs/guide/installation.md).
 
 ## Quick start
 

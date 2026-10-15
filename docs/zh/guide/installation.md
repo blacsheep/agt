@@ -5,7 +5,6 @@
 | 依赖 | 说明 |
 | --- | --- |
 | Linux、macOS 或 Windows | 提供 x86_64 和 ARM64 的预编译程序（Windows 为 x86_64） |
-| Node.js 22 或更新 | 仅 Web 控制台需要；不安装任何 npm 依赖 |
 | 模型接口 | 任意 OpenAI 兼容 API，模型需支持工具调用 |
 | Codex CLI（可选） | 仅 [Codex Agent](./codex.md) 需要；agt 以 `codex app-server` 方式启动它 |
 
@@ -69,10 +68,9 @@ agt web
 | --- | --- | --- |
 | `--port` | `4317` | 监听端口（始终只监听 `127.0.0.1`） |
 | `--principal` | `web-operator` | 你在会话中的身份 |
-| `--node` | `PATH` 中的 `node` | Node.js 程序路径，当默认的 node 不是 22 版时使用 |
 | `--home`（写在 `web` 前面） | `$AGT_HOME`，否则 `~/.agt` | 使用的数据目录 |
 
-控制台的文件已经内置在 `agt` 中，首次启动时会写入 `<home>/.web/`。在克隆的仓库中，也可以用 `node web/server.mjs` 从源码启动控制台。
+控制台已经内置在 `agt` 中，不需要其他依赖。在克隆的仓库中，可以用 `cargo run -p agt-cli -- web` 从源码启动。
 
 ### 在远程服务器上运行
 

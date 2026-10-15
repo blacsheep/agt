@@ -46,7 +46,7 @@ text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", 
   <line class="life" x1="73.3" y1="82" x2="73.3" y2="1388"/>
   <rect class="node" x="21.000000000000007" y="16" width="104.66666666666667" height="66" rx="8"/>
   <text class="t" x="73.33333333333334" y="45.0">用户 / Web</text>
-  <text class="s" x="73.33333333333334" y="63.0">Node</text>
+  <text class="s" x="73.33333333333334" y="63.0">agt web</text>
   <line class="life" x1="188" y1="82" x2="188" y2="1388"/>
   <rect class="node" x="135.66666666666666" y="16" width="104.66666666666667" height="66" rx="8"/>
   <text class="t" x="188.0" y="45.0">Service / IM</text>

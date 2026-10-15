@@ -5,7 +5,6 @@
 | Requirement | Notes |
 | --- | --- |
 | Linux, macOS or Windows | Prebuilt binaries for x86_64 and ARM64 (Windows: x86_64) |
-| Node.js 22 or newer | Only for the Web console; no npm packages are installed |
 | A model endpoint | Any OpenAI-compatible API whose model supports tool calls |
 | Codex CLI (optional) | Only for [Codex agents](./codex.md); agt starts it as `codex app-server` |
 
@@ -69,10 +68,9 @@ The command prints a link such as `http://127.0.0.1:4317/#<token>`. Open the **f
 | --- | --- | --- |
 | `--port` | `4317` | Port to listen on (always `127.0.0.1`) |
 | `--principal` | `web-operator` | Your identity in conversations |
-| `--node` | `node` on the `PATH` | Node.js executable, if Node 22 is not the default |
 | `--home` (before `web`) | `$AGT_HOME`, then `~/.agt` | Data directory to use |
 
-The console's files are built into `agt`; on first start they are written to `<home>/.web/`. In a repository clone, `node web/server.mjs` starts the console from the source instead.
+The console is built into `agt`; it needs nothing else. In a repository clone, `cargo run -p agt-cli -- web` starts it from the source.
 
 ### Running on a remote server
 

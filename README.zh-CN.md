@@ -52,7 +52,7 @@ Windows（PowerShell）：
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.ps1 | iex"
 ```
 
-安装脚本会把预编译的 `agt` 放到 `~/.local/bin`。另外需要 Node.js 22 或更新版本（用于 Web 控制台），以及一个兼容 OpenAI API、支持工具调用的模型接口。使用 Codex Agent 还需要安装 [Codex CLI](https://github.com/openai/codex)。其他安装方式、更新和卸载见 [安装](docs/zh/guide/installation.md)。
+安装脚本会把预编译的 `agt` 放到 `~/.local/bin`，Web 控制台已经内置在其中。另外需要一个兼容 OpenAI API、支持工具调用的模型接口。使用 Codex Agent 还需要安装 [Codex CLI](https://github.com/openai/codex)。其他安装方式、更新和卸载见 [安装](docs/zh/guide/installation.md)。
 
 ## 快速开始
 

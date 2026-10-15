@@ -2,22 +2,22 @@
 
 ## Build and test
 
-You need Rust 1.96.1 or newer and Node.js 22 or newer.
+You need Rust 1.96.1 or newer. The Web console tests also need Node.js 22 or newer; `agt` itself does not.
 
 ```bash
 cargo build -p agt-cli              # target/debug/agt
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-node --test web/test/*.test.mjs     # needs target/debug/agt
+node --test web/test/*.test.mjs     # runs target/debug/agt web
 ```
 
 No test needs a model API key. The browser tests (`web/test/*.browser.mjs`) need a local Chrome and run separately; see [Web console architecture](docs/zh/architecture/web-console.md) (Chinese).
 
-To run the console from your working tree instead of the copy built into `agt`:
+To run the console from your working tree:
 
 ```bash
-node web/server.mjs                 # uses target/debug/agt
+cargo run -p agt-cli -- web
 ```
 
 ## Where tests go
@@ -46,7 +46,7 @@ agt-runtime    model/tool loop, persistent runs, delivery scheduling, delegation
 agt-cli        the agt command-line interface, with the Web console built in
 ```
 
-The Web console lives in `web/`: a Node.js server and plain HTML, CSS and JavaScript, with no npm dependencies. `crates/agt-cli/build.rs` embeds it into the `agt` binary, so a change under `web/public/` reaches `agt web` only after a rebuild.
+The Web console is a page in `web/public/` (plain HTML, CSS and JavaScript, no build step) and a local server in `crates/agt-cli/src/web/` that turns each request into an `agt` command. `crates/agt-cli/build.rs` embeds the page into the binary, so a change under `web/public/` reaches `agt web` after a rebuild. Server tests in `web/test/` start `agt web` with a scripted CLI (`web/test/support/`).
 
 ### Console text
 

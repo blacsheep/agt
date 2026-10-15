@@ -4,8 +4,8 @@
 | --- | --- |
 | **What it is** | AGT Studio, the local browser UI for agt |
 | **Start** | `agt web` |
-| **Needs** | Node.js 22 or newer |
-| **Code** | `web/` (Node.js server and plain HTML/CSS/JavaScript, no npm dependencies), built into `agt` |
+| **Needs** | Nothing beyond `agt`: the console is built into it |
+| **Code** | `web/public/` (plain HTML/CSS/JavaScript, no build step) and `crates/agt-cli/src/web/` (the local server), both built into `agt` |
 
 ## What it does
 
@@ -36,16 +36,15 @@ Open the full link printed in the terminal, including the token after `#`. On a 
 | --- | --- | --- |
 | `--port <n>` | `4317` | Port. The console only listens on `127.0.0.1`. |
 | `--principal <id>` | `web-operator` | Your identity. The first identity to start the console on a home becomes the workspace owner; later starts must use the same identity. |
-| `--node <path>` | `node` | Node.js executable (22 or newer) |
 | `--home <dir>` (global) | `$AGT_HOME`, then `~/.agt` | Home directory; write it before `web` |
 
-`agt web` writes the console's files to `<home>/.web/<version hash>/` on first start, removes copies from other versions, and runs them with Node.js, passing its own path so the console and the scheduler use the same `agt`. Ctrl+C stops the console and the scheduler.
+`agt web` serves the page from the `agt` binary itself and runs every operation as an `agt` command on the same home, so the console and the scheduler always use the same version. Ctrl+C stops the console and the scheduler.
 
 On first start the console creates your user identity. It never calls a model for old messages on start.
 
 ### Running from source
 
-In a repository clone, `node web/server.mjs` runs the console from `web/` directly. It accepts `--home`, `--port`, `--principal`, and `--binary <path>` (the `agt` to call, default `target/debug/agt`).
+In a repository clone, `cargo run -p agt-cli -- web` serves the console from your working tree. The files under `web/public/` are embedded at build time, so Cargo rebuilds `agt` when one of them changes.
 
 ### Pages
 

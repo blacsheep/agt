@@ -28,10 +28,15 @@ agt-service.workspace = true
 agt-skill.workspace = true
 agt-storage.workspace = true
 anyhow.workspace = true
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 clap.workspace = true
+form_urlencoded = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "process", "net", "signal", "io-util"] }
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -35,7 +35,7 @@
 | [运行配置、记忆与本机执行](config-and-memory.md) | 配置、记忆与本机命令的生效时机和边界是什么？ |
 | [MCP 工具](mcp-tools.md) | MCP 如何开发、注册、校验和在 Run 内刷新？ |
 | [会话生命周期](conversations.md) | 隐藏、退群、解散和删除身份分别影响什么？ |
-| [Web 控制台](web-console.md) | Node 与 Rust 如何分工？界面依赖哪些接口？ |
+| [Web 控制台](web-console.md) | 页面与本地服务如何分工？界面依赖哪些接口？ |
 
 ## 核心概念
 

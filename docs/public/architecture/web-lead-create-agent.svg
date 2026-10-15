@@ -46,11 +46,11 @@ text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", 
   <rect class="end" x="260" y="16" width="200" height="36" rx="18.0"/>
   <text class="t" x="360.0" y="39.0">用户：请创建 reviewer</text>
   <rect class="node" x="260" y="76" width="200" height="48" rx="8"/>
-  <text class="t" x="360.0" y="96.0">Web / Node</text>
+  <text class="t" x="360.0" y="96.0">Web 控制台</text>
   <text class="s" x="360.0" y="114.0">发送消息并授权自动回复</text>
   <rect class="node" x="24" y="76" width="200" height="48" rx="8"/>
   <text class="t" x="124.0" y="96.0">outbox → events watch</text>
-  <text class="s" x="124.0" y="114.0">Node SSE → Web 刷新</text>
+  <text class="s" x="124.0" y="114.0">SSE → 页面刷新</text>
   <rect class="node" x="24" y="168" width="200" height="48" rx="8"/>
   <text class="t" x="124.0" y="188.0">agt-service → agt-im</text>
   <text class="s" x="124.0" y="206.0">保存消息与投递</text>

@@ -11,7 +11,7 @@
 - 资源管理使用 `.resources.lock` 串行化读写与删除执行；`revision/expected_revision` 检测过期编辑。详情见[资源管理与能力生效](resource-flow.md)。
 - 资源服务保存配置；Native Runtime 在成功自修改 MCP/Skill 后，于工具批次结束刷新能力。保存成功不等于当前 Run 已加载，刷新失败保留旧能力并单独报告。
 - Agent 引用 Model 或 Harness，二者互斥；Model 再引用 Provider。Prompt、Skill 与工具能力附着于 Agent。
-- Node 负责本地界面和 HTTP 适配，业务操作经 Rust CLI；scheduler 是长期运行的 Rust 子进程。
+- `agt web` 提供本地界面并把 HTTP 适配为 Rust CLI 命令；scheduler 是长期运行的 Rust 子进程。
 - 当前每个 Web 事件订阅启动一个长期运行的 `agt events watch`，将 JSONL 桥接成 SSE。
 - IM 自身不调用模型；Runtime 负责执行，Scheduler 负责执行准入，WorkItem 记录工作责任。
 - `agt-service` 不依赖 Runtime。它声明 `WorkControl`、`HarnessControl`、`ExecutionControl`，由 Runtime 实现并注入。
@@ -38,7 +38,7 @@
 ## 代码入口
 
 - [Workspace](../../../Cargo.toml)：crate 列表与依赖。
-- [Web 服务](../../../web/server.mjs)：`cliRunner`、`createConsole`、`watchEvents`。
+- [Web 服务](../../../crates/agt-cli/src/web/mod.rs)：启动与关闭；[HTTP 接口](../../../crates/agt-cli/src/web/http.rs)；[CLI 调用](../../../crates/agt-cli/src/web/cli.rs)：`Cli`、`watch_events`。
 - [共享资源服务](../../../crates/agt-service/src/resources/mod.rs)与[更新/版本检查](../../../crates/agt-service/src/resources/mutation.rs)。
 - [能力刷新](../../../crates/agt-runtime/src/engine/native/refresh.rs)：批次边界装配与应用。
 - [Agent 配置](../../../crates/agt-agent/src/config.rs)：`AgentConfig::validate`。

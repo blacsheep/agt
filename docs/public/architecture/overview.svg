@@ -52,7 +52,7 @@ text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", 
   <text class="t" x="290.0" y="61.0">浏览器</text>
   <text class="s" x="290.0" y="79.0">Web 控制台</text>
   <rect class="node" x="390" y="40" width="140" height="50" rx="8"/>
-  <text class="t" x="460.0" y="61.0">Node Web 服务</text>
+  <text class="t" x="460.0" y="61.0">agt web 服务</text>
   <text class="s" x="460.0" y="79.0">静态页面、HTTP、SSE</text>
   <rect class="node" x="50" y="132" width="140" height="44" rx="8"/>
   <text class="t" x="120.0" y="159.0">agt serve</text>
