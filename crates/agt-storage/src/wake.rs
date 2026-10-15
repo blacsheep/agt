@@ -6,11 +6,12 @@ use std::{
         fs::{FileTypeExt, PermissionsExt},
         net::UnixDatagram,
     },
+    path::PathBuf,
     sync::atomic::AtomicU64,
 };
 use std::{
     io::{self, Write},
-    path::{Path, PathBuf},
+    path::Path,
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant},
 };

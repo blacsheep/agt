@@ -71,6 +71,8 @@ fn nonblocking(pipe: &impl std::os::fd::AsRawFd) -> Result<()> {
     Ok(())
 }
 impl agt_service::ExecutionControl for LocalExecution {
+    // Elsewhere the call is refused before the Unix-only body below.
+    #[cfg_attr(not(unix), allow(unreachable_code, unused_variables))]
     fn call(&self, args: Value) -> Result<Value> {
         let policy = agt_config::RuntimeConfig::load(&self.home)?.execution;
         if !policy.enabled {
