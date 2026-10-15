@@ -38,6 +38,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # Defender scans every SQLite write, which slows the runner enough to exceed the
+      # tests' lock and lease time budgets. Test homes live under the temp directory.
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-MpPreference -ExclusionPath "${{ github.workspace }}", "$env:TEMP", "$env:USERPROFILE\.cargo"
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       # MCP test fixtures are Python scripts (`python` on Windows, `python3` elsewhere).
