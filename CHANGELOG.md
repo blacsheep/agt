@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 - 2026-10-15
+
+### Scheduler
+
+- The scheduler no longer drops its lease after a brief error. Its heartbeat stopped for good the first time renewing failed, for example while the database was busy, and fifteen seconds later the scheduler cancelled all running work with "scheduler lease lost". Errors are now retried on the next heartbeat.
+
 ## 0.3.0 - 2026-10-15
 
 ### The Web console no longer needs Node.js
