@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension, Row, Transaction, TransactionBehavior, params};
 use serde_json::{Value, json};
@@ -1179,7 +1179,7 @@ impl ImStore {
 }
 
 fn configure_connection(connection: &Connection, enable_wal: bool) -> Result<()> {
-    connection.busy_timeout(Duration::from_secs(5))?;
+    connection.busy_timeout(agt_storage::sqlite::BUSY_TIMEOUT)?;
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
     if enable_wal {
         connection.pragma_update(None, "journal_mode", "WAL")?;
@@ -1890,6 +1890,8 @@ mod tests {
         assert!(!listener.wait(Duration::from_millis(1)).unwrap());
     }
     use super::*;
+    #[cfg(unix)]
+    use std::time::Duration;
 
     fn principal(store: &ImStore, id: &str) -> PrincipalId {
         let id = PrincipalId::new(id);

@@ -128,7 +128,7 @@ impl HarnessSessions {
             let Ok(db) = Connection::open(path) else {
                 return;
             };
-            let _ = db.busy_timeout(Duration::from_secs(5));
+            let _ = db.busy_timeout(agt_storage::sqlite::BUSY_TIMEOUT);
             while receiver.recv_timeout(Duration::from_secs(5))
                 == Err(mpsc::RecvTimeoutError::Timeout)
             {

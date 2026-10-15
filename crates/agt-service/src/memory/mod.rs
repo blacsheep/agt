@@ -36,7 +36,7 @@ fn bounded<'a>(args: &'a Value, key: &str, max: usize) -> Result<&'a str> {
 }
 fn open(home: &Path) -> Result<Connection> {
     let db = Connection::open(agt_storage::database_path(home, "memory", "memory.db")?)?;
-    db.busy_timeout(std::time::Duration::from_secs(5))?;
+    db.busy_timeout(agt_storage::sqlite::BUSY_TIMEOUT)?;
     let version: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     if version > 1 {
         bail!("unsupported memory schema");
