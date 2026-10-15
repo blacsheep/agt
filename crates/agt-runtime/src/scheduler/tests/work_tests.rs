@@ -27,6 +27,9 @@ fn delegate(scheduler: &mut Scheduler, chat: &str) -> String {
     item["id"].as_str().unwrap().into()
 }
 fn claim_work(scheduler: &mut Scheduler, id: &str) -> ScheduledTask {
+    // The coordinator lease lasts 15 s and only the scheduler loop renews it. A slow
+    // runner can take longer than that between the setup's scan and this claim.
+    assert!(scheduler.store.acquire(&scheduler.owner, now_ms()).unwrap());
     scheduler
         .store
         .claim(&format!("work:{id}"), &scheduler.owner, now_ms())
