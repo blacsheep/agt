@@ -1114,18 +1114,36 @@ fn reset_during_summary_generation_cannot_recreate_the_summary() {
     );
 }
 
+/// Writes an executable script from a child process. Were this process to hold
+/// the file open for writing, a child forked meanwhile by a parallel test could
+/// inherit the descriptor, and running the script would fail with ETXTBSY.
+#[cfg(unix)]
+fn write_executable(path: &std::path::Path, script: &str) {
+    use std::io::Write;
+    let mut child = std::process::Command::new("sh")
+        .args(["-c", "cat > \"$0\" && chmod 700 \"$0\""])
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(script.as_bytes())
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+}
+
 #[cfg(unix)]
 fn external_fixture() -> (tempfile::TempDir, ToolService, String) {
-    use std::os::unix::fs::PermissionsExt;
     let (home, user, group) = fixture();
     let path = home.path();
     let exe = path.join("codex-fixture");
-    std::fs::write(
+    write_executable(
         &exe,
         include_str!("../../../agt-harness/tests/fixtures/codex.py"),
-    )
-    .unwrap();
-    std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
+    );
     agt_harness::HarnessStore::new(path)
         .write_in(
             &agt_core::CategoryName::default(),
