@@ -84,7 +84,7 @@ lead 修改 reviewer 不会自动刷新 reviewer 当前正在执行的 Run，后
 
 ## 代码依据与维护入口
 
-- [Web 服务](../../../web/server.mjs)：`message_send` 后的 `schedule start --message`。
+- [Web 服务](../../../crates/agt-cli/src/web/http.rs)：`message_send` 后的 `schedule start --message`。
 - [调度执行](../../../crates/agt-runtime/src/scheduler/execution.rs)：构造 `MessageTrigger`，使用 binding principal。
 - [Native 准备](../../../crates/agt-runtime/src/engine/native/prepare.rs)：`with_resource_management` 与 `framework_` 工具 schema。
 - [Native 工具阶段](../../../crates/agt-runtime/src/engine/native/tools.rs)：`PermissionLoop::authorize` 与执行审计。

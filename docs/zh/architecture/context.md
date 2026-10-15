@@ -13,7 +13,7 @@
 | runtime/context_store.rs | `runtime/runtime.db` 中 conversation_summaries 表的摘要持久化 |
 | runtime/scheduler.rs | 摘要调用的调度授权、重置权限、与旧任务发布之间的围栏；schedule_store 在 runtime.db 保存重置起点 |
 | agt-im | 原始消息、分页与成员可见区间；不依赖模型或 Runtime |
-| CLI / Web | 同一 Runtime 重置接口的适配和交互；Node 不生成或管理摘要 |
+| CLI / Web | 同一 Runtime 重置接口的适配和交互；Web 服务不生成或管理摘要 |
 
 Agent 私有工具执行摘要仅存于 `runtime.db` 的 Run `context` 字段；不写入 IM，也不注入其他 Agent 的上下文。会话摘要只提取该 principal 可见的公共对话消息，按 `(conversation, principal)` 保存，与 Agent 配置指纹和来源内容摘要绑定。这不是所有 Agent 共用的全局记忆。
 

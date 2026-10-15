@@ -791,6 +791,8 @@ AgtI18n.add('en', {
   "无会话访问权限，请联系相关成员核查": "You have no access to that conversation; ask a member to check",
   "无法确认执行结果，请核对原始执行和文件改动。": "The outcome cannot be confirmed. Check the original run and any file changes.",
   "无法获取模型列表。请检查 Provider 地址、密钥和连接，或直接填写模型名称。": "Could not fetch the model list. Check the provider URL, key and connection, or type the model name.",
+  "操作未完成。请检查资源配置、权限或命令超时；重试前先刷新当前状态。": "The operation did not complete. Check the resource configuration, permissions or a command timeout, and refresh before retrying.",
+  "无法删除：请先解除资源引用或在运行设置中解除 Agent 的运行配置。默认 Prompt 不可删除；资源配置损坏或引用缺失也会阻止删除。刷新状态后重试。": "Cannot delete: remove references to the resource first, or unbind the agent in the run settings. The default prompt cannot be deleted, and a broken configuration or a missing reference also blocks deletion. Refresh and try again.",
   "无追加回复": "No further reply",
   "无需处理": "Nothing to do",
   "早上好": "Good morning",

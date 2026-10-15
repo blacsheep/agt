@@ -103,7 +103,7 @@ enum Command {
     /// manage generic IM participants, conversations and messages
     #[command(subcommand, alias = "conversation")]
     Im(ImCommand),
-    /// start the Web console (needs Node.js 22+)
+    /// start the Web console
     Web(web::WebArgs),
 }
 

@@ -1,4 +1,4 @@
-import { createConsole, cliRunner } from '../server.mjs';
+import { cliRunner, startConsole } from './support/console.mjs';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
@@ -18,9 +18,8 @@ try {
     ['resource_write',{kind:'agent',reference:'tech-lead',create:true,data:{model:'fixture'}}],
     ['agent_bind',{principal:'tech-lead',agent:'tech-lead',policy:'manual',working_directory:home}],
   ]) await run(['tool','call','--principal','operator','--manager',name,'--args',JSON.stringify(args)]);
-  ({ server } = createConsole({ run, home, principal: 'operator', token: 'browser-test-token' }));
-  await new Promise(ok => server.listen(0, '127.0.0.1', ok));
-  const url = `http://127.0.0.1:${server.address().port}`;
+  server = await startConsole({ run, principal: 'operator', token: 'browser-test-token' });
+  const url = server.url;
   chrome = spawn(process.env.CHROME_BINARY || '/opt/google/chrome/chrome', ['--headless=new', '--accept-lang=zh-CN', '--no-sandbox', '--disable-dev-shm-usage', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   const endpoint = await new Promise((ok, fail) => { let log = ''; chrome.stderr.on('data', chunk => { log += chunk; const match = log.match(/DevTools listening on (ws:\/\/\S+)/); if (match) ok(match[1]); }); chrome.on('error', fail); });
   socket = new WebSocket(endpoint);
@@ -188,7 +187,7 @@ try {
   assert.deepEqual(errors,[]);
   console.log('Collaboration browser passed: real direct create/reuse/hidden restore/archive restore, group menu, keyboard/focus, observer restrictions, escaped search, failure recovery, 6 widths.');
 } finally {
-  socket?.close(); chrome?.kill('SIGTERM'); run.close(); server?.closeAllConnections(); server?.close();
+  socket?.close(); chrome?.kill('SIGTERM'); run.close(); await server?.close();
   await new Promise(ok => setTimeout(ok, 500));
   await rm(home, { recursive: true, force: true }); await rm(profile, { recursive: true, force: true });
 }

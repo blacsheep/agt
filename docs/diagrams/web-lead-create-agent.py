@@ -10,8 +10,8 @@ W = 200
 cl, cm, cr = L + W / 2, M + W / 2, R + W / 2
 
 user = f.node(M, 16, W, 36, '用户：请创建 reviewer', kind='end')
-web = f.node(M, 76, W, 48, 'Web / Node', '发送消息并授权自动回复')
-refresh = f.node(L, 76, W, 48, 'outbox → events watch', 'Node SSE → Web 刷新')
+web = f.node(M, 76, W, 48, 'Web 控制台', '发送消息并授权自动回复')
+refresh = f.node(L, 76, W, 48, 'outbox → events watch', 'SSE → 页面刷新')
 im = f.node(L, 168, W, 48, 'agt-service → agt-im', '保存消息与投递')
 sched = f.node(R, 168, W, 48, 'Scheduler', '授权、准入、领取 lead 任务')
 config = f.node(L, 268, W, 64, 'lead 配置', 'builtin_tools: resource_management')
@@ -56,7 +56,7 @@ f.edge((L - 1, 416), (10, 416), (10, 204), (L - 2, 204), back=True)
 s = Sequence('lead 创建 Agent 的完整时序',
              '消息保存后启动调度，lead 的 NativeRun 请求模型并执行 framework_resource_write；审批与能力检查通过时写入 agent.yaml，'
              '要求成为可用队友时继续创建身份、绑定并核验；最后保存 Run 结果并幂等发布回复。',
-             [('W', '用户 / Web', 'Node'), ('S', 'Service / IM', 'Rust'), ('Q', 'Scheduler', None),
+             [('W', '用户 / Web', 'agt web'), ('S', 'Service / IM', 'Rust'), ('Q', 'Scheduler', None),
               ('R', 'lead', 'NativeRun'), ('M', '模型', None), ('T', 'ToolService', 'Resources 与存储')], head_h=66
              ).build([
     ('self', 'W', '用户发送创建 reviewer 的消息'),

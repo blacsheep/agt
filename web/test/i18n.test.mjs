@@ -36,7 +36,10 @@ function usedKeys() {
   for (const m of html.matchAll(/<[a-z0-9]+[^>]*\sdata-i18n(?:="([^"]*)")?(?=[\s>])[^>]*>([^<]*)</g)) keys.add((m[1] || m[2]).trim());
   for (const m of html.matchAll(/<[^>]*data-i18n-attr="([^"]*)"[^>]*>/g))
     for (const attr of m[1].split(' ')) { const value = m[0].match(new RegExp(`\\s${attr}="([^"]*)"`)); if (value) keys.add(value[1]); }
-  for (const m of read('server.mjs').matchAll(/ApiError\(\d+,\s*'[^']*',\s*'((?:[^'\\]|\\.)*)'/g)) keys.add(unquote(m[1]));
+  // Error messages of the console's HTTP API (`ApiError::new(status, code, message)` and `bad(code, message)`).
+  const api = /(?:ApiError::new\(\s*\d+,|\bbad\()\s*"[^"]*",\s*"((?:[^"\\]|\\.)*)"/g;
+  for (const file of readdirSync(join(repo, 'crates/agt-cli/src/web')).filter(f => f.endsWith('.rs')))
+    for (const m of readFileSync(join(repo, 'crates/agt-cli/src/web', file), 'utf8').matchAll(api)) keys.add(m[1]);
   for (const file of ['crates/agt-config/src/runtime.rs', 'crates/agt-runtime/src/audit.rs'])
     for (const m of readFileSync(join(repo, file), 'utf8').matchAll(/"((?:[^"\\]|\\.)*)"/g)) if (IDEOGRAPH.test(m[1])) keys.add(m[1]);
   return [...keys].filter(k => IDEOGRAPH.test(k));

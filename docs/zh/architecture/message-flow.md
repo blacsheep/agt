@@ -17,7 +17,7 @@
 
 ## 代码入口
 
-- [Web 发送与授权](../../../web/server.mjs)：`message_send` 后调用 `schedule start`。
+- [Web 发送与授权](../../../crates/agt-cli/src/web/http.rs)：`message_send` 后调用 `schedule start`。
 - [协调循环](../../../crates/agt-runtime/src/scheduler.rs)：`Scheduler::run`、`tick`、`dispatch_ready`。
 - [投递入队](../../../crates/agt-runtime/src/scheduler/ingress.rs)。
 - [讨论授权与控制](../../../crates/agt-runtime/src/scheduler/controls.rs)。

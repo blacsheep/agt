@@ -52,7 +52,7 @@ text { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", 
   <text class="t" x="588.0" y="38.0">模型工具调用</text>
   <text class="s" x="588.0" y="56.0">framework_resource_*</text>
   <rect class="node" x="248" y="88" width="216" height="40" rx="8"/>
-  <text class="t" x="356.0" y="113.0">Node → agt tool call</text>
+  <text class="t" x="356.0" y="113.0">Web → agt tool call</text>
   <rect class="node" x="480" y="88" width="216" height="40" rx="8"/>
   <text class="t" x="588.0" y="113.0">Runtime 工具校验与执行控制</text>
   <rect class="node" x="248" y="156" width="448" height="52" rx="8"/>
