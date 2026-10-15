@@ -2,6 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+/// Python launcher of the MCP test fixtures; Windows installs it as `python`.
+const PYTHON: &str = if cfg!(windows) { "python" } else { "python3" };
+
 fn temp_home(label: &str) -> PathBuf {
     let path =
         std::env::temp_dir().join(format!("agt-resource-cli-{label}-{}", std::process::id()));
@@ -391,7 +394,7 @@ fn mcp_probe_is_explicit_and_checks_tool_schemas() {
         .join("../agt-runtime/tests/fixtures/contract_mcp.py");
     let log = temp.path().join("calls");
     let file = temp.path().join("mcp.json");
-    let config = serde_json::json!({"mcpServers":{"counter":{"cwd":"/tmp","command":"python3","args":[fixture,"valid",log]}}});
+    let config = serde_json::json!({"mcpServers":{"counter":{"cwd":std::env::temp_dir(),"command":PYTHON,"args":[fixture,"valid",log]}}});
     fs::write(&file, config.to_string()).unwrap();
     assert!(
         run(

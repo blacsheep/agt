@@ -636,8 +636,14 @@ mod tests {
     }
 
     fn sample_json(name: &str) -> String {
+        // Absolute on every platform: without a drive, `/srv/tools` is relative on Windows.
+        let cwd = if cfg!(windows) {
+            "C:/srv/tools"
+        } else {
+            "/srv/tools"
+        };
         format!(
-            r#"{{"mcpServers":{{"{name}":{{"type":"stdio","command":"npx","args":["-y","pkg"],"env":{{"API_KEY":"secret"}},"cwd":"/srv/tools"}}}}}}"#
+            r#"{{"mcpServers":{{"{name}":{{"type":"stdio","command":"npx","args":["-y","pkg"],"env":{{"API_KEY":"secret"}},"cwd":"{cwd}"}}}}}}"#
         )
     }
 
@@ -688,7 +694,7 @@ mod tests {
                 fs::write(file, "not-json").map_err(|source| McpError::io(file, source))
             })
             .expect_err("read-back should fail");
-        assert!(matches!(error, McpError::Json { .. }));
+        assert!(matches!(error, McpError::Json { .. }), "{error:?}");
         assert!(!home.join("mcps/default/broken").exists());
         let entries = fs::read_dir(home.join("mcps/default"))
             .expect("default category dir")

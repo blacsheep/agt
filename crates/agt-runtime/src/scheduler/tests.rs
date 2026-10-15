@@ -1,5 +1,8 @@
 use super::guard::ScheduledModel;
 use super::*;
+
+/// Python launcher of the MCP test fixtures; Windows installs it as `python`.
+const PYTHON: &str = if cfg!(windows) { "python" } else { "python3" };
 use crate::RunRequest;
 use crate::participation::ParticipationDecision;
 use crate::{ModelClient, ResolvedAgent, RunState, RuntimeError, ScheduledTask};
@@ -1571,7 +1574,7 @@ fn scheduled_native_uses_mounted_mcp_without_an_opt_in() {
     let (home, user, _) = fixture();
     let server = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/contract_mcp.py");
     user.call("resource_write", json!({"kind":"mcp","reference":"counter","create":true,
-        "data":{"mcpServers":{"counter":{"cwd":"/tmp","command":"python3","args":[server,"valid",home.path().join("calls")]}}}})).unwrap();
+        "data":{"mcpServers":{"counter":{"cwd":std::env::temp_dir(),"command":PYTHON,"args":[server,"valid",home.path().join("calls")]}}}})).unwrap();
     user.call(
         "resource_write",
         json!({"kind":"agent","reference":"a","create":false,

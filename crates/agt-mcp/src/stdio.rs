@@ -798,6 +798,8 @@ fn terminate_spawned_child(child: &mut Child) {
 
 #[cfg(test)]
 mod tests {
+    /// Python launcher of the MCP test fixtures; Windows installs it as `python`.
+    const PYTHON: &str = if cfg!(windows) { "python" } else { "python3" };
     use std::fs;
     use std::io::Cursor;
     use std::path::{Path, PathBuf};
@@ -820,7 +822,7 @@ mod tests {
         McpDocument::from_value(json!({
             "mcpServers": {
                 "helper": {
-                    "command": "python3",
+                    "command": PYTHON,
                     "args": [helper.display().to_string()],
                     "cwd": workspace.display().to_string(),
                     "env": {
@@ -908,7 +910,7 @@ for raw_line in sys.stdin:
         let document = McpDocument::from_value(json!({
             "mcpServers": {
                 "helper": {
-                    "command": "python3",
+                    "command": PYTHON,
                     "args": [helper.display().to_string()],
                     "cwd": workspace.display().to_string()
                 }
@@ -944,7 +946,7 @@ for raw_line in sys.stdin:
         let document = McpDocument::from_value(json!({
             "mcpServers": {
                 "helper": {
-                    "command": "python3",
+                    "command": PYTHON,
                     "args": [helper.display().to_string()],
                     "cwd": server_cwd.display().to_string(),
                     "env": {

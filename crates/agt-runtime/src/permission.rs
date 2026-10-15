@@ -245,6 +245,7 @@ fn load_config(home: &Path) -> Result<PermissionConfig> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::cell::Cell;
 
     fn home(mode: PermissionMode) -> tempfile::TempDir {
@@ -391,6 +392,8 @@ mod tests {
         assert!(!permissions.refresh().unwrap());
     }
 
+    // Prompt wake-ups use Unix datagram hints; elsewhere waiters poll storage.
+    #[cfg(unix)]
     #[test]
     fn waiting_request_checks_storage_rarely_and_wakes_on_decision() {
         let home = home(PermissionMode::Manual);

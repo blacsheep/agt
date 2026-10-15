@@ -1,6 +1,9 @@
 use std::collections::VecDeque;
 use std::path::Path;
 
+/// Python launcher of the MCP test fixtures; Windows installs it as `python`.
+const PYTHON: &str = if cfg!(windows) { "python" } else { "python3" };
+
 use agt_agent::{AgentConfig, AgentStore};
 use agt_core::CancellationToken;
 use agt_im::{ImStore, MessageListOptions, PrincipalId};
@@ -582,7 +585,7 @@ fn mcp_tool_loop_preserves_call_id_and_excludes_client_only_metadata() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mcp.py");
     let document = McpDocument::stdio(
         "helper",
-        "python3",
+        PYTHON,
         vec![fixture.to_string_lossy().into_owned()],
         Vec::<(String, String)>::new(),
         fixture.parent().unwrap(),
@@ -641,7 +644,7 @@ fn mcp_business_and_transport_failures_are_audited_without_raw_results() {
             .add(
                 McpDocument::stdio(
                     "helper",
-                    "python3",
+                    PYTHON,
                     vec![fixture.to_string_lossy().into_owned()],
                     [("AGT_AUDIT_TEST_MODE".into(), mode.into())],
                     fixture.parent().unwrap(),

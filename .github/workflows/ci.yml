@@ -40,5 +40,9 @@ jobs:
       - uses: actions/checkout@v4
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
+      # MCP test fixtures are Python scripts (`python` on Windows, `python3` elsewhere).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo test --workspace --no-fail-fast

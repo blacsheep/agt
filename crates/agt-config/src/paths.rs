@@ -110,9 +110,15 @@ mod tests {
             resolve_default_home(Some(PathBuf::new()), user.clone()).expect("empty is unset"),
             PathBuf::from("/home/someone/.agt")
         );
+        // `/srv/agt` has no drive, so it is not absolute on Windows.
+        let absolute = if cfg!(windows) {
+            "C:/srv/agt"
+        } else {
+            "/srv/agt"
+        };
         assert_eq!(
-            resolve_default_home(Some(PathBuf::from("/srv/agt")), None).expect("override"),
-            PathBuf::from("/srv/agt")
+            resolve_default_home(Some(PathBuf::from(absolute)), None).expect("override"),
+            PathBuf::from(absolute)
         );
         assert!(resolve_default_home(Some(PathBuf::from("agt")), user).is_err());
     }

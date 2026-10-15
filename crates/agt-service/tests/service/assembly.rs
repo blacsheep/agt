@@ -20,7 +20,7 @@ fn resource_updates_replace_mounts_and_removed_tools_are_unavailable() {
         s.call(
             "resource_write",
             json!({"kind":"mcp","reference":name,"create":true,
-            "data":{"mcpServers":{name:{"cwd":"/tmp","command":"must-not-run"}}}}),
+            "data":{"mcpServers":{name:{"cwd":std::env::temp_dir(),"command":"must-not-run"}}}}),
         )
         .unwrap();
     }
@@ -83,7 +83,7 @@ fn concurrent_mounts_do_not_overwrite_each_other() {
         s.call(
             "resource_write",
             json!({"kind":"mcp","reference":name,"create":true,
-            "data":{"mcpServers":{name:{"cwd":"/tmp","command":"must-not-run"}}}}),
+            "data":{"mcpServers":{name:{"cwd":std::env::temp_dir(),"command":"must-not-run"}}}}),
         )
         .unwrap();
     }
@@ -153,7 +153,7 @@ fn probe_requires_engine_support_and_harness_mounts_stay_rejected() {
     s.call(
         "resource_write",
         json!({"kind":"mcp","reference":"one","create":true,
-        "data":{"mcpServers":{"one":{"cwd":"/tmp","command":"must-not-run"}}}}),
+        "data":{"mcpServers":{"one":{"cwd":std::env::temp_dir(),"command":"must-not-run"}}}}),
     )
     .unwrap();
     s.call("resource_write", json!({"kind":"harness","reference":"h","create":true,
@@ -195,7 +195,7 @@ fn every_resource_rejects_stale_edits_and_returns_safe_revisions() {
         (
             "mcp",
             "one",
-            json!({"mcpServers":{"one":{"cwd":"/tmp","command":"updated-command"}}}),
+            json!({"mcpServers":{"one":{"cwd":std::env::temp_dir(),"command":"updated-command"}}}),
         ),
         (
             "harness",
@@ -219,7 +219,7 @@ fn every_resource_rejects_stale_edits_and_returns_safe_revisions() {
             "mcp",
             "one",
             true,
-            json!({"mcpServers":{"one":{"cwd":"/tmp","command":"must-not-run"}}}),
+            json!({"mcpServers":{"one":{"cwd":std::env::temp_dir(),"command":"must-not-run"}}}),
         )
         .unwrap();
     resources.write("harness", "external", true, json!({"engine":"codex","executable":std::env::current_exe().unwrap(),"working_directory":home.path(),"sandbox":"read_only"})).unwrap();
@@ -253,7 +253,7 @@ fn collection_updates_are_atomic_normalized_and_shared_by_concurrent_writers() {
         s.call(
             "resource_write",
             json!({"kind":"mcp","reference":name,"create":true,
-            "data":{"mcpServers":{name:{"cwd":"/tmp","command":"must-not-run"}}}}),
+            "data":{"mcpServers":{name:{"cwd":std::env::temp_dir(),"command":"must-not-run"}}}}),
         )
         .unwrap();
     }

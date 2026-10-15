@@ -243,7 +243,7 @@ fn tools_create_update_mount_and_delete_resources_with_safe_summaries() {
     manager.call("resource_write",json!({"kind":"model","reference":"m","create":true,"data":{"provider":"p","model":"test"}})).unwrap();
     manager.call("resource_write",json!({"kind":"prompt","reference":"review","create":true,"data":{"text":"Review carefully"}})).unwrap();
     manager.call("resource_write",json!({"kind":"skill","reference":"@team/review","create":true,"data":{"description":"review"}})).unwrap();
-    let result=manager.call("resource_write",json!({"kind":"mcp","reference":"helper","create":true,"data":{"mcpServers":{"helper":{"cwd":"/tmp","command":"echo","env":{"TOKEN":"mcp-secret"}}}}})).unwrap();
+    let result=manager.call("resource_write",json!({"kind":"mcp","reference":"helper","create":true,"data":{"mcpServers":{"helper":{"cwd":std::env::temp_dir(),"command":"echo","env":{"TOKEN":"mcp-secret"}}}}})).unwrap();
     assert!(!result.to_string().contains("mcp-secret"));
     let agent=manager.call("resource_write",json!({"kind":"agent","reference":"reviewer","create":true,"data":{"model":"m","prompt":"review","skills":["@team/review"],"mcps":["helper"]}})).unwrap();
     assert_eq!(agent["skills"].as_array().unwrap().len(), 1);
@@ -824,7 +824,7 @@ fn resource_capability_is_separate_from_identity_administration() {
         .call("resource_test", json!({"kind":"provider","reference":"p"}))
         .unwrap();
     assert!(!tested.to_string().contains("replacement-key"));
-    resources.call("resource_write", json!({"kind":"mcp","reference":"safe","create":true,"data":{"mcpServers":{"safe":{"cwd":"/tmp","command":"this-command-must-not-run","env":{"TOKEN":"private-key"}}}}})).unwrap();
+    resources.call("resource_write", json!({"kind":"mcp","reference":"safe","create":true,"data":{"mcpServers":{"safe":{"cwd":std::env::temp_dir(),"command":"this-command-must-not-run","env":{"TOKEN":"private-key"}}}}})).unwrap();
     let tested = resources
         .call("resource_test", json!({"kind":"mcp","reference":"safe"}))
         .unwrap();

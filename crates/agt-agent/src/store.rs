@@ -736,9 +736,11 @@ mod tests {
     fn create_mcp(home: &Path) {
         let store = McpStore::new(home);
         store
-            .add_from_str(
-                r#"{"mcpServers":{"filesystem":{"type":"stdio","cwd":"/tmp","command":"npx","args":["-y","pkg"]}}}"#,
-            )
+            // An absolute directory on every platform; Debug quoting is valid JSON here.
+            .add_from_str(&format!(
+                r#"{{"mcpServers":{{"filesystem":{{"type":"stdio","cwd":{:?},"command":"npx","args":["-y","pkg"]}}}}}}"#,
+                std::env::temp_dir().display().to_string()
+            ))
             .expect("create mcp");
     }
 
