@@ -20,6 +20,17 @@ The reviewer is an ordinary model resource, separate from the agent being review
 
 A denied call is not executed. The agent is told it was denied and continues. Calls with invalid arguments are rejected before they reach the approval queue.
 
+### Always allow a tool for an agent
+
+When you approve a call, you can choose **Always allow this agent to use this tool** (总是允许此 Agent 使用该工具). Later calls of that tool by that agent run without asking, in every mode, and the approval history shows "a saved always-allow rule" as the reason. The rule covers one agent and one tool, with any arguments.
+
+See and remove rules at the top of the **Approvals** (权限审批) panel, or from the CLI:
+
+```bash
+agt permission rules
+agt permission forget --agent default/lead --tool framework_resource_write
+```
+
 ## Codex approvals
 
 Codex asks for approval itself when a command, a file change or extra permissions fall outside its sandbox. These requests use `permissions.harness_mode`:
@@ -43,7 +54,7 @@ agt permission info <id>
 agt permission decide <id> --expected-revision <rev> --decision '"allow"' --reason 'looks fine'
 ```
 
-`--decision` takes the JSON `value` of one of the options that `permission info` lists, such as `"allow"`, `"deny"` or `"cancel"` for a native call.
+`--decision` takes the JSON `value` of one of the options that `permission info` lists, such as `"allow"`, `"allow_always"`, `"deny"` or `"cancel"` for a native call.
 
 A request that is not decided within `permissions.request_timeout_seconds` (600 by default) cancels the run.
 

@@ -81,6 +81,7 @@ crate::string_enum::string_enum! {
         LocalAdmin = "local_admin",
         AutoAllow = "auto_allow",
         ModelReview = "model_review",
+        Rule = "rule",
     }
 }
 
@@ -135,6 +136,19 @@ pub(crate) const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Sche
     version: 1,
     ddl: "CREATE TABLE approvals(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,request_key TEXT NOT NULL,scope TEXT NOT NULL,value TEXT NOT NULL,lease_until INTEGER NOT NULL,UNIQUE(run_id,request_key));",
 };
+/// "Always allow this tool for this Agent", saved from a native approval decision.
+pub(crate) const RULES_SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Schema {
+    module: "permission_rules",
+    version: 1,
+    ddl: "CREATE TABLE permission_rules(agent TEXT NOT NULL,tool TEXT NOT NULL,actor TEXT NOT NULL,created_at INTEGER NOT NULL,PRIMARY KEY(agent,tool));",
+};
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PermissionRule {
+    pub agent: String,
+    pub tool: String,
+    pub actor: String,
+    pub created_at: i64,
+}
 pub struct ApprovalStore {
     home: PathBuf,
     db: agt_storage::sqlite::Db,
@@ -143,6 +157,42 @@ fn now() -> i64 {
     crate::schedule_store::now_ms()
 }
 impl ApprovalStore {
+    pub(crate) fn rule_allows(&self, agent: &str, tool: &str) -> Result<bool> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT 1 FROM permission_rules WHERE agent=?1 AND tool=?2",
+                params![agent, tool],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+    pub fn rules(&self) -> Result<Vec<PermissionRule>> {
+        let mut statement = self.db.prepare(
+            "SELECT agent,tool,actor,created_at FROM permission_rules ORDER BY agent,tool",
+        )?;
+        let rules = statement
+            .query_map([], |r| {
+                Ok(PermissionRule {
+                    agent: r.get(0)?,
+                    tool: r.get(1)?,
+                    actor: r.get(2)?,
+                    created_at: r.get(3)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rules)
+    }
+    /// Remove a saved rule; later calls are reviewed again. Returns whether it existed.
+    pub fn forget_rule(&self, agent: &str, tool: &str) -> Result<bool> {
+        let removed = self.db.execute(
+            "DELETE FROM permission_rules WHERE agent=?1 AND tool=?2",
+            params![agent, tool],
+        )?;
+        agt_storage::wake::notify(&self.home);
+        Ok(removed > 0)
+    }
     pub fn open(home: &Path) -> Result<Self> {
         let db = crate::store::runtime_db(home)?;
         Ok(Self {

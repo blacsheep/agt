@@ -20,6 +20,17 @@ Native Agent 执行工具之前，调用要经过工作空间策略 `permissions
 
 被拒绝的调用不会执行。Agent 会被告知调用被拒绝，然后继续工作。参数无效的调用在进入审批队列之前就会被拒绝。
 
+### 总是允许某个 Agent 使用某个工具
+
+批准调用时，可以选择**总是允许此 Agent 使用该工具**。之后这个 Agent 再调用这个工具时，不管哪种模式都不再询问，审批记录里的决定来源显示为"已保存的总是允许规则"。一条规则只针对一个 Agent 和一个工具，参数不限。
+
+在**权限审批**面板顶部可以查看和移除规则，也可以用 CLI：
+
+```bash
+agt permission rules
+agt permission forget --agent default/lead --tool framework_resource_write
+```
+
 ## Codex 审批
 
 当命令、文件修改或额外权限超出 Codex 沙箱时，Codex 会自己请求审批。这些请求使用 `permissions.harness_mode`：
@@ -43,7 +54,7 @@ agt permission info <id>
 agt permission decide <id> --expected-revision <rev> --decision '"allow"' --reason '没问题'
 ```
 
-`--decision` 接受 `permission info` 列出的某个选项的 JSON `value`，例如 Native 调用的 `"allow"`、`"deny"` 或 `"cancel"`。
+`--decision` 接受 `permission info` 列出的某个选项的 JSON `value`，例如 Native 调用的 `"allow"`、`"allow_always"`、`"deny"` 或 `"cancel"`。
 
 在 `permissions.request_timeout_seconds`（默认 600 秒）内没有得到决定的请求会取消这次执行。
 

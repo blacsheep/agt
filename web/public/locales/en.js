@@ -1416,4 +1416,12 @@ AgtI18n.add('en', {
   "新执行和新建的定时任务；已有定时任务保留创建时的时区": "New runs and new timers; existing timers keep the zone they were created with",
   "设置定时任务": "Set a timer",
   "取消定时任务": "Cancel a timer",
+  "已保存的总是允许规则": "a saved always-allow rule",
+  "总是允许的规则（{0}）": "Always-allow rules ({0})",
+  "这些 Agent 调用对应工具时不再询问。移除后恢复正常审批。": "These agents use these tools without asking. Remove a rule to review its calls again.",
+  "移除": "Remove",
+  "规则参数无效。": "Invalid rule.",
+  "批准本次调用": "Allow this call",
+  "总是允许此 Agent 使用该工具": "Always allow this agent to use this tool",
+  "拒绝本次调用": "Deny this call",
 });

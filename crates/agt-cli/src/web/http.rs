@@ -323,6 +323,28 @@ async fn route(app: &Arc<App>, request: Request) -> Result<Response, ApiError> {
             }
             ok(app.run(args).await?)
         }
+        (Method::GET, "/api/permission-rules") => {
+            ok(app.run(strings(&["permission", "rules"])).await?)
+        }
+        (Method::POST, "/api/permission-rules") => {
+            let data = payload.json().await?;
+            let (Some(agent), Some(tool)) = (
+                data.get("agent").and_then(Value::as_str),
+                data.get("tool").and_then(Value::as_str),
+            ) else {
+                return Err(bad("invalid_arguments", "规则参数无效。"));
+            };
+            ok(app
+                .run(strings(&[
+                    "permission",
+                    "forget",
+                    "--agent",
+                    agent,
+                    "--tool",
+                    tool,
+                ]))
+                .await?)
+        }
         (Method::POST, "/api/approvals") => {
             let data = payload.json().await?;
             if data

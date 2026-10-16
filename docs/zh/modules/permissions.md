@@ -62,12 +62,14 @@ agt permission decide <id> --expected-revision 1 --decision '"allow"' --reason '
 | `list` | `--principal <id>`、`--before <游标>` | 审批请求，从新到旧 |
 | `info <id>` | `--principal <id>` | 一个请求：工具、参数、原因、选项、revision |
 | `decide <id>` | `--expected-revision <n>`（必填）、`--decision <json>`（必填）、`--reason <文本>`、`--principal <id>` | 作出决定 |
+| `rules` | | 已保存的"总是允许"规则：Agent、工具、保存者、时间 |
+| `forget` | `--agent <引用>`、`--tool <名称>`（都必填） | 移除规则，之后的调用恢复审批 |
 
 `--decision` 是 `info` 中某个选项的 JSON `value`：
 
 | 来源 | 选项 |
 | --- | --- |
-| Native 调用 | `"allow"`、`"deny"`、`"cancel"`（取消执行） |
+| Native 调用 | `"allow"`、`"allow_always"`（批准并为该 Agent 和工具保存规则）、`"deny"`、`"cancel"`（取消执行） |
 | Codex 命令或文件修改 | 批准本次、批准本会话、拒绝、取消本轮（以 Codex 提供的为准） |
 | Codex 权限请求 | 授予本轮、拒绝、取消本轮 |
 

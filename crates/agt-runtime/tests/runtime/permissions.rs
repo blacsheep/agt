@@ -201,3 +201,74 @@ fn framework_reads_skip_approval_even_in_manual_mode() {
             .is_empty()
     );
 }
+
+#[test]
+fn always_allow_saves_a_rule_for_this_agent_and_tool() {
+    let home = home();
+    mount_resources(home.path(), "a");
+    let mut config = agt_config::RuntimeConfig::load(home.path()).unwrap();
+    config.permissions.mode = PermissionMode::Manual;
+    config.permissions.request_timeout_seconds = 60;
+    config.save(home.path()).unwrap();
+    let path = home.path().to_owned();
+    // A person answers the first request with "always allow"; nobody answers later ones.
+    let human = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while std::time::Instant::now() < deadline {
+            let store = ApprovalStore::open(&path).unwrap();
+            if let Some(a) = store.list(None, None).unwrap().first() {
+                store
+                    .decide(&a.id, a.revision, json!("allow_always"), "fine", None)
+                    .unwrap();
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        panic!("approval never appeared");
+    });
+    let write = |id: &str| {
+        (
+            "default/a",
+            calls(vec![call(
+                id,
+                "framework_resource_write",
+                json!({"kind":"prompt","reference":id,"create":true,"data":{"text":id}}),
+            )]),
+        )
+    };
+    let mut model = Script::new(vec![
+        write("one"),
+        write("two"),
+        ("default/a", text("done")),
+    ]);
+    let run = Runtime::open(home.path(), &mut model, &DefaultMcpClientFactory)
+        .unwrap()
+        .run(request(), &CancellationToken::new())
+        .unwrap();
+    human.join().unwrap();
+    assert_eq!(run.state, RunState::Completed, "{:?}", run.error);
+    let store = ApprovalStore::open(home.path()).unwrap();
+    let mut origins: Vec<_> = store
+        .list(None, None)
+        .unwrap()
+        .into_iter()
+        .map(|a| a.decision_origin)
+        .collect();
+    origins.sort_by_key(|o| o.map(|o| o.as_str()));
+    assert_eq!(
+        origins,
+        vec![Some(DecisionOrigin::LocalAdmin), Some(DecisionOrigin::Rule)]
+    );
+    let rules = store.rules().unwrap();
+    assert_eq!(rules.len(), 1);
+    assert_eq!(
+        (rules[0].agent.as_str(), rules[0].tool.as_str()),
+        ("default/a", "framework_resource_write")
+    );
+    assert!(
+        store
+            .forget_rule("default/a", "framework_resource_write")
+            .unwrap()
+    );
+    assert!(store.rules().unwrap().is_empty());
+}

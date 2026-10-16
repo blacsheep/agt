@@ -54,6 +54,7 @@ const RUNTIME_SCHEMAS: &[&agt_storage::sqlite::Schema] = &[
     &crate::context_store::SCHEMA,
     &crate::harness_sessions::SCHEMA,
     &crate::approval::SCHEMA,
+    &crate::approval::RULES_SCHEMA,
     &crate::events::SCHEMA,
     &agt_service::BINDINGS_SCHEMA,
 ];

@@ -121,6 +121,7 @@ impl NativeRun<'_, '_> {
                 scope: &scope,
                 call: &call.id,
                 tool: &call.function.name,
+                agent: &self.record.request.agent,
                 arguments,
                 input: &self.record.request.input,
             },
