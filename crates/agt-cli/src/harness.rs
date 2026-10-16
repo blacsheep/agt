@@ -1,5 +1,5 @@
 use crate::{OutputMode, emit, parse_named_ref};
-use agt_harness::{Codex, HarnessStore};
+use agt_harness::HarnessStore;
 use agt_runtime::HarnessSessions;
 use anyhow::Result;
 use clap::Subcommand;
@@ -75,7 +75,7 @@ pub(crate) fn dispatch(
         HarnessCommand::Resource(command) => {
             crate::dispatch_harness_resource(command, home, output, yes)
         }
-        HarnessCommand::Capabilities => emit(&Codex::capabilities(), output),
+        HarnessCommand::Capabilities => emit(&agt_harness::capabilities(), output),
         HarnessCommand::Models { reference } => {
             resource_operation(&reference, home, output, "models")
         }
@@ -97,14 +97,16 @@ pub(crate) fn dispatch(
                 } => emit(&store.current(home, &principal, &conversation)?, output),
                 SessionCommand::Info { id } => emit(&store.get(&id)?, output),
                 SessionCommand::Models { id } => {
-                    emit(&Codex::models(&store.get(&id)?.config)?, output)
+                    emit(&agt_harness::models(&store.get(&id)?.config)?, output)
                 }
-                SessionCommand::Skills { id } => {
-                    emit(&Codex::inspect(&store.get(&id)?.config, "skills")?, output)
-                }
-                SessionCommand::Mcp { id } => {
-                    emit(&Codex::inspect(&store.get(&id)?.config, "mcp")?, output)
-                }
+                SessionCommand::Skills { id } => emit(
+                    &agt_harness::inspect(&store.get(&id)?.config, "skills")?,
+                    output,
+                ),
+                SessionCommand::Mcp { id } => emit(
+                    &agt_harness::inspect(&store.get(&id)?.config, "mcp")?,
+                    output,
+                ),
                 SessionCommand::Configure { id, model, effort } => {
                     emit(&store.configure(&id, &model, effort.as_deref())?, output)
                 }
@@ -127,9 +129,9 @@ fn resource_operation(
     let config = HarnessStore::new(home).read_in(&c, &n)?.config;
     emit(
         &if operation == "models" {
-            Codex::models(&config)?
+            agt_harness::models(&config)?
         } else {
-            Codex::inspect(&config, operation)?
+            agt_harness::inspect(&config, operation)?
         },
         output,
     )

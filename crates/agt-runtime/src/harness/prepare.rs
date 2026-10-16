@@ -32,7 +32,7 @@ impl PreparedHarness {
         }
         if !agent.mcps.is_empty() {
             return Err(error(
-                "mounted AGT MCP servers are not yet supported by Codex; remove these mounts before execution",
+                "mounted AGT MCP servers are not yet supported by external engines; remove these mounts before execution",
             ));
         }
         let reference = agent
@@ -276,7 +276,7 @@ impl PreparedHarness {
                 || session.session_id.as_deref() != Some(thread_id.as_str())
             {
                 return Err(error(
-                    "Codex session or configuration changed since suspension; inspect before new work",
+                    "engine session or configuration changed since suspension; inspect before new work",
                 ));
             }
             thread = Some(thread_id);

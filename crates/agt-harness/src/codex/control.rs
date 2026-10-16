@@ -20,7 +20,7 @@ impl Codex {
         let mut event = |_: Event<'_>| Ok(());
         let mut client = Self::connect(harness, &mut event)?;
         // Metadata requests must finish before the Web CLI request timeout.
-        client.transport.deadline = Instant::now() + Duration::from_secs(10);
+        client.transport.process.deadline = Instant::now() + Duration::from_secs(10);
         client.catalog(
             "model/list",
             json!({"limit":100,"includeHidden":false}),
@@ -58,7 +58,7 @@ impl Codex {
         let mut event = |_: Event<'_>| Ok(());
         let mut client = Self::connect(harness, &mut event)?;
         // Metadata requests must finish before the Web CLI request timeout.
-        client.transport.deadline = Instant::now() + Duration::from_secs(10);
+        client.transport.process.deadline = Instant::now() + Duration::from_secs(10);
         match operation {
             "skills" => client.transport.request(
                 "skills/list",
@@ -73,7 +73,7 @@ impl Codex {
         let mut event = |_: Event<'_>| Ok(());
         let mut client = Self::connect(harness, &mut event)?;
         // Metadata requests must finish before the Web CLI request timeout.
-        client.transport.deadline = Instant::now() + Duration::from_secs(10);
+        client.transport.process.deadline = Instant::now() + Duration::from_secs(10);
         client.transport.request(
             "thread/name/set",
             json!({"threadId":thread,"name":name}),

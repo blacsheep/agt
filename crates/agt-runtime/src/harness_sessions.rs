@@ -1,5 +1,5 @@
 //! AGT-owned session metadata; the engine alone creates thread IDs.
-use agt_harness::{Codex, HarnessConfig, HarnessStore};
+use agt_harness::{HarnessConfig, HarnessStore};
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
@@ -172,7 +172,7 @@ impl HarnessSessions {
         let lease = self.execution_lock(id)?;
         let result = (|| {
             let mut session = self.get(id)?;
-            let catalog = Codex::models(&session.config)?;
+            let catalog = agt_harness::models(&session.config)?;
             let selected = catalog["data"]
                 .as_array()
                 .context("missing models")?
@@ -221,7 +221,7 @@ impl HarnessSessions {
             let session = self.get(id)?;
             // No engine thread exists before first execution; apply the saved title on creation.
             if let Some(thread) = &session.session_id {
-                Codex::rename(&session.config, thread, title)?;
+                agt_harness::rename(&session.config, thread, title)?;
             }
             lease.fenced(|| {
                 self.db.execute(
@@ -263,7 +263,7 @@ impl HarnessSessions {
         let session = self.get(id)?;
         let thread = session.session_id.context("session has not started yet")?;
         // Keep submitted compactions fenced unless the engine explicitly rejects them.
-        Codex::compact(&session.config, &thread, &mut |event| {
+        agt_harness::compact(&session.config, &thread, &mut |event| {
             execution_lock.check()?;
             if !matches!(event, agt_harness::Event::Settled(_))
                 && (token.is_canceled() || self.canceled(id)?)

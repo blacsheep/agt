@@ -39,7 +39,7 @@ impl HarnessControl for SessionControl {
             let (category, name) =
                 agt_service::named_ref(args["reference"].as_str().context("reference required")?)?;
             let resource = agt_harness::HarnessStore::new(&self.home).read_in(&category, &name)?;
-            return agt_harness::Codex::models(&resource.config);
+            return agt_harness::models(&resource.config);
         }
         let conversation = args["conversation"]
             .as_str()
@@ -64,7 +64,7 @@ impl HarnessControl for SessionControl {
         }
         let session = match name {
             "harness_session_get" => session,
-            "harness_session_models" => return agt_harness::Codex::models(&session.config),
+            "harness_session_models" => return agt_harness::models(&session.config),
             "harness_session_configure" => sessions.configure_for_task(
                 &session.id,
                 args["model"].as_str().context("model required")?,
