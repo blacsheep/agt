@@ -15,7 +15,15 @@ AGT Studio 是 agt 控制台的桌面版，支持 macOS、Windows 和 Linux。�
 Linux 上需要 WebKitGTK 4.1（`libwebkit2gtk-4.1-0`），`.deb` 和 `.rpm` 安装包会自动装上。
 
 ::: warning 未签名的版本
-在项目给安装包签名之前，macOS 第一次打开时会要求确认（右键点应用，选**打开**），Windows SmartScreen 也可能弹出警告（点**更多信息** → **仍要运行**）。
+安装包没有签名，系统会要求你确认一次。
+
+**macOS：** 第一次打开 AGT Studio 时会被拦截。点**完成**，打开**系统设置 → 隐私与安全性**，在页面下方点**仍要打开**，再输入密码确认。如果提示"已损坏，无法打开"，在终端里清除下载时附带的隔离标记，然后重新打开：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/AGT Studio.app"
+```
+
+**Windows：** SmartScreen 可能弹出警告，点**更多信息** → **仍要运行**。
 :::
 
 ## 使用的数据

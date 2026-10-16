@@ -15,7 +15,15 @@ Download the installer for your system from the [latest release](https://github.
 On Linux the app needs WebKitGTK 4.1 (`libwebkit2gtk-4.1-0`), which the `.deb` and `.rpm` packages pull in.
 
 ::: warning Unsigned builds
-Until the project signs its builds, macOS asks you to confirm the first time you open the app (right-click the app, then **Open**), and Windows SmartScreen may show a warning (**More info** → **Run anyway**).
+The installers are not signed, so your system asks you to confirm the app once.
+
+**macOS:** the first time you open AGT Studio, macOS blocks it. Click **Done**, open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**, then confirm with your password. If macOS says the app "is damaged and can't be opened", clear the download quarantine flag in Terminal and open it again:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/AGT Studio.app"
+```
+
+**Windows:** SmartScreen may show a warning. Click **More info** → **Run anyway**.
 :::
 
 ## What it uses
