@@ -91,8 +91,7 @@ try {
     assert.equal(await evaluate('document.documentElement.scrollWidth <= innerWidth'),true,'overflow at '+width);
   }
   await cdp('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
-  const screenshot = await cdp('Page.captureScreenshot',{format:'png'});
-  await writeFile('/tmp/agt-interactions.png',Buffer.from(screenshot.data,'base64'));
+  if(process.env.AGT_DESIGN_CAPTURE){const screenshot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile('/tmp/agt-interactions.png',Buffer.from(screenshot.data,'base64'));}
   await evaluate('document.querySelector("#ix-viewer").value="coder";document.querySelector("#ix-viewer").dispatchEvent(new Event("change"));');
   await wait('document.querySelectorAll(".ix-row").length === 2 && document.querySelector("[data-ix-message=private-1]")');
   assert.equal(await evaluate('document.querySelector("[data-ix-message=team-1]") === null'),true);
@@ -160,8 +159,7 @@ try {
   await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:position.x+45,y:position.y+20,button:'left',clickCount:1});
   assert.notEqual(await evaluate(`document.querySelector('[data-node="p:coder"]').getAttribute('transform')`),initialPosition);
   await evaluate('document.querySelector("#ix-graph").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
-  const networkScreenshot=await cdp('Page.captureScreenshot',{format:'png'});
-  await writeFile('/tmp/agt-network.png',Buffer.from(networkScreenshot.data,'base64'));
+  if(process.env.AGT_DESIGN_CAPTURE){const networkScreenshot=await cdp('Page.captureScreenshot',{format:'png'});await writeFile('/tmp/agt-network.png',Buffer.from(networkScreenshot.data,'base64'));}
   await evaluate('state.scheduler.online=false; AgtInteractions.refresh();');
   assert.equal(await evaluate('document.querySelectorAll(".ix-node.running").length'),0);
   await new Promise(resolve=>setTimeout(resolve,6600));

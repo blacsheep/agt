@@ -10,9 +10,10 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 node --test web/test/*.test.mjs     # runs target/debug/agt web
+node --test --test-concurrency=1 web/test/*.browser.mjs   # needs Chrome
 ```
 
-No test needs a model API key. The browser tests (`web/test/*.browser.mjs`) need a local Chrome and run separately; see [Web console architecture](docs/zh/architecture/web-console.md) (Chinese).
+No test needs a model API key. The web tests need Node.js 22 or later; the console itself does not. The browser tests drive the console in headless Chrome at `/opt/google/chrome/chrome`; set `CHROME_BINARY` to use another path, and `AGT_DESIGN_CAPTURE=1` to save screenshots under `/tmp`. CI runs all of these. See [Web console architecture](docs/zh/architecture/web-console.md) (Chinese).
 
 To run the console from your working tree:
 

@@ -27,6 +27,12 @@ jobs:
       - run: cargo build -p agt-cli
       - run: node --test test/*.test.mjs
         working-directory: web
+      # Browser tests click through the console in the runner's headless Chrome.
+      # One file at a time: each starts its own console and Chrome.
+      - run: node --test --test-concurrency=1 test/*.browser.mjs
+        working-directory: web
+        env:
+          CHROME_BINARY: /usr/bin/google-chrome
 
   # Released binaries also run on macOS and Windows. The web tests stay on
   # Linux: their scripted CLI is a Node script started as an executable.
