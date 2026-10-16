@@ -25,7 +25,6 @@ mod events;
 mod framework;
 mod runtime;
 mod signals;
-mod web;
 
 #[derive(Debug, Parser)]
 #[command(name = "agt", version, about = "CLI-first agent resource manager")]
@@ -104,7 +103,7 @@ enum Command {
     #[command(subcommand, alias = "conversation")]
     Im(ImCommand),
     /// start the Web console
-    Web(web::WebArgs),
+    Web(agt_console::WebArgs),
 }
 
 #[derive(Debug, Args)]
@@ -774,7 +773,7 @@ fn dispatch(command: Command, home: &Path, output: OutputMode, yes: bool) -> Res
         Command::Agent(command) => dispatch_agent(command, home, output, yes),
         Command::Run(command) => runtime::inspect(command, home, output),
         Command::Im(command) => dispatch_im(command, home, output),
-        Command::Web(args) => web::run(args, home),
+        Command::Web(args) => agt_console::run(args, home),
         Command::Init(_) => unreachable!(),
     }
 }

@@ -4,7 +4,7 @@
 
 ## 进程与职责边界
 
-前端是无构建步骤的静态 HTML/CSS/JavaScript。`agt web`（`crates/agt-cli/src/web/`）从程序内提供静态资源，并把白名单内的 HTTP API 适配为 Rust CLI 命令。资源、权限、消息和执行逻辑都在 Rust 中。
+前端是无构建步骤的静态 HTML/CSS/JavaScript。`agt web`（`crates/agt-console/`）从程序内提供静态资源，并把白名单内的 HTTP API 适配为 Rust CLI 命令。资源、权限、消息和执行逻辑都在 Rust 中。
 
 Web 启动时准备所选 home 和操作者身份，并启动一个 Rust watch 协调者；如果该 home 已有其他协调者，则进入待命。每个 home 只有一个活跃协调者，默认最多同时派发 3 个任务，每个身份跨会话同时只处理一个任务。自动消息执行都经过这个协调者。
 

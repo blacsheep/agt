@@ -47,7 +47,7 @@ agt-runtime    model/tool loop, persistent runs, delivery scheduling, delegation
 agt-cli        the agt command-line interface, with the Web console built in
 ```
 
-The Web console is a page in `web/public/` (plain HTML, CSS and JavaScript, no build step) and a local server in `crates/agt-cli/src/web/` that turns each request into an `agt` command. `crates/agt-cli/build.rs` embeds the page into the binary, so a change under `web/public/` reaches `agt web` after a rebuild. Server tests in `web/test/` start `agt web` with a scripted CLI (`web/test/support/`).
+The Web console is a page in `web/public/` (plain HTML, CSS and JavaScript, no build step) and a server in `crates/agt-console/` that turns each request into an `agt` command; `agt web` serves it over HTTP and the desktop app calls it in-process. `crates/agt-console/build.rs` embeds the page into the binary, so a change under `web/public/` reaches `agt web` after a rebuild. Server tests in `web/test/` start `agt web` with a scripted CLI (`web/test/support/`).
 
 ### Console text
 

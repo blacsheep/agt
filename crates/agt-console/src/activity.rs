@@ -437,7 +437,7 @@ pub(crate) async fn tool_detail(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::web::cli::{Backend, Reply};
+    use crate::cli::{Backend, Reply};
     use std::sync::Mutex;
 
     type Handler = Box<dyn Fn(&[String]) -> Value + Send + Sync>;

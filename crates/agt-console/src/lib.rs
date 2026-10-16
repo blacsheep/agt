@@ -52,7 +52,7 @@ const DEFAULT_PORT: u16 = 4317;
 const DEFAULT_PRINCIPAL: &str = "web-operator";
 
 #[derive(Debug, Args)]
-pub(crate) struct WebArgs {
+pub struct WebArgs {
     /// Port on 127.0.0.1 [default: 4317]
     #[arg(long)]
     port: Option<u16>,
@@ -70,7 +70,7 @@ pub(crate) struct WebArgs {
     no_setup: bool,
 }
 
-pub(crate) fn run(args: WebArgs, home: &Path) -> Result<()> {
+pub fn run(args: WebArgs, home: &Path) -> Result<()> {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
