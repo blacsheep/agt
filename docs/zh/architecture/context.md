@@ -27,6 +27,8 @@ Model 默认窗口为 272000 tokens，旧配置缺省兼容；有效范围 4096�
 
 摘要目标长度只用于提示，不再把 1638 / 2048 作为摘要成功的硬门槛。与 Codex 普通摘要路径一致，摘要完成后重建上下文、重新计数；本框架保留整体输入预算校验。运行内检查固定指令、当前请求、摘要和工具 schema 的整体大小；会话摘要与近期历史共享输入预算的一半，另一半留给触发消息、指令和工具。分块摘要请求自身也做输入预算检查。真正装不下时返回 context_overflow，含 stage、estimated_tokens 和 available_tokens，不安装失败的压缩结果。空摘要走现有最多 10 次请求重试，含工具调用的摘要仍拒绝。未成功压缩前不覆盖 checkpoint；失败后保留旧 checkpoint、原始 Run 请求与 IM 历史。Run `context` 保存最近摘要、压缩次数和输入计数（estimated_tokens 为兼容字段名）； `run calls` 单独记录 compaction、累计请求次数、压缩前后计数、预算和 count_source。trigger 区分 token_budget（正常阈值）和 provider_context_rejected（服务端拒绝后的补救）。count_source 区分服务端 usage + 本地增量与纯本地估算；request_attempts 包括分块调用和网络重试。model_steps 继续统计普通逻辑采样（含子 Run），压缩调用单列；调度器 calls 包含实际摘要请求。不持久化完整私有工具 transcript，不支持重启后自动恢复中断的工具循环。
 
+调度执行的输入是一个 JSON 对象，字段顺序固定，按变化频率排列：先是每次都相同的（instruction、your_principal、conversation、timezone），再是很少变或只在末尾增长的（discussion、conversation_summary、context_reset_through_seq、history），最后是每次都不同的（report_obligation、last_decision、presence、trigger、messages、now）。Provider 的提示词缓存只复用到第一个变化的字节，这样每次变化只影响输入末尾。新增字段要先判断属于哪一层；不必要的易变字段不放进输入。测试 `model_input_puts_what_changes_every_call_last` 守住这个顺序。
+
 会话历史预算为输入预算的四分之一。超过时将旧消息和已有摘要一起分块整理，保留预算内最多 20 条近期原文，并留一半历史预算供后续消息增长，避免逐条重新摘要。预算内的历史不会仅因超过 20 条而丢失。摘要由同一个配置模型生成，也会产生模型费用。后续回复 / 参与判断加载已保存摘要及尚未摘要的消息；重启后亦然。读取始终通过 IM 成员可见区间，来源消息删除、可见区间改变或配置指纹变化时重建摘要。当前为保证来源校验，会分页扫描重置点后的可见历史；本机扫描量随历史增长，后续可通过 IM 变更版本优化，但不能绕过成员可见性和删除校验。
 
 ## 重置语义与权限

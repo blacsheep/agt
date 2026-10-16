@@ -129,8 +129,57 @@ fn prepare_input(
         crate::conversation_instructions::execution(task.work_id.is_some(), task.work_notification);
     let report_obligation = crate::work::notification_obligation(home, store, task)?;
     let zone = crate::clock::zone(&agt_config::RuntimeConfig::load(home)?);
-    let now = now_ms();
-    let input=json!({"instruction":instruction,"report_obligation":report_obligation,"discussion":task.discussion,"last_decision":task.reason,"now":crate::clock::local(now, &zone),"timezone":crate::clock::zone_name(&zone),"now_unix_ms":now,"your_principal":task.principal,"conversation":task.conversation,"trigger":{"id":admitted.trigger.id},"messages":admitted.batch,"history":history,"conversation_summary":context["summary"],"context_reset_through_seq":context["reset_through_seq"],"presence":presence}).to_string();
+    let input = ordered_input(&[
+        // Same on every call in this conversation.
+        ("instruction", json!(instruction)),
+        ("your_principal", json!(task.principal)),
+        ("conversation", json!(task.conversation)),
+        ("timezone", json!(crate::clock::zone_name(&zone))),
+        // Changes rarely, or only grows at its end.
+        ("discussion", json!(task.discussion)),
+        ("conversation_summary", context["summary"].clone()),
+        (
+            "context_reset_through_seq",
+            context["reset_through_seq"].clone(),
+        ),
+        ("history", history),
+        // Different on every call.
+        ("report_obligation", json!(report_obligation)),
+        ("last_decision", json!(task.reason)),
+        ("presence", json!(presence)),
+        ("trigger", json!({"id": admitted.trigger.id})),
+        ("messages", json!(admitted.batch)),
+        ("now", json!(crate::clock::local(now_ms(), &zone))),
+    ]);
     engine.validate_input(&input)?;
     Ok(Some((input, active)))
+}
+
+/// A JSON object whose fields keep the given order. Model providers reuse a cached
+/// prompt only up to its first changed byte, so fields that stay the same across
+/// calls come first and fields that differ on every call come last.
+fn ordered_input(fields: &[(&str, serde_json::Value)]) -> String {
+    let body: Vec<String> = fields
+        .iter()
+        .map(|(key, value)| format!("{}:{value}", serde_json::Value::from(*key)))
+        .collect();
+    format!("{{{}}}", body.join(","))
+}
+
+#[cfg(test)]
+mod input_order_tests {
+    use super::ordered_input;
+    use serde_json::json;
+
+    #[test]
+    fn fields_keep_their_order_and_stay_valid_json() {
+        let input = ordered_input(&[
+            ("z", json!(1)),
+            ("a", json!({"q\"": [1]})),
+            ("now", json!("t")),
+        ]);
+        assert_eq!(input, r#"{"z":1,"a":{"q\"":[1]},"now":"t"}"#);
+        let parsed: serde_json::Value = serde_json::from_str(&input).unwrap();
+        assert_eq!(parsed["a"]["q\""], json!([1]));
+    }
 }

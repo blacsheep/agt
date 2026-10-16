@@ -1809,3 +1809,53 @@ fn unavailable_hints_do_not_stop_scheduler_or_cancellation() {
     assert!(token.is_canceled());
     thread.join().unwrap();
 }
+
+/// Records the input of each model call and answers with a fixed message.
+struct Capture(Value, Vec<Vec<Value>>);
+impl ModelClient for Capture {
+    fn complete(
+        &mut self,
+        _: &ResolvedAgent,
+        messages: &[Value],
+        _: &[Value],
+    ) -> crate::Result<Value> {
+        self.1.push(messages.to_vec());
+        Ok(self.0.clone())
+    }
+}
+
+#[test]
+fn model_input_puts_what_changes_every_call_last() {
+    let (home, user, chat) = fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let task = claim(&mut scheduler, "a");
+    let mut model = Capture(json!({"role":"assistant","content":"ok"}), Vec::new());
+    execute(home.path(), task, &mut model, &CancellationToken::new()).unwrap();
+    let input = model.1[0]
+        .iter()
+        .find(|m| m["role"] == "user")
+        .and_then(|m| m["content"].as_str())
+        .expect("scheduled input")
+        .to_owned();
+    let position = |key: &str| {
+        input
+            .find(&format!("\"{key}\":"))
+            .unwrap_or_else(|| panic!("{key} missing from {input}"))
+    };
+    let stable = [
+        "instruction",
+        "your_principal",
+        "conversation",
+        "timezone",
+        "history",
+    ];
+    let volatile = ["presence", "trigger", "messages", "now"];
+    for s in stable {
+        for v in volatile {
+            assert!(position(s) < position(v), "{s} must come before {v}");
+        }
+    }
+    assert!(!input.contains("now_unix_ms"));
+    let parsed: Value = serde_json::from_str(&input).unwrap();
+    assert!(parsed["now"].as_str().unwrap().contains('T'));
+}
