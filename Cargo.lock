@@ -46,6 +46,7 @@ dependencies = [
  "agt-storage",
  "anyhow",
  "clap",
+ "futures-util",
  "libc",
  "serde",
  "serde_json",
