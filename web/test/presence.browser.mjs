@@ -30,8 +30,11 @@ try {
   const wait = async expression => { for (let i = 0; i < 150; i++) { if (await evaluate(expression)) return; await new Promise(ok => setTimeout(ok, 100)); } throw new Error(`Timed out: ${expression}`); };
   const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   await wait('document.querySelector("#connection")?.textContent === "本地已连接"');
+  // A new generation discards activity requests still in flight; one returning
+  // after this would replace the injected scheduler state with the real one.
   await evaluate(`
     state.polling = true;
+    state.generation++;
     const chat = { id: 'sample-chat', kind: 'group', state: 'active', title: '示例协作', last_message_seq: 3 };
     state.conversation = chat;
     state.conversations = [{ conversation: chat }];
