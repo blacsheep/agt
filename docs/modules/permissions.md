@@ -11,7 +11,7 @@
 
 ## What it does
 
-Every tool call a native agent makes (built-in, MCP or local command) goes through the workspace approval policy before it runs. Codex agents send their own approval requests when they need to go beyond their sandbox. Both kinds end up in one approval queue.
+Every MCP tool call, local command and built-in tool call that writes or reaches outside agt goes through the workspace approval policy before it runs. Built-in tools that only read agt's own data skip it, since membership and discussion limits already decide what they return. Codex agents send their own approval requests when they need to go beyond their sandbox. Both kinds end up in one approval queue.
 
 | Native policy | Behavior |
 | --- | --- |
@@ -19,7 +19,7 @@ Every tool call a native agent makes (built-in, MCP or local command) goes throu
 | `manual` | Every call waits for a person |
 | `auto_allow` | Every call runs |
 
-With the default settings no reviewer model is configured, so **every call goes to a person** until you choose a reviewer model or another policy.
+With the default settings no reviewer model is configured, so **every reviewed call goes to a person** until you choose a reviewer model or another policy.
 
 ## How to use it
 

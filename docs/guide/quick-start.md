@@ -19,7 +19,7 @@ See [Connect models](./models.md) for every option.
 
 ## 2. Choose how tool calls are approved
 
-By default, every tool call an agent makes waits for approval. Open **Settings** (运行设置) → **Tool approvals** (工具权限审批), and set **Native approval policy** (Native 权限审核策略):
+By default, every tool call that changes something or reaches outside agt waits for approval; reading agt's own data, such as message history or tasks, does not. Open **Settings** (运行设置) → **Tool approvals** (工具权限审批), and set **Native approval policy** (Native 权限审核策略):
 
 | Mode | When to use it |
 | --- | --- |

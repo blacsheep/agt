@@ -76,32 +76,7 @@ impl NativeRun<'_, '_> {
                 self.after_tool_call(&call, invocation, Ok(ToolOutput::failed(output, error)))?;
                 continue;
             }
-            let scope =
-                crate::approval::Scope::new(self.record, self.runtime.scheduled_task.as_ref());
-            let (allowed, policy_changed) = self.permissions.authorize(
-                crate::permission::Request {
-                    scope: &scope,
-                    call: &call.id,
-                    tool: &call.function.name,
-                    arguments: &arguments,
-                    input: &self.record.request.input,
-                },
-                self.cancellation,
-                &|| self.runtime.check_schedule(),
-            )?;
-            if policy_changed {
-                // The fingerprint records the policy actually applied, so resume checks
-                // compare against what this Run used.
-                self.record.config_fingerprint = Some(super::refresh::execution_fingerprint(
-                    &self.agent,
-                    self.agents,
-                    self.record.parent_run_id.is_none(),
-                    &self.permissions,
-                    &self.tools.schemas,
-                )?);
-                self.runtime.store.save(self.record)?;
-            }
-            if !allowed {
+            if self.needs_approval(&call.function.name) && !self.authorize(&call, &arguments)? {
                 self.transcript.messages.push(json!({"role":"tool","tool_call_id":call.id,"content":"Permission denied. This tool was not executed. Do not repeat the same request without new authorization."}));
                 continue;
             }
@@ -131,6 +106,40 @@ impl NativeRun<'_, '_> {
             self.refresh_capabilities()?;
         }
         Ok(ToolFlow::Continue)
+    }
+
+    /// Framework reads of agt's own data run without approval; everything else is reviewed.
+    fn needs_approval(&self, name: &str) -> bool {
+        !self.is_framework(name)
+            || agt_service::catalog::hosted_tool(name).is_none_or(|t| t.needs_approval())
+    }
+
+    fn authorize(&mut self, call: &ToolCall, arguments: &Value) -> Result<bool> {
+        let scope = crate::approval::Scope::new(self.record, self.runtime.scheduled_task.as_ref());
+        let (allowed, policy_changed) = self.permissions.authorize(
+            crate::permission::Request {
+                scope: &scope,
+                call: &call.id,
+                tool: &call.function.name,
+                arguments,
+                input: &self.record.request.input,
+            },
+            self.cancellation,
+            &|| self.runtime.check_schedule(),
+        )?;
+        if policy_changed {
+            // The fingerprint records the policy actually applied, so resume checks
+            // compare against what this Run used.
+            self.record.config_fingerprint = Some(super::refresh::execution_fingerprint(
+                &self.agent,
+                self.agents,
+                self.record.parent_run_id.is_none(),
+                &self.permissions,
+                &self.tools.schemas,
+            )?);
+            self.runtime.store.save(self.record)?;
+        }
+        Ok(allowed)
     }
 
     fn prepare_tool_call(&self, call: &ToolCall) -> Result<(Value, CallRecord)> {

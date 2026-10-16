@@ -4,7 +4,7 @@ Attaching a tool to an agent decides what it *can* call. Approvals decide whethe
 
 ## Native tool calls
 
-Before a native agent runs any tool (built-in, MCP or local command), the call goes through the workspace policy `permissions.mode`:
+Before a native agent runs a tool, the call goes through the workspace policy `permissions.mode`. This covers MCP tools, local commands and built-in tools that change something or reach outside agt. Built-in tools that only read agt's own data, such as `message_history`, `task_list`, `memory_read` or `resource_list`, run without approval in every mode, because they can only see what the agent is already allowed to see.
 
 | Mode | Web label | Behavior |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ Before a native agent runs any tool (built-in, MCP or local command), the call g
 | `auto_allow` | 自动放行 | Every call runs without review. |
 
 ::: tip The default asks you
-The default mode is `model_review`, but no reviewer model is configured out of the box, so every call goes to manual approval until you choose a reviewer model.
+The default mode is `model_review`, but no reviewer model is configured out of the box, so every reviewed call goes to manual approval until you choose a reviewer model.
 :::
 
 The reviewer is an ordinary model resource, separate from the agent being reviewed. It gets the tool name, the arguments and the request the agent is working on, and answers allow or deny once. A deny from the reviewer is final; anything else goes to you.
