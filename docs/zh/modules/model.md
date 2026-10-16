@@ -39,7 +39,7 @@ agt model update fast --clear-reasoning-effort
 | 参数 | 含义 |
 | --- | --- |
 | `--model` | Provider 上的模型 ID |
-| `--api-format` | `chat-completions` 或 `responses`；必须与 Provider 支持的一致 |
+| `--api-format` | `chat-completions`、`responses`、`anthropic-messages` 或 `gemini`；必须与 Provider 支持的一致 |
 | `--tool-call true` | 使用任何工具的 Agent 都需要 |
 | `--reasoning-effort` | 推理模型的思考档位 |
 | `--context-window` | 模型接受的输入 token 数；按 Provider 文档设置 |
@@ -52,7 +52,7 @@ agt model update fast --clear-reasoning-effort
 | --- | --- | --- | --- |
 | `--provider <引用>` | 是 | | Provider |
 | `--model <id>` | 是 | | Provider 上的模型 ID |
-| `--api-format <格式>` | 否 | `chat-completions` | `chat-completions` 或 `responses`。agt 从不自动切换。 |
+| `--api-format <格式>` | 否 | `chat-completions` | `chat-completions`、`responses`、`anthropic-messages` 或 `gemini`。agt 从不自动切换。 |
 | `--temperature <t>` | 否 | `0.7` | 0 到 2。设置推理强度时不发送。 |
 | `--max-tokens <n>` | 否 | 不发送 | 输出 token 上限 |
 | `--timeout <秒>` | 否 | `60` | 等待响应开始、每次读取，以及回复开始输出后相邻两段输出之间的最长秒数；卡住的回复会自动重试 |
@@ -98,7 +98,7 @@ capabilities:
 | `temperature` | 0 到 2 |
 | `max_tokens` | 正整数 |
 | `timeout` | 秒 |
-| `api_format` | `chat-completions` 或 `responses` |
+| `api_format` | `chat-completions`、`responses`、`anthropic-messages` 或 `gemini` |
 | `reasoning_effort` | 同 `--reasoning-effort` |
 | `tool_call` | 布尔值 |
 | `context_window` | 4096 到 2000000 |
@@ -113,6 +113,9 @@ capabilities:
 | 重试 | 连接错误、HTTP 错误、无效 JSON 和空回复会重试，总共最多 10 次，间隔从 250 毫秒增加到 4 秒。配置错误和明确拒绝不重试。 |
 | 压缩 | 达到上下文窗口的 90% 时，用同一个模型摘要较早的历史。 |
 | 输入 | 仅文本，不支持图片。 |
+| Anthropic | 发送 `x-api-key` 和 `anthropic-version: 2023-06-01`。给系统提示词、工具和最新一条消息打上提示词缓存标记。未设置 `max_tokens` 时请求最多 16384 个输出 token。`reasoning_effort` 换算为扩展思考预算（low 2048、medium 8192、high 16384、xhigh 32768、max 64000，或直接填数字）；必须调用某个工具的那一次请求会关闭思考。 |
+| Gemini | 发送 `x-goog-api-key`。工具定义以 JSON Schema 发送（`parametersJsonSchema`）。`reasoning_effort` 换算为思考预算（none 为 0、low 2048、medium 8192、high 16384、max 由模型自定，或直接填数字）。 |
+| 思考内容 | 服务商的推理内容不会显示，也不会写进执行记录。服务商要求回传的思考块和签名随这次执行保留，供下一步发送；因等待任务而挂起的执行会把它们保存在本机检查点里。 |
 
 ## 相关模块
 

@@ -4,6 +4,7 @@ pub mod context;
 mod error;
 pub mod model;
 mod model_stream;
+mod protocol;
 mod resolve;
 
 pub use context::ContextCheckpoint;

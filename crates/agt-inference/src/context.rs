@@ -9,13 +9,15 @@ pub fn estimate(text: &str) -> usize {
     text.len().div_ceil(4)
 }
 pub fn size(messages: &[Value], tools: &[Value]) -> usize {
-    // Responses output is the canonical history sent by the adapter. Do not count
-    // its duplicate normalized content/tool_calls a second time when usage is absent.
+    // A protocol's own output (Responses items, Anthropic blocks, Gemini parts) is
+    // what the adapter sends back. Do not count its duplicate normalized
+    // content/tool_calls a second time when usage is absent.
     let visible: Vec<_> = messages
         .iter()
         .map(|m| {
-            m.get("_responses_output")
-                .filter(|v| v.is_array())
+            ["_responses_output", "_anthropic_content", "_gemini_parts"]
+                .iter()
+                .find_map(|key| m.get(*key).filter(|v| v.is_array()))
                 .unwrap_or(m)
         })
         .collect();

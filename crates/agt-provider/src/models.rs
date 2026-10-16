@@ -11,9 +11,16 @@ pub struct ProviderModel {
     pub owned_by: Option<String>,
 }
 
+/// OpenAI-compatible and Anthropic list `data[].id`; Gemini lists `models[].name`.
 #[derive(Debug, Deserialize)]
-struct OpenAiModelsResponse {
-    data: Vec<OpenAiModelItem>,
+struct ModelsResponse {
+    data: Option<Vec<OpenAiModelItem>>,
+    models: Option<Vec<GeminiModelItem>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeminiModelItem {
+    name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -25,23 +32,42 @@ struct OpenAiModelItem {
 
 pub fn list_openai_compatible_models(config: &ProviderConfig) -> Result<Vec<ProviderModel>> {
     let url = models_url(&config.base_url)?;
-    let response = build_http_client(&url)?
-        .get(url)
-        .bearer_auth(&config.api_key)
-        .send()
-        .map_err(ProviderError::http)?;
-
-    let status = response.status();
-    if !status.is_success() {
-        return Err(ProviderError::Remote {
-            message: format!(
-                "/models 接口返回 HTTP {status}。该 provider 可能不支持模型列表接口，请手动使用 agt model add-alias"
-            ),
-        });
+    let client = build_http_client(&url)?;
+    // A provider has no API format of its own, so try each vendor's credentials in
+    // turn: OpenAI-compatible bearer, then Anthropic, then Gemini.
+    let attempts: [&dyn Fn() -> reqwest::blocking::RequestBuilder; 3] = [
+        &|| client.get(url.clone()).bearer_auth(&config.api_key),
+        &|| {
+            client
+                .get(url.clone())
+                .header("x-api-key", &config.api_key)
+                .header("anthropic-version", "2023-06-01")
+        },
+        &|| {
+            let mut url = url.clone();
+            url.set_query(Some("pageSize=1000"));
+            client.get(url).header("x-goog-api-key", &config.api_key)
+        },
+    ];
+    let mut status = None;
+    for attempt in attempts {
+        let response = attempt().send().map_err(ProviderError::http)?;
+        if response.status().is_success() {
+            let text = response.text().map_err(ProviderError::http)?;
+            return parse_models_response(&text);
+        }
+        let code = response.status();
+        status = Some(code);
+        if !matches!(code.as_u16(), 400 | 401 | 403) {
+            break;
+        }
     }
-
-    let text = response.text().map_err(ProviderError::http)?;
-    parse_models_response(&text)
+    Err(ProviderError::Remote {
+        message: format!(
+            "/models 接口返回 HTTP {}。该 provider 可能不支持模型列表接口，请手动使用 agt model add-alias",
+            status.map(|s| s.to_string()).unwrap_or_default()
+        ),
+    })
 }
 
 pub fn models_url(base_url: &str) -> Result<reqwest::Url> {
@@ -52,20 +78,29 @@ pub fn models_url(base_url: &str) -> Result<reqwest::Url> {
 }
 
 pub fn parse_models_response(text: &str) -> Result<Vec<ProviderModel>> {
-    let response: OpenAiModelsResponse =
-        serde_json::from_str(text).map_err(|source| ProviderError::Remote {
-            message: format!("/models 响应不是 OpenAI-compatible 格式：{source}"),
-        })?;
-
-    let mut models = response
-        .data
-        .into_iter()
-        .filter(|item| !item.id.trim().is_empty())
-        .map(|item| ProviderModel {
-            id: item.id,
-            owned_by: item.owned_by,
-        })
-        .collect::<Vec<_>>();
+    let invalid = |detail: String| ProviderError::Remote {
+        message: format!("/models 响应不是可识别的模型列表格式：{detail}"),
+    };
+    let response: ModelsResponse =
+        serde_json::from_str(text).map_err(|source| invalid(source.to_string()))?;
+    let mut models = match (response.data, response.models) {
+        (Some(data), _) => data
+            .into_iter()
+            .map(|item| ProviderModel {
+                id: item.id,
+                owned_by: item.owned_by,
+            })
+            .collect::<Vec<_>>(),
+        (None, Some(models)) => models
+            .into_iter()
+            .map(|item| ProviderModel {
+                id: item.name.trim_start_matches("models/").to_owned(),
+                owned_by: None,
+            })
+            .collect(),
+        (None, None) => return Err(invalid("missing data or models".into())),
+    };
+    models.retain(|item| !item.id.trim().is_empty());
     models.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(models)
 }
@@ -126,7 +161,19 @@ mod tests {
 
     #[test]
     fn rejects_invalid_models_response() {
-        assert!(parse_models_response(r#"{"models":[]}"#).is_err());
+        assert!(parse_models_response(r#"{"items":[]}"#).is_err());
+    }
+
+    #[test]
+    fn parses_gemini_models_response() {
+        let models = parse_models_response(
+            r#"{"models":[{"name":"models/gemini-2.5-pro"},{"name":"models/gemini-2.5-flash"}]}"#,
+        )
+        .expect("parse");
+        assert_eq!(
+            models.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
+            ["gemini-2.5-flash", "gemini-2.5-pro"]
+        );
     }
 
     #[test]

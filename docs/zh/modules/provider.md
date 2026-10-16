@@ -11,7 +11,7 @@
 
 ## 作用
 
-Provider 告诉 agt 把模型请求发往哪里。OpenAI、API 网关以及实现了 OpenAI API 的本地服务（如 Ollama、vLLM）都可以。[Model](./model.md) 引用 Provider；一个 Provider 可以服务多个 Model。
+Provider 告诉 agt 把模型请求发往哪里。OpenAI、Anthropic、Google Gemini、API 网关以及实现了 OpenAI API 的本地服务（如 Ollama、vLLM）都可以。每个 [Model](./model.md) 选择它的 Provider 使用的接口格式。
 
 ## 怎么用
 
@@ -68,7 +68,7 @@ agt provider update openai --base-url https://gateway.example.com/v1
 | 命令 | 含义 |
 | --- | --- |
 | `test <引用>` | 校验已保存的配置，不访问服务器 |
-| `list-models <引用>` | 用保存的密钥调用 Provider 的 `/models` 接口，不执行推理 |
+| `list-models <引用>` | 用保存的密钥调用 Provider 的 `/models` 接口，不执行推理。依次尝试 OpenAI 兼容、Anthropic 和 Gemini 的认证方式。 |
 | `list`、`info`、`delete`、`category` | 见[资源通用操作](./resources.md#通用-cli-命令) |
 
 ### 文件：`provider.yaml`

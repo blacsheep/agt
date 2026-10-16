@@ -2,7 +2,6 @@ use std::io::Read;
 use std::time::Duration;
 
 use agt_core::CancellationToken;
-use agt_model::ModelApiFormat;
 use serde_json::{Value, json};
 
 use crate::{ResolvedAgent, Result, RuntimeError};
@@ -155,58 +154,22 @@ impl ModelClient for ChatCompletions {
         tools: &[Value],
         progress: &mut dyn FnMut(ModelEvent<'_>) -> Result<()>,
     ) -> Result<Value> {
-        let mut url = reqwest::Url::parse(&agent.provider.base_url).map_err(|e| {
+        let base = reqwest::Url::parse(&agent.provider.base_url).map_err(|e| {
             RuntimeError::Configuration(crate::Reason::because("invalid provider URL", e))
         })?;
-        if !matches!(url.scheme(), "http" | "https")
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || url.query().is_some()
-            || url.fragment().is_some()
+        if !matches!(base.scheme(), "http" | "https")
+            || !base.username().is_empty()
+            || base.password().is_some()
+            || base.query().is_some()
+            || base.fragment().is_some()
         {
             return Err(RuntimeError::Configuration(
                 "provider URL must be HTTP(S) without credentials, query or fragment".into(),
             ));
         }
-        let responses = agent.model.api_format == ModelApiFormat::Responses;
-        let endpoint = if responses {
-            "responses"
-        } else {
-            "chat/completions"
-        };
-        url.set_path(&format!("{}/{endpoint}", url.path().trim_end_matches('/')));
+        let protocol = crate::protocol::select(&agent.model.api_format);
+        let request = protocol.request(&base, agent, messages, tools)?;
         let params = &agent.model.params;
-        let mut body = if responses {
-            responses_request(messages, tools)?
-        } else {
-            let mut body = json!({"messages": messages});
-            if !tools.is_empty() {
-                body["tools"] = json!(wire_tools(tools));
-            }
-            body
-        };
-        apply_tool_choice(&mut body, tools, responses);
-        body["model"] = json!(agent.model.model);
-        body["stream"] = json!(true);
-        if !responses {
-            body["stream_options"] = json!({"include_usage":true});
-        }
-        if let Some(effort) = &params.reasoning_effort {
-            if responses {
-                body["reasoning"] = json!({"effort": effort.as_str()});
-            } else {
-                body["reasoning_effort"] = json!(effort.as_str());
-            }
-        } else {
-            body["temperature"] = json!(params.temperature);
-        }
-        if let Some(limit) = params.max_tokens {
-            body[if responses {
-                "max_output_tokens"
-            } else {
-                "max_completion_tokens"
-            }] = json!(limit);
-        }
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(u64::from(params.timeout)))
             .redirect(reqwest::redirect::Policy::none())
@@ -214,17 +177,16 @@ impl ModelClient for ChatCompletions {
             .map_err(|e| {
                 RuntimeError::Model(crate::Reason::because("cannot create HTTP client", e))
             })?;
-        let response = client
-            .post(url)
-            .bearer_auth(&agent.provider.api_key)
-            .json(&body)
-            .send()
-            .map_err(|e| {
-                RuntimeError::ModelTransient(crate::Reason::because(
-                    "HTTP request failed or timed out",
-                    e,
-                ))
-            })?;
+        let mut builder = client.post(request.url).json(&request.body);
+        for (name, value) in &request.headers {
+            builder = builder.header(*name, value);
+        }
+        let response = builder.send().map_err(|e| {
+            RuntimeError::ModelTransient(crate::Reason::because(
+                "HTTP request failed or timed out",
+                e,
+            ))
+        })?;
         if !response.status().is_success() {
             let status = response.status().as_u16();
             // Inspect a bounded structured error, never persist provider bodies or credentials.
@@ -232,7 +194,7 @@ impl ModelClient for ChatCompletions {
             if response.take(65537).read_to_end(&mut bytes).is_ok()
                 && bytes.len() <= 65536
                 && let Ok(body) = serde_json::from_slice::<Value>(&bytes)
-                && context_rejected(&body)
+                && protocol.context_rejected(&body)
             {
                 return Err(RuntimeError::ContextWindowRejected);
             }
@@ -250,9 +212,9 @@ impl ModelClient for ChatCompletions {
                     .eq_ignore_ascii_case("text/event-stream")
             })
         {
-            return crate::model_stream::read(
+            return crate::model_stream::read_with(
                 response,
-                responses,
+                protocol.decoder(),
                 Duration::from_secs(u64::from(params.timeout)),
                 progress,
             );
@@ -272,7 +234,7 @@ impl ModelClient for ChatCompletions {
         let response: Value = serde_json::from_slice(&bytes).map_err(|e| {
             RuntimeError::ModelTransient(crate::Reason::because("invalid JSON response", e))
         })?;
-        if context_rejected(&response) {
+        if protocol.context_rejected(&response) {
             return Err(RuntimeError::ContextWindowRejected);
         }
         if !response["error"].is_null() {
@@ -280,31 +242,15 @@ impl ModelClient for ChatCompletions {
                 "model returned an error".into(),
             ));
         }
-        if response["choices"].as_array().is_some_and(Vec::is_empty)
-            || response.is_null()
-            || response.as_object().is_some_and(serde_json::Map::is_empty)
-        {
+        if response.is_null() || response.as_object().is_some_and(serde_json::Map::is_empty) {
             return Err(RuntimeError::ModelTransient("empty model response".into()));
         }
-        if responses {
-            return responses_message(&response)
-                .map(|message| attach_usage(message, &response["usage"], true));
-        }
-        let choice = &response["choices"][0];
-        let message = &choice["message"];
-        match choice["finish_reason"].as_str() {
-            Some("stop" | "tool_calls") if message["refusal"].is_null() => {
-                Ok(attach_usage(message.clone(), &response["usage"], false))
-            }
-            _ => Err(RuntimeError::Model(
-                "response was incomplete, refused or unsupported".into(),
-            )),
-        }
+        protocol.message(&response)
     }
 }
 
 // Host-only accounting. Runtime consumes/removes this before appending to history.
-pub fn attach_usage(mut message: Value, usage: &Value, responses: bool) -> Value {
+pub fn attach_usage(message: Value, usage: &Value, responses: bool) -> Value {
     let total = usage["total_tokens"].as_u64().or_else(|| {
         let (input, output) = if responses {
             ("input_tokens", "output_tokens")
@@ -318,101 +264,15 @@ pub fn attach_usage(mut message: Value, usage: &Value, responses: bool) -> Value
         )
     });
     // Ignore nonsensical zero totals; cached input is already included in input/total.
-    if let Some(total) = total.filter(|n| *n > 0) {
+    set_total_tokens(message, total.unwrap_or(0))
+}
+
+/// Record the provider's token count for this step; zero means unknown.
+pub fn set_total_tokens(mut message: Value, total: u64) -> Value {
+    if total > 0 {
         message["_agt_total_tokens"] = json!(total);
     }
     message
-}
-
-// Internal request constraint; never send AGT metadata to the provider.
-fn wire_tools(tools: &[Value]) -> Vec<Value> {
-    tools
-        .iter()
-        .map(|tool| {
-            let mut tool = tool.clone();
-            if let Some(object) = tool.as_object_mut() {
-                object.remove("_agt_required");
-            }
-            tool
-        })
-        .collect()
-}
-fn apply_tool_choice(body: &mut Value, tools: &[Value], responses: bool) {
-    if let [tool] = tools
-        && tool["_agt_required"] == true
-    {
-        let name = &tool["function"]["name"];
-        body["tool_choice"] = if responses {
-            json!({"type":"function","name":name})
-        } else {
-            json!({"type":"function","function":{"name":name}})
-        };
-        body["parallel_tool_calls"] = json!(false);
-    }
-}
-
-fn responses_request(messages: &[Value], tools: &[Value]) -> Result<Value> {
-    let mut input = Vec::new();
-    for message in messages {
-        // Keep complete output (including reasoning and phase) in this run's
-        // in-memory transcript, never in shared client state or audit records.
-        if let Some(output) = message["_responses_output"].as_array() {
-            input.extend(output.iter().cloned());
-        } else if message["role"] == "tool" {
-            input.push(json!({"type":"function_call_output", "call_id":message["tool_call_id"], "output":message["content"]}));
-        } else {
-            input.push(message.clone());
-        }
-    }
-    let mut body = json!({"input":input,"store":false,"include":["reasoning.encrypted_content"]});
-    if !tools.is_empty() {
-        let converted = tools
-            .iter()
-            .map(|tool| {
-                let mut function = tool["function"]
-                    .as_object()
-                    .cloned()
-                    .ok_or(RuntimeError::Model("invalid function tool schema".into()))?;
-                function.insert("type".into(), json!("function"));
-                // Responses defaults to strict; preserve optional fields in existing
-                // MCP/framework schemas unless the schema explicitly opts in.
-                function.entry("strict").or_insert(json!(false));
-                Ok(Value::Object(function))
-            })
-            .collect::<Result<Vec<_>>>()?;
-        body["tools"] = json!(converted);
-    }
-    Ok(body)
-}
-
-pub fn responses_message(response: &Value) -> Result<Value> {
-    let invalid = || RuntimeError::Model("response was incomplete, refused or unsupported".into());
-    if response["status"] != "completed" || !response["error"].is_null() {
-        return Err(invalid());
-    }
-    let output = response["output"].as_array().ok_or_else(invalid)?;
-    let mut content = String::new();
-    let mut calls = Vec::new();
-    for item in output {
-        if !item["status"].is_null() && item["status"] != "completed" {
-            return Err(invalid());
-        }
-        match item["type"].as_str() {
-            Some("reasoning") => {}
-            Some("message") if item["role"] == "assistant" => {
-                for part in item["content"].as_array().ok_or_else(invalid)? {
-                    if part["type"] != "output_text" {
-                        return Err(invalid());
-                    }
-                    content.push_str(part["text"].as_str().ok_or_else(invalid)?);
-                }
-            }
-            Some("function_call") => calls.push(json!({"type":"function", "id":item["call_id"],
-                "function":{"name":item["name"],"arguments":item["arguments"]}})),
-            _ => return Err(invalid()),
-        }
-    }
-    Ok(json!({"role":"assistant","content":content,"tool_calls":calls,"_responses_output":output}))
 }
 
 #[cfg(test)]
@@ -454,36 +314,3 @@ mod usage_tests {
 
 #[cfg(test)]
 mod provider_errors;
-
-#[cfg(test)]
-mod required_tool_tests {
-    use super::*;
-    #[test]
-    fn forced_tool_is_encoded_for_both_apis_without_private_metadata() {
-        let tools = vec![
-            json!({"type":"function","_agt_required":true,"function":{"name":"participation_decision","parameters":{"type":"object"},"strict":false}}),
-        ];
-        for responses in [false, true] {
-            let mut body = if responses {
-                responses_request(&[], &tools).unwrap()
-            } else {
-                json!({"tools":wire_tools(&tools)})
-            };
-            apply_tool_choice(&mut body, &tools, responses);
-            assert_eq!(body["parallel_tool_calls"], false);
-            assert_eq!(
-                body["tool_choice"],
-                if responses {
-                    json!({"type":"function","name":"participation_decision"})
-                } else {
-                    json!({"type":"function","function":{"name":"participation_decision"}})
-                }
-            );
-            assert!(!body.to_string().contains("_agt_required"));
-        }
-        let ordinary = wire_tools(&tools);
-        let mut body = json!({});
-        apply_tool_choice(&mut body, &ordinary, false);
-        assert!(body.get("tool_choice").is_none());
-    }
-}

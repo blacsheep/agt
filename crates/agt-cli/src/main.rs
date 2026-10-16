@@ -188,6 +188,7 @@ struct ModelCreateArgs {
     provider: String,
     #[arg(long)]
     model: String,
+    /// chat-completions (default), responses, anthropic-messages or gemini
     #[arg(long)]
     api_format: Option<String>,
     #[arg(long)]
@@ -212,6 +213,7 @@ struct ModelUpdateArgs {
     name: String,
     #[arg(long)]
     category: Option<String>,
+    /// chat-completions (default), responses, anthropic-messages or gemini
     #[arg(long)]
     api_format: Option<String>,
     #[arg(long)]

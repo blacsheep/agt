@@ -132,6 +132,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror",
+ "uuid",
 ]
 
 [[package]]
