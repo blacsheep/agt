@@ -56,6 +56,10 @@ cd agt
 cargo build -p agt-cli        # target/debug/agt
 ```
 
+::: tip 想用桌面应用？
+[AGT Studio](./desktop.md) 把控制台做成了 macOS、Windows 和 Linux 上的应用，带托盘和系统通知，和命令行使用同一个工作空间。
+:::
+
 ## 启动 Web 控制台
 
 ```bash

@@ -5,6 +5,7 @@ members = [
     "crates/agt-cli",
     "crates/agt-config",
     "crates/agt-console",
+    "crates/agt-desktop",
     "crates/agt-core",
     "crates/agt-im",
     "crates/agt-inference",
@@ -30,6 +31,7 @@ version = "0.4.0"
 [workspace.dependencies]
 agt-harness = { path = "crates/agt-harness" }
 agt-agent = { path = "crates/agt-agent" }
+agt-cli = { path = "crates/agt-cli" }
 agt-config = { path = "crates/agt-config" }
 agt-console = { path = "crates/agt-console" }
 agt-core = { path = "crates/agt-core" }
