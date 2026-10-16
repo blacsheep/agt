@@ -122,10 +122,11 @@ impl PermissionLoop {
             scope,
             call,
             tool,
+            agent,
             arguments: args,
             input,
         } = request;
-        let request = json!({"tool":tool,"arguments":args,"policy":self.config,"reviewer_fingerprint":self.reviewer_fingerprint(),"options":[{"label":"批准本次调用","value":"allow"},{"label":"拒绝本次调用","value":"deny"},{"label":"取消执行","value":"cancel"}]});
+        let request = json!({"tool":tool,"agent":agent,"arguments":args,"policy":self.config,"reviewer_fingerprint":self.reviewer_fingerprint(),"options":[{"label":"批准本次调用","value":"allow"},{"label":"总是允许此 Agent 使用该工具","value":"allow_always"},{"label":"拒绝本次调用","value":"deny"},{"label":"取消执行","value":"cancel"}]});
         let item = store.create(
             scope,
             crate::approval::ApprovalSource::Native,
@@ -140,6 +141,17 @@ impl PermissionLoop {
             }
         }
         let _guard = Guard(&store, &scope.run_id);
+        if store.rule_allows(agent, tool)? {
+            // Recorded like any decision, so the approval history shows why it ran.
+            store.decide_as(
+                &item.id,
+                item.revision,
+                json!("allow"),
+                "Allowed by a saved rule for this Agent and tool",
+                None,
+                Some(DecisionOrigin::Rule),
+            )?;
+        }
         let context = json!({"tool":tool,"arguments":args,"task":input});
         let mut plugin = self.start_policy(&store, &item.id, context.clone())?;
         let mut hinted = true;
@@ -170,7 +182,7 @@ impl PermissionLoop {
                     );
                 }
                 store.change(&item.id, None, Some(Delivery::Resolved))?;
-                return Ok(decision == "allow");
+                return Ok(decision == "allow" || decision == "allow_always");
             }
             let previous = self.config.clone();
             if self.refresh()? {
@@ -230,6 +242,8 @@ pub(crate) struct Request<'a> {
     pub scope: &'a Scope,
     pub call: &'a str,
     pub tool: &'a str,
+    /// The Agent definition making the call; "always allow" rules are kept per Agent.
+    pub agent: &'a str,
     pub arguments: &'a Value,
     pub input: &'a str,
 }
@@ -277,6 +291,7 @@ mod tests {
             scope,
             call: "call-1",
             tool: "framework_message_send",
+            agent: "default/a",
             arguments: &Value::Null,
             input: "task",
         }
@@ -425,6 +440,7 @@ mod tests {
                     scope: &scope,
                     call: "call-1",
                     tool: "framework_message_send",
+                    agent: "default/a",
                     arguments: &json!({}),
                     input: "task",
                 },

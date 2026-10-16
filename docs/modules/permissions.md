@@ -62,12 +62,14 @@ Changes apply to requests waiting now and to later ones. Decisions already made 
 | `list` | `--principal <id>`, `--before <cursor>` | Approval requests, newest first |
 | `info <id>` | `--principal <id>` | One request: tool, arguments, reason, options, revision |
 | `decide <id>` | `--expected-revision <n>` (required), `--decision <json>` (required), `--reason <text>`, `--principal <id>` | Decide a request |
+| `rules` | | Saved "always allow" rules: agent, tool, who saved it, when |
+| `forget` | `--agent <ref>`, `--tool <name>` (both required) | Remove a rule; later calls are reviewed again |
 
 `--decision` is the JSON `value` of one of the options in `info`:
 
 | Source | Options |
 | --- | --- |
-| Native call | `"allow"`, `"deny"`, `"cancel"` (cancel the run) |
+| Native call | `"allow"`, `"allow_always"` (allow and save a rule for this agent and tool), `"deny"`, `"cancel"` (cancel the run) |
 | Codex command or file change | Accept once, accept for the session, decline, cancel the turn (as offered by Codex) |
 | Codex permission request | Grant for this turn, deny, cancel the turn |
 

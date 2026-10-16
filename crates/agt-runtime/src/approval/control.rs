@@ -141,7 +141,23 @@ impl ApprovalStore {
         } else {
             ApprovalState::Approved
         };
+        let tx = agt_storage::sqlite::write(&self.db)?;
         self.update(&old, &next)?;
+        if decision == "allow_always" {
+            // Saved with the decision, so the rule exists exactly when the choice does.
+            let (Some(agent), Some(tool)) =
+                (old.request["agent"].as_str(), old.request["tool"].as_str())
+            else {
+                bail!("this approval cannot save a rule");
+            };
+            self.db.execute(
+                "INSERT OR IGNORE INTO permission_rules(agent,tool,actor,created_at) VALUES(?1,?2,?3,?4)",
+                params![agent, tool, next.actor.as_deref().unwrap_or("local-admin"), now()],
+            )?;
+        }
+        tx.commit()?;
+        // `update` hinted inside this transaction; hint again now that it is visible.
+        agt_storage::wake::notify(&self.home);
         Ok(next)
     }
 }
