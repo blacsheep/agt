@@ -78,8 +78,9 @@ impl ScheduledEngine {
         match self {
             Self::Harness => {
                 let cutoff = store.context_cutoff(&task.conversation)?;
+                let zone = crate::clock::zone(&agt_config::RuntimeConfig::load(home)?);
                 Ok(Some(
-                    json!({"history":crate::conversation_context::visible_history(im,task,cutoff)?,"summary":"","reset_through_seq":cutoff}),
+                    json!({"history":crate::conversation_context::visible_history(im,task,cutoff,&zone)?,"summary":"","reset_through_seq":cutoff}),
                 ))
             }
             Self::Native(agent) => {

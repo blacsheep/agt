@@ -36,8 +36,8 @@ pub(super) fn register(
             let item=read(&store.connection,id)?;
             let WorkState::Running{run_id}=&item.state else { bail!("work is not running"); };
             if task.work_notification || item.request.assignee!=task.principal { bail!("only current assignee may suspend work"); }
-            let deadline=args[if kind=="timer" {"not_before"} else {"deadline"}].as_i64().ok_or_else(||anyhow::anyhow!("future deadline required"))?;
-            if deadline<=crate::schedule_store::now_ms(){bail!("deadline must be future Unix milliseconds");}
+            let deadline=crate::clock::moment(home,args.get(if kind=="timer" {"not_before"} else {"deadline"}))?.ok_or_else(||anyhow::anyhow!("future deadline required"))?;
+            if deadline<=crate::schedule_store::now_ms(){bail!("deadline must be in the future");}
             let targets:Vec<String>=if kind=="dependency" {
                 if args.get("task_ids").is_some(){
                     if args.get("task_id").is_some(){bail!("choose task_id or task_ids");}
@@ -63,7 +63,8 @@ pub(super) fn register(
                 }
                 store.connection.execute("INSERT INTO work_waits(run_id,work_id,dependency,deadline,kind,payload) VALUES(?1,?2,?3,?4,?5,?6)",params![run_id,id,target,deadline,kind,payload.to_string()])?;
             }
-            Ok(json!({"status":"suspending","task_id":id,"dependencies":targets,"deadline":deadline,"instruction":"End this turn now. Runtime will resume this task when the waiting condition is met. Do not continue using tools."}))
+            let zone=crate::clock::zone(&agt_config::RuntimeConfig::load(home)?);
+            Ok(json!({"status":"suspending","task_id":id,"dependencies":targets,"deadline":deadline,"deadline_local":crate::clock::local(deadline,&zone),"instruction":"End this turn now. Runtime will resume this task when the waiting condition is met. Do not continue using tools."}))
         };
         operation().map_err(|e|crate::RuntimeError::Invalid(e.to_string()))
     }).map_err(Into::into)

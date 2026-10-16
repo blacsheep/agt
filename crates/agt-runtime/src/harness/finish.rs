@@ -75,7 +75,9 @@ impl HarnessRun<'_> {
                         params![
                             scope,
                             task.map(|t| t.through_seq).unwrap_or(0),
-                            crate::fingerprint(&serde_json::to_vec(&history)?)
+                            crate::fingerprint(&serde_json::to_vec(
+                                &crate::conversation_context::identity(history.iter())
+                            )?)
                         ],
                     )?;
                     Ok(())

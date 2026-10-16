@@ -69,7 +69,7 @@ Available only while an agent is working on a task.
 | `task_yield` | `not_before`, `reason` | Save a checkpoint and pause until a time |
 | `task_input` | `question`, `deadline` | Ask the requester a question and wait for `task_reply` or the deadline |
 
-Times are Unix milliseconds. While waiting, the agent's slot is free for other work. A deadline never cancels the awaited tasks and never invents a result.
+Times are local, such as `2026-11-01T09:00` in the workspace time zone (`scheduler.timezone`), or carry an offset such as `+08:00`; this applies to `task_defer` too. Unix milliseconds, which earlier versions required, still work. While waiting, the agent's slot is free for other work. A deadline never cancels the awaited tasks and never invents a result.
 
 ### Timers
 
