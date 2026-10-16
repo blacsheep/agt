@@ -17,5 +17,8 @@ install-path = ["$XDG_BIN_HOME/", "$XDG_DATA_HOME/../bin", "~/.local/bin"]
 hosting = "github"
 # Publish with the GH_RELEASES_TOKEN secret; the default token is refused for this repository
 github-releases-repo = "blacsheep/agt"
+# Build only the released binary; the workspace also has the desktop app,
+# which needs system WebView libraries the release runners lack
+precise-builds = true
 # Whether to install an updater program
 install-updater = false
