@@ -35,6 +35,12 @@ pub struct HarnessConfig {
     pub sandbox: Sandbox,
     #[serde(default = "default_timeout")]
     pub timeout_seconds: u64,
+    /// `acp` engine only: arguments that start the agent's ACP server.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+    /// `acp` engine only: the ACP auth method to use when the agent needs one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_method: Option<String>,
 }
 fn default_timeout() -> u64 {
     1800
@@ -42,7 +48,23 @@ fn default_timeout() -> u64 {
 impl HarnessConfig {
     pub fn validate(&self) -> Result<()> {
         if !crate::ENGINES.contains(&self.engine.as_str()) {
-            bail!("supported execution engines: codex, claude-code, deepseek-harness");
+            bail!("supported execution engines: codex, claude-code, deepseek-harness, acp");
+        }
+        // Only a custom ACP agent takes launch arguments, so a Codex harness can never be
+        // started any way other than `codex app-server`.
+        if self.engine == crate::ACP {
+            if self.args.len() > 32 || self.args.iter().any(|a| a.len() > 4096) {
+                bail!("args must be at most 32 arguments of up to 4096 bytes");
+            }
+            if self
+                .auth_method
+                .as_ref()
+                .is_some_and(|m| m.trim().is_empty())
+            {
+                bail!("auth_method must be non-empty or omitted");
+            }
+        } else if !self.args.is_empty() || self.auth_method.is_some() {
+            bail!("args and auth_method apply only to the acp engine");
         }
         if !self.executable.is_absolute() || !self.executable.is_file() {
             bail!("executable must be an existing absolute file path on the server");

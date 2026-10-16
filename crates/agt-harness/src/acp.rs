@@ -14,20 +14,37 @@ use serde_json::{Value, json};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-/// How to start an ACP server for one engine.
+/// How to start one engine's ACP server.
 pub(crate) struct Launch {
     /// Engine name for errors, such as "DeepSeek Harness".
-    pub name: &'static str,
-    pub args: &'static [&'static str],
+    pub name: String,
+    pub args: Vec<String>,
+    /// ACP auth method to select after `initialize`, when the agent needs one.
+    pub auth_method: Option<String>,
 }
 
-pub(crate) const DEEPSEEK_HARNESS: Launch = Launch {
-    name: "DeepSeek Harness",
-    args: &["--profile", "acp"],
-};
+impl Launch {
+    /// DeepSeek Harness has a fixed launch; a custom `acp` agent brings its own.
+    pub(crate) fn for_harness(harness: &HarnessConfig) -> Self {
+        if harness.engine == crate::DEEPSEEK_HARNESS {
+            Self {
+                name: "DeepSeek Harness".into(),
+                args: vec!["--profile".into(), "acp".into()],
+                auth_method: None,
+            }
+        } else {
+            Self {
+                name: "ACP agent".into(),
+                args: harness.args.clone(),
+                auth_method: harness.auth_method.clone(),
+            }
+        }
+    }
+}
 
 pub(crate) struct Acp {
-    launch: &'static Launch,
+    launch: Launch,
+    auth_methods: Vec<String>,
     process: Option<Lines>,
     next_id: u64,
 }
@@ -41,9 +58,10 @@ struct Pending {
 }
 
 impl Acp {
-    pub(crate) fn new(launch: &'static Launch) -> Self {
+    pub(crate) fn new(launch: Launch) -> Self {
         Self {
             launch,
+            auth_methods: Vec::new(),
             process: None,
             next_id: 0,
         }
@@ -95,6 +113,59 @@ impl Acp {
         }
     }
 
+    /// Start the server, `initialize`, and select the configured auth method.
+    /// Returns the agent's `initialize` result.
+    fn start(
+        &mut self,
+        harness: &HarnessConfig,
+        event: &mut dyn FnMut(Event<'_>) -> Result<()>,
+    ) -> Result<Value> {
+        let mut command = Command::new(&harness.executable);
+        command
+            .args(&self.launch.args)
+            .current_dir(&harness.working_directory);
+        self.process = Some(Lines::spawn(command, self.launch.name.clone())?);
+        let info = self.call(
+            "initialize",
+            json!({"protocolVersion":1,"clientInfo":{"name":"agt","version":env!("CARGO_PKG_VERSION")},
+                "clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false}}),
+            event,
+        )?;
+        self.auth_methods = info["authMethods"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|m| m["id"].as_str().map(str::to_owned))
+            .collect();
+        if let Some(method) = self.launch.auth_method.clone() {
+            if !self.auth_methods.contains(&method) {
+                bail!(
+                    "{} does not offer auth method {method:?}; available: {}",
+                    self.launch.name,
+                    self.auth_methods.join(", ")
+                );
+            }
+            self.call("authenticate", json!({"methodId": method}), event)?;
+        }
+        Ok(info)
+    }
+
+    /// An agent that is not signed in refuses new sessions; say how to fix it.
+    fn explain_auth(&self, error: anyhow::Error) -> anyhow::Error {
+        if !error.to_string().contains("Authentication required") {
+            return error;
+        }
+        anyhow::anyhow!(
+            "{} needs authentication: sign in with the agent's own tool, or set auth_method to one of: {}",
+            self.launch.name,
+            if self.auth_methods.is_empty() {
+                "(none offered)".to_owned()
+            } else {
+                self.auth_methods.join(", ")
+            }
+        )
+    }
+
     fn unsupported(&mut self, frame: &Value) -> Result<()> {
         self.process()
             .send(&json!({"jsonrpc":"2.0","id":frame["id"],
@@ -115,19 +186,9 @@ impl Acp {
             crate::tools::descriptors(execution.tools),
             Duration::from_secs(harness.timeout_seconds),
         )?;
-        let mut command = Command::new(&harness.executable);
-        command
-            .args(self.launch.args)
-            .current_dir(&harness.working_directory);
-        self.process = Some(Lines::spawn(command, self.launch.name)?);
         let mut turn = Turn::default();
         let result = (|| -> Result<String> {
-            self.call(
-                "initialize",
-                json!({"protocolVersion":1,"clientInfo":{"name":"agt","version":env!("CARGO_PKG_VERSION")},
-                    "clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false}}),
-                event,
-            )?;
+            self.start(harness, event)?;
             let cwd = harness.working_directory.to_string_lossy().to_string();
             let servers = json!([{"type":"http","name":"agt","url":bridge.url,
                 "headers":[{"name":"authorization","value":format!("Bearer {}", bridge.token)}]}]);
@@ -142,11 +203,13 @@ impl Acp {
                     id.to_owned()
                 }
                 None => {
-                    let response = self.call(
-                        "session/new",
-                        json!({"cwd":cwd,"mcpServers":servers}),
-                        event,
-                    )?;
+                    let response = self
+                        .call(
+                            "session/new",
+                            json!({"cwd":cwd,"mcpServers":servers}),
+                            event,
+                        )
+                        .map_err(|e| self.explain_auth(e))?;
                     turn.options = response["configOptions"].clone();
                     response["sessionId"]
                         .as_str()
@@ -552,27 +615,19 @@ fn kind(kind: Option<&str>) -> &'static str {
     }
 }
 
-pub(crate) fn test(harness: &HarnessConfig, launch: &'static Launch) -> Result<Value> {
+pub(crate) fn test(harness: &HarnessConfig) -> Result<Value> {
     harness.validate()?;
-    let mut engine = Acp::new(launch);
-    let mut command = Command::new(&harness.executable);
-    command
-        .args(launch.args)
-        .current_dir(&harness.working_directory);
-    engine.process = Some(Lines::spawn(command, launch.name)?);
-    let info = engine.call(
-        "initialize",
-        json!({"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false}}),
-        &mut |_| Ok(()),
-    )?;
+    let mut engine = Acp::new(Launch::for_harness(harness));
+    let info = engine.start(harness, &mut |_| Ok(()))?;
     if info["agentCapabilities"]["mcpCapabilities"]["http"] != true {
         bail!(
             "{} does not accept HTTP MCP servers, which agt needs for its tools",
-            launch.name
+            engine.launch.name
         );
     }
     Ok(
-        json!({"status":"connected","engine":harness.engine,"agent":info["agentInfo"],"inference":false}),
+        json!({"status":"connected","engine":harness.engine,"agent":info["agentInfo"],
+        "auth_methods":engine.auth_methods,"inference":false}),
     )
 }
 

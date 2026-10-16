@@ -57,6 +57,25 @@ agt harness resource test builder      # 启动 dsh 并检查 ACP 握手，不�
 | 消息、记忆和任务工具 | 响应策略 `all`（只支持 `mentioned` 和 `manual`） |
 | `/stop`、`/new`、`/status`，回复实时预览 | `/model`、`/compact`、`/rename`、`/skills`、`/mcp`、`/permissions` |
 
+## 其他 ACP Agent
+
+同一套 ACP 支持也适用于任何讲 Agent Client Protocol、并接受 HTTP MCP 服务的 Agent。执行引擎选 `acp`，`executable` 指向 Agent 的 ACP 命令，参数写在 `args` 里：
+
+```json
+{
+  "engine": "acp",
+  "executable": "/usr/local/bin/codex-acp",
+  "args": [],
+  "working_directory": "/home/me/projects/tools",
+  "sandbox": "workspace_write",
+  "timeout_seconds": 1800
+}
+```
+
+- Agent 需要登录时，`agt harness resource test` 会列出它的 ACP 认证方式，把其中一个填进 `auth_method`（例如 codex-acp 填 `"api-key"`，它会读取 `OPENAI_API_KEY`）。已经用 Agent 自己的工具登录过的不需要填。
+- `model` 和 `reasoning_effort` 会和 Agent 在这个会话里提供的选项做匹配。
+- `args` 和 `auth_method` 只对 `acp` 有效。`codex` 类型的 Harness 始终直接运行 `codex app-server`；要用 Codex 的全部功能请看 [Codex Agent](./codex.md)，只有想让 Codex 和其他 Agent 走同一套协议时才用 `codex-acp`。
+
 ## 注意事项
 
 - **开发者预览版。** DeepSeek Harness 说明了会有不兼容的变化；agt 只使用 ACP v1 的标准方法。

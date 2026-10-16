@@ -10,7 +10,7 @@ import json, sys, pathlib, urllib.request
 root = pathlib.Path.cwd()
 (root / "args.json").write_text(json.dumps(sys.argv[1:]))
 MODELS = [["deepseek-official", "deepseek-v4-flash"], ["deepseek-official", "deepseek-v4-pro"]]
-state = {"model": json.dumps(MODELS[0]), "effort": "high"}
+state = {"model": json.dumps(MODELS[0]), "effort": "high", "authenticated": "--require-auth" not in sys.argv}
 server = None
 
 
@@ -71,7 +71,12 @@ while True:
               "agentInfo": {"name": "deepseek-harness-acp", "version": "0.0.1"},
               "agentCapabilities": {"mcpCapabilities": {"http": True},
                                     "sessionCapabilities": {"close": {}, "list": {}, "resume": {}}},
-              "authMethods": []}})
+              "authMethods": [{"id": "api-key", "name": "API Key"}] if "--require-auth" in sys.argv else []}})
+    elif method == "authenticate":
+        state["authenticated"] = params["methodId"] == "api-key"
+        emit({"jsonrpc": "2.0", "id": rid, "result": {}})
+    elif method == "session/new" and not state["authenticated"]:
+        emit({"jsonrpc": "2.0", "id": rid, "error": {"code": -32000, "message": "Authentication required"}})
     elif method == "session/new":
         tools = mount(params["mcpServers"])
         emit({"jsonrpc": "2.0", "id": rid, "result": {"sessionId": "acp-session-1", "configOptions": options()}})

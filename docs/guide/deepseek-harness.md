@@ -57,6 +57,25 @@ Then create the agent on it: `agt agent create builder --harness builder --promp
 | Messaging, memory and task tools | Response policy `all` (only `mentioned` and `manual`) |
 | `/stop`, `/new`, `/status`, live preview of the reply | `/model`, `/compact`, `/rename`, `/skills`, `/mcp`, `/permissions` |
 
+## Other ACP agents
+
+The same ACP support works for any agent that speaks the Agent Client Protocol and accepts HTTP MCP servers. Use the engine `acp`, point `executable` at the agent's ACP command, and list its arguments in `args`:
+
+```json
+{
+  "engine": "acp",
+  "executable": "/usr/local/bin/codex-acp",
+  "args": [],
+  "working_directory": "/home/me/projects/tools",
+  "sandbox": "workspace_write",
+  "timeout_seconds": 1800
+}
+```
+
+- If the agent requires sign-in, `agt harness resource test` lists its ACP auth methods; set one in `auth_method` (for example `"api-key"` for codex-acp, which then reads `OPENAI_API_KEY`). Agents already signed in through their own tool need none.
+- `model` and `reasoning_effort` are matched against the options the agent offers for the session.
+- `args` and `auth_method` are accepted only for `acp`. A `codex` harness always runs `codex app-server` directly; use [Codex agents](./codex.md) for the full Codex feature set, and `codex-acp` only if you want Codex behind the same protocol as your other agents.
+
 ## Things to know
 
 - **Developer preview.** DeepSeek Harness says breaking changes are expected; agt uses only the standard ACP v1 methods.

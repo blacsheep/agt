@@ -35,6 +35,8 @@ fn fixture() -> (tempfile::TempDir, HarnessConfig) {
         reasoning_effort: None,
         sandbox: Sandbox::ReadOnly,
         timeout_seconds: 10,
+        args: Vec::new(),
+        auth_method: None,
     };
     (dir, config)
 }

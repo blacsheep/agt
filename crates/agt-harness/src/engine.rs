@@ -10,7 +10,9 @@ pub const CODEX: &str = "codex";
 pub const CLAUDE_CODE: &str = "claude-code";
 /// DeepSeek Harness (`dsh`), driven over the Agent Client Protocol.
 pub const DEEPSEEK_HARNESS: &str = "deepseek-harness";
-pub const ENGINES: [&str; 3] = [CODEX, CLAUDE_CODE, DEEPSEEK_HARNESS];
+/// Any other Agent Client Protocol agent, started with the harness's own `args`.
+pub const ACP: &str = "acp";
+pub const ENGINES: [&str; 4] = [CODEX, CLAUDE_CODE, DEEPSEEK_HARNESS, ACP];
 
 /// A connected engine that runs one turn with agt's tools and approvals.
 pub trait Engine {
@@ -85,9 +87,9 @@ pub fn connect(
             harness.validate()?;
             Box::new(ClaudeCode::new())
         }
-        DEEPSEEK_HARNESS => {
+        DEEPSEEK_HARNESS | ACP => {
             harness.validate()?;
-            Box::new(Acp::new(&acp::DEEPSEEK_HARNESS))
+            Box::new(Acp::new(acp::Launch::for_harness(harness)))
         }
         other => bail!("unsupported execution engine: {other}"),
     })
@@ -98,7 +100,7 @@ pub fn test(harness: &HarnessConfig) -> Result<Value> {
     match harness.engine.as_str() {
         CODEX => Codex::test(harness),
         CLAUDE_CODE => claude::test(harness),
-        DEEPSEEK_HARNESS => acp::test(harness, &acp::DEEPSEEK_HARNESS),
+        DEEPSEEK_HARNESS | ACP => acp::test(harness),
         other => bail!("unsupported execution engine: {other}"),
     }
 }
@@ -107,7 +109,7 @@ pub fn test(harness: &HarnessConfig) -> Result<Value> {
 pub fn capabilities() -> Value {
     let mut codex = Codex::capabilities();
     let engines = json!({CODEX: codex.clone(), CLAUDE_CODE: claude::capabilities(),
-        DEEPSEEK_HARNESS: acp::capabilities(DEEPSEEK_HARNESS)});
+        DEEPSEEK_HARNESS: acp::capabilities(DEEPSEEK_HARNESS), ACP: acp::capabilities(ACP)});
     codex["engines"] = engines;
     codex
 }
@@ -117,8 +119,8 @@ pub fn models(harness: &HarnessConfig) -> Result<Value> {
         CODEX => Codex::models(harness),
         CLAUDE_CODE => Ok(claude::models()),
         // Models come from the engine's own provider setup, offered per session.
-        DEEPSEEK_HARNESS => {
-            bail!("choose the model in DeepSeek Harness, or name it in the harness")
+        DEEPSEEK_HARNESS | ACP => {
+            bail!("models are offered per session by the agent; name one in the harness")
         }
         other => bail!("unsupported execution engine: {other}"),
     }
@@ -138,7 +140,7 @@ pub fn inspect(harness: &HarnessConfig, operation: &str) -> Result<Value> {
 pub fn rename(harness: &HarnessConfig, thread: &str, name: &str) -> Result<()> {
     match harness.engine.as_str() {
         CODEX => Codex::rename(harness, thread, name),
-        CLAUDE_CODE | DEEPSEEK_HARNESS => Ok(()),
+        CLAUDE_CODE | DEEPSEEK_HARNESS | ACP => Ok(()),
         other => bail!("unsupported execution engine: {other}"),
     }
 }
