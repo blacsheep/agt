@@ -145,6 +145,11 @@ pub(crate) fn schedule(command: ScheduleCommand, home: &Path, output: OutputMode
             let concurrency = concurrency
                 .or(agt_config::RuntimeConfig::load(home)?.scheduler.concurrency)
                 .unwrap_or(usize::MAX);
+            // Hosts start here (`agt web` runs it too), so an upgrade reaches unedited
+            // built-in prompts without touching ones people changed.
+            if let Err(error) = agt_prompt::PromptStore::new(home).upgrade_builtin_prompts() {
+                eprintln!("warning: built-in prompts were not upgraded: {error}");
+            }
             let cancellation = crate::signals::cancellation();
             let mut scheduler = loop {
                 if cancellation.is_canceled() {

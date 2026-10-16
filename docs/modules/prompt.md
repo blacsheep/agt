@@ -22,6 +22,8 @@ agt ships two prompts:
 
 `agt init` creates both, and never overwrites a prompt that already exists.
 
+When a new version of agt improves `default/lead`, your home gets it the next time the scheduler starts (`agt web` or `agt schedule run`), as long as you never edited that prompt. An edited lead prompt is left alone; to take the new version, copy `crates/agt-prompt/src/lead.md` from the release over `prompts/default/lead/PROMPT.md`.
+
 ## How to use it
 
 **Web console:** **Resources** → **New resource** → Prompt, or **Write a new one** (新写一份) in the agent form. Prompts show a 2,000-character preview that you can expand.
