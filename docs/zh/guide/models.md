@@ -40,7 +40,14 @@ agt model info fast
 
 最重要的几个选项：
 
-- `--api-format`：`chat-completions`（默认）或 `responses`。必须与 Provider 对该模型支持的一致；agt 不会自动切换。
+- `--api-format`：Provider 对这个模型使用的接口协议。agt 不会自动切换。
+
+  | 格式 | 适用于 | Provider 的 Base URL |
+  | --- | --- | --- |
+  | `chat-completions`（默认） | OpenAI 及大多数兼容服务 | 例如 `https://api.openai.com/v1` |
+  | `responses` | OpenAI Responses API | `https://api.openai.com/v1` |
+  | `anthropic-messages` | Claude（Anthropic Messages API） | `https://api.anthropic.com/v1` |
+  | `gemini` | Google Gemini API | `https://generativelanguage.googleapis.com/v1beta` |
 - `--tool-call true`：使用任何工具的 Agent 都需要。
 - `--reasoning-effort`：推理模型的思考档位。
 - `--context-window`：模型接受的输入 token 数（默认 272000）。请按 Provider 文档设置；agt 据此判断何时摘要旧的上下文。

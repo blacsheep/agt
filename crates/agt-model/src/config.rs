@@ -19,6 +19,10 @@ pub enum ModelApiFormat {
     #[default]
     ChatCompletions,
     Responses,
+    /// Anthropic Messages (`POST {base}/messages`).
+    AnthropicMessages,
+    /// Google Gemini `generateContent` (`POST {base}/models/{model}:streamGenerateContent`).
+    Gemini,
 }
 
 impl ModelApiFormat {
@@ -26,6 +30,8 @@ impl ModelApiFormat {
         match self {
             Self::ChatCompletions => "chat-completions",
             Self::Responses => "responses",
+            Self::AnthropicMessages => "anthropic-messages",
+            Self::Gemini => "gemini",
         }
     }
 }
@@ -43,8 +49,12 @@ impl std::str::FromStr for ModelApiFormat {
         match value {
             "chat-completions" | "chat" => Ok(Self::ChatCompletions),
             "responses" | "response" => Ok(Self::Responses),
+            "anthropic-messages" | "anthropic" => Ok(Self::AnthropicMessages),
+            "gemini" => Ok(Self::Gemini),
             _ => Err(ModelError::InvalidConfig {
-                message: format!("api_format 无效：{value}，可选值为 chat-completions、responses"),
+                message: format!(
+                    "api_format 无效：{value}，可选值为 chat-completions、responses、anthropic-messages、gemini"
+                ),
             }),
         }
     }

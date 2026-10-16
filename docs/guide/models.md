@@ -40,7 +40,14 @@ agt model info fast
 
 The options that matter most:
 
-- `--api-format`: `chat-completions` (default) or `responses`. It must match what the provider supports for this model; agt does not switch automatically.
+- `--api-format`: the protocol the provider speaks for this model. agt does not switch automatically.
+
+  | Format | For | Provider base URL |
+  | --- | --- | --- |
+  | `chat-completions` (default) | OpenAI and most compatible services | e.g. `https://api.openai.com/v1` |
+  | `responses` | OpenAI Responses API | `https://api.openai.com/v1` |
+  | `anthropic-messages` | Claude (Anthropic Messages API) | `https://api.anthropic.com/v1` |
+  | `gemini` | Google Gemini API | `https://generativelanguage.googleapis.com/v1beta` |
 - `--tool-call true`: required for agents that use any tool.
 - `--reasoning-effort`: the thinking level of reasoning models.
 - `--context-window`: the input tokens the model accepts (default 272000). Set it from your provider's documentation; agt uses it to decide when to summarize old context.

@@ -11,7 +11,7 @@
 
 ## What it does
 
-A provider tells agt where to send model requests. It works with OpenAI, API gateways, and local servers such as Ollama or vLLM that implement the OpenAI API. [Models](./model.md) refer to a provider; one provider can serve many models.
+A provider tells agt where to send model requests. It works with OpenAI, Anthropic, Google Gemini, API gateways, and local servers such as Ollama or vLLM that implement the OpenAI API. [Models](./model.md) refer to a provider, and each chooses the API format that provider speaks; one provider can serve many models.
 
 ## How to use it
 
@@ -68,7 +68,7 @@ The key is read once, when the command runs, and stored in `provider.yaml`. Chan
 | Command | Meaning |
 | --- | --- |
 | `test <ref>` | Validate the stored configuration. Does not contact the server. |
-| `list-models <ref>` | Call the provider's `/models` endpoint with the stored key. Does not run inference. |
+| `list-models <ref>` | Call the provider's `/models` endpoint with the stored key. Does not run inference. Tries OpenAI-compatible, then Anthropic, then Gemini credentials. |
 | `list`, `info`, `delete`, `category` | See [Resources](./resources.md#shared-cli-commands) |
 
 ### File: `provider.yaml`

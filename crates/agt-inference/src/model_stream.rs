@@ -1,16 +1,28 @@
 //! Protocol assembly only. Partial tools never reach the execution loop.
 use crate::{ModelEvent, Result, RuntimeError};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::cell::Cell;
 use std::io::{BufRead, BufReader, Read};
 use std::time::{Duration, Instant};
 
-/// `stall` bounds the silence between output deltas. Reasoning may be silent for
-/// minutes, but once text or a tool call is streaming, heartbeats or empty events
-/// alone must not keep a dead stream open.
+/// Chat Completions (`responses == false`) or Responses stream.
+#[cfg(test)]
 pub fn read(
     input: impl Read,
     responses: bool,
+    stall: Duration,
+    progress: &mut dyn FnMut(ModelEvent<'_>) -> Result<()>,
+) -> Result<Value> {
+    read_with(input, crate::protocol::decoder(responses), stall, progress)
+}
+
+/// Read server-sent events and let the protocol's decoder assemble the message.
+/// `stall` bounds the silence between output deltas. Reasoning may be silent for
+/// minutes, but once text or a tool call is streaming, heartbeats or empty events
+/// alone must not keep a dead stream open.
+pub(crate) fn read_with(
+    input: impl Read,
+    mut decoder: Box<dyn crate::protocol::StreamDecoder>,
     stall: Duration,
     progress: &mut dyn FnMut(ModelEvent<'_>) -> Result<()>,
 ) -> Result<Value> {
@@ -28,9 +40,6 @@ pub fn read(
     let mut line = String::new();
     let mut data = String::new();
     let mut total = 0;
-    let mut message = json!({"role":"assistant","content":"","tool_calls":[]});
-    let mut finish = None;
-    let mut usage = Value::Null;
     loop {
         line.clear();
         let n = reader.read_line(&mut line).map_err(|e| {
@@ -41,9 +50,14 @@ pub fn read(
             return Err(RuntimeError::Model("response exceeds 4 MiB".into()));
         }
         if n == 0 {
-            return Err(RuntimeError::ModelTransient(
-                "incomplete event stream".into(),
-            ));
+            // A last event may end at EOF without its blank line.
+            if !data.is_empty() {
+                let event = std::mem::take(&mut data);
+                if let Some(message) = handle(&event, decoder.as_mut(), progress)? {
+                    return Ok(message);
+                }
+            }
+            return decoder.finish(false);
         }
         if last_output.get().is_some_and(|at| at.elapsed() > stall) {
             return Err(RuntimeError::ModelTransient(
@@ -65,129 +79,37 @@ pub fn read(
         }
         let event = std::mem::take(&mut data);
         if event == "[DONE]" {
-            if !responses && matches!(finish.as_deref(), Some("stop" | "tool_calls")) {
-                return Ok(super::model::attach_usage(message, &usage, false));
-            }
-            return Err(RuntimeError::ModelTransient(
-                "incomplete event stream".into(),
-            ));
+            return decoder.finish(true);
         }
-        let value: Value = serde_json::from_str(&event).map_err(|e| {
-            RuntimeError::ModelTransient(crate::Reason::because("invalid JSON response", e))
-        })?;
-        if super::model::context_rejected(&value) {
-            return Err(RuntimeError::ContextWindowRejected);
-        }
-        if !value["error"].is_null() || value["type"] == "error" {
-            return Err(RuntimeError::ModelTransient(
-                "model returned an error".into(),
-            ));
-        }
-        if responses {
-            match value["type"].as_str() {
-                Some("response.completed") => {
-                    return super::model::responses_message(&value["response"])
-                        .map(|m| super::model::attach_usage(m, &value["response"]["usage"], true));
-                }
-                Some("response.failed") => {
-                    return Err(RuntimeError::ModelTransient(
-                        "model returned an error".into(),
-                    ));
-                }
-                Some("response.incomplete") => {
-                    return Err(RuntimeError::Model(
-                        "response was incomplete, refused or unsupported".into(),
-                    ));
-                }
-                Some("response.output_text.delta") => {
-                    if let Some(text) = value["delta"].as_str() {
-                        progress(ModelEvent::Text(text))?;
-                    }
-                }
-                Some("response.reasoning_summary_text.delta" | "response.reasoning_text.delta") => {
-                    progress(ModelEvent::Reasoning)?
-                }
-                Some("response.output_item.added") if value["item"]["type"] == "reasoning" => {
-                    progress(ModelEvent::Reasoning)?
-                }
-                Some("response.function_call_arguments.delta") => progress(ModelEvent::Tool)?,
-                _ => {}
-            }
-        } else {
-            if !value["usage"].is_null() {
-                usage = value["usage"].clone();
-            }
-            for choice in value["choices"].as_array().into_iter().flatten() {
-                if choice["index"].as_u64().unwrap_or(0) != 0 {
-                    continue;
-                }
-                let delta = &choice["delta"];
-                if (!delta["role"].is_null() && delta["role"] != "assistant")
-                    || (!delta["content"].is_null() && !delta["content"].is_string())
-                    || (!delta["tool_calls"].is_null() && !delta["tool_calls"].is_array())
-                {
-                    return Err(RuntimeError::Model(
-                        "invalid streamed assistant message".into(),
-                    ));
-                }
-                if !delta["refusal"].is_null() {
-                    return Err(RuntimeError::Model(
-                        "response was incomplete, refused or unsupported".into(),
-                    ));
-                }
-                if let Some(text) = delta["content"].as_str() {
-                    append(&mut message["content"], text);
-                    progress(ModelEvent::Text(text))?;
-                }
-                // Never copy provider-private reasoning into progress or audit storage.
-                if delta["reasoning_content"].is_string() || delta["reasoning"].is_string() {
-                    progress(ModelEvent::Reasoning)?;
-                }
-                for call in delta["tool_calls"].as_array().into_iter().flatten() {
-                    if !call["type"].is_null() && call["type"] != "function" {
-                        return Err(RuntimeError::Model("unsupported streamed tool type".into()));
-                    }
-                    let index = call["index"]
-                        .as_u64()
-                        .filter(|i| *i < 32)
-                        .ok_or(RuntimeError::Model("invalid streamed tool index".into()))?
-                        as usize;
-                    let calls = message["tool_calls"].as_array_mut().expect("array");
-                    while calls.len() <= index {
-                        calls.push(json!({"type":"function","id":"","function":{"name":"","arguments":""}}));
-                    }
-                    if let Some(text) = call["id"].as_str() {
-                        append(&mut calls[index]["id"], text);
-                    }
-                    for field in ["name", "arguments"] {
-                        if let Some(text) = call["function"][field].as_str() {
-                            append(&mut calls[index]["function"][field], text);
-                        }
-                    }
-                    progress(ModelEvent::Tool)?;
-                }
-                if let Some(reason) = choice["finish_reason"].as_str() {
-                    if !matches!(reason, "stop" | "tool_calls") {
-                        return Err(RuntimeError::Model(
-                            "response was incomplete, refused or unsupported".into(),
-                        ));
-                    }
-                    finish = Some(reason.to_owned());
-                }
-            }
+        if let Some(message) = handle(&event, decoder.as_mut(), progress)? {
+            return Ok(message);
         }
     }
 }
 
-fn append(value: &mut Value, text: &str) {
-    if let Value::String(value) = value {
-        value.push_str(text);
+fn handle(
+    event: &str,
+    decoder: &mut dyn crate::protocol::StreamDecoder,
+    progress: &mut dyn FnMut(ModelEvent<'_>) -> Result<()>,
+) -> Result<Option<Value>> {
+    let value: Value = serde_json::from_str(event).map_err(|e| {
+        RuntimeError::ModelTransient(crate::Reason::because("invalid JSON response", e))
+    })?;
+    if decoder.context_rejected(&value) {
+        return Err(RuntimeError::ContextWindowRejected);
     }
+    if !value["error"].is_null() || value["type"] == "error" {
+        return Err(RuntimeError::ModelTransient(
+            "model returned an error".into(),
+        ));
+    }
+    decoder.event(&value, progress)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     const SECS_60: Duration = Duration::from_secs(60);
     fn frame(v: Value) -> String {
         format!("data: {v}\r\n\r\n")

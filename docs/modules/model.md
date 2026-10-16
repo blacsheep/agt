@@ -39,7 +39,7 @@ agt model update fast --clear-reasoning-effort
 | Parameter | Meaning |
 | --- | --- |
 | `--model` | The model ID at the provider |
-| `--api-format` | `chat-completions` or `responses`; must match what the provider supports |
+| `--api-format` | `chat-completions`, `responses`, `anthropic-messages` or `gemini`; must match what the provider supports |
 | `--tool-call true` | Required for agents that use any tool |
 | `--reasoning-effort` | Thinking level for reasoning models |
 | `--context-window` | Input tokens the model accepts; set it from the provider's documentation |
@@ -52,7 +52,7 @@ agt model update fast --clear-reasoning-effort
 | --- | --- | --- | --- |
 | `--provider <ref>` | yes | | The provider |
 | `--model <id>` | yes | | Model ID at the provider |
-| `--api-format <f>` | no | `chat-completions` | `chat-completions` or `responses`. agt never switches automatically. |
+| `--api-format <f>` | no | `chat-completions` | `chat-completions`, `responses`, `anthropic-messages` or `gemini`. agt never switches automatically. |
 | `--temperature <t>` | no | `0.7` | 0 to 2. Not sent when a reasoning effort is set. |
 | `--max-tokens <n>` | no | not sent | Output token limit |
 | `--timeout <s>` | no | `60` | Seconds to wait for the response to start, for each read, and between output chunks once the reply is streaming; a stalled reply is retried |
@@ -98,7 +98,7 @@ On create: `provider` (required), `model` (required), and optional `params` with
 | `temperature` | 0 to 2 |
 | `max_tokens` | Positive integer |
 | `timeout` | Seconds |
-| `api_format` | `chat-completions` or `responses` |
+| `api_format` | `chat-completions`, `responses`, `anthropic-messages` or `gemini` |
 | `reasoning_effort` | As for `--reasoning-effort` |
 | `tool_call` | Boolean |
 | `context_window` | 4096 to 2000000 |
@@ -113,6 +113,9 @@ On create: `provider` (required), `model` (required), and optional `params` with
 | Retries | Connection errors, HTTP errors, invalid JSON and empty replies are retried up to 10 attempts in total, waiting from 250 ms up to 4 s. Configuration errors and explicit refusals are not retried. |
 | Compaction | At 90% of the context window, older history is summarized with the same model. |
 | Input | Text only; images are not supported. |
+| Anthropic | Sends `x-api-key` and `anthropic-version: 2023-06-01`. Marks the system prompt, tools and newest message for prompt caching. Without `max_tokens`, asks for up to 16384 output tokens. `reasoning_effort` becomes an extended-thinking budget (low 2048, medium 8192, high 16384, xhigh 32768, max 64000, or a number); thinking is turned off for the one call where a tool is required. |
+| Gemini | Sends `x-goog-api-key`. Tool schemas go as JSON Schema (`parametersJsonSchema`). `reasoning_effort` becomes a thinking budget (none 0, low 2048, medium 8192, high 16384, max lets the model decide, or a number). |
+| Thinking | Provider reasoning is never shown or stored in records. Thinking blocks and signatures that the provider needs back are kept with the run so the next step can send them; a run suspended on a task saves them in its local checkpoint. |
 
 ## Related modules
 
