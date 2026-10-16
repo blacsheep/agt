@@ -77,7 +77,7 @@ Timers come with `task_collaboration`. See [Timers](../guide/timers.md) for how 
 
 | Tool | Parameters | Meaning |
 | --- | --- | --- |
-| `timer_create` | `text`, one of `after_seconds` / `at` / `cron`, `mentions?`, `name?`, `timezone?`, `conversation?` | Post `text` to the conversation later, once or on a cron schedule. Agents can only use their current conversation; people calling from the CLI must name it. Returns the resolved `next_at` in local time. |
+| `timer_create` | `text`, one of `after_seconds` / `at` / `cron`, `mentions?`, `name?`, `timezone?`, `discussion_seconds?`, `conversation?` | Post `text` to the conversation later, once or on a cron schedule. Agents can only use their current conversation; people calling from the CLI must name it. Returns the resolved `next_at` in local time. |
 | `timer_list` | `conversation?`, `include_finished?` | Active timers in your conversations; `include_finished` adds fired and canceled ones |
 | `timer_cancel` | `timer_id`, `reason?` | Agents cancel their own timers; people cancel any timer in their conversation |
 

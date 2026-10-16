@@ -343,3 +343,39 @@ fn invalid_timers_are_refused_and_timers_end_with_their_conversation() {
         .unwrap();
     assert_eq!(ended, "canceled");
 }
+
+#[test]
+fn a_timer_can_give_its_discussion_a_longer_life() {
+    let (home, _user, chat) = fixture();
+    let user = control(home.path(), "user");
+    assert!(
+        user.call(
+            "timer_create",
+            json!({"conversation":chat,"text":"x","after_seconds":60,"discussion_seconds":30}),
+        )
+        .is_err()
+    );
+    let id = user
+        .call(
+            "timer_create",
+            json!({"conversation":chat,"text":"monthly data","after_seconds":60,"discussion_seconds":7200}),
+        )
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    make_due(home.path(), &id, now_ms() - 1_000);
+    let store = ScheduleStore::open(home.path()).unwrap();
+    crate::timers::fire_due(home.path(), &store).unwrap();
+    let message = messages(home.path(), &chat)
+        .into_iter()
+        .find(|m| m.metadata["timer"]["id"] == id.as_str())
+        .unwrap();
+    let discussion = store
+        .human_discussion(message.id.as_str())
+        .unwrap()
+        .unwrap();
+    let expires = store.discussion(&discussion).unwrap().unwrap().expires_at;
+    let left = expires - now_ms();
+    assert!((7_100_000..=7_200_000).contains(&left), "{left}");
+}
