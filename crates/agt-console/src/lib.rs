@@ -229,6 +229,93 @@ async fn listen(
     Ok(())
 }
 
+/// The console without an HTTP listener, for a host that calls it in-process,
+/// such as the desktop app. Requests reach the same routes as `agt web`.
+pub struct Console {
+    app: Arc<http::App>,
+    cli: Arc<Cli>,
+    stopping: watch::Sender<bool>,
+}
+
+/// How an embedding host starts the console.
+pub struct ConsoleOptions {
+    pub home: PathBuf,
+    /// Your identity in conversations; it owns the workspace.
+    pub principal: String,
+    /// The program that runs agt CLI commands, and arguments it needs first.
+    pub binary: PathBuf,
+    pub binary_args: Vec<String>,
+}
+
+pub use axum::body::Body;
+pub use axum::response::Response;
+
+impl Console {
+    /// Prepare the operator, the workspace owner and the scheduler, like `agt web`.
+    pub async fn start(options: ConsoleOptions) -> Result<Self> {
+        if options.principal.trim().is_empty() || js::utf16_len(&options.principal) > 256 {
+            bail!("标识符必须是非空字符串。");
+        }
+        let home = std::path::absolute(&options.home).context("无法确定 agt home 路径")?;
+        let cli = Cli::with_prefix(options.binary, options.binary_args, home);
+        let home = prepare(&cli, &options.principal).await?;
+        let (stopping, shutdown) = watch::channel(false);
+        let app = Arc::new(http::App {
+            cli: cli.clone(),
+            principal: options.principal,
+            home: home.display().to_string(),
+            token: format!(
+                "{}{}",
+                uuid::Uuid::new_v4().simple(),
+                uuid::Uuid::new_v4().simple()
+            ),
+            port: 0,
+            streams: AtomicUsize::new(0),
+            changing: Default::default(),
+            shutdown,
+        });
+        Ok(Self { app, cli, stopping })
+    }
+
+    /// Handle one request, as if the page had sent it to `agt web`. `path`
+    /// includes any query string. Streaming routes return a streaming body.
+    pub async fn request(&self, method: &str, path: &str, body: Vec<u8>) -> Response {
+        let request = axum::http::Request::builder()
+            .method(method)
+            .uri(path)
+            .header("host", format!("127.0.0.1:{}", self.app.port))
+            .header("x-agt-token", &self.app.token)
+            .header("content-type", "application/json")
+            .body(Body::from(body));
+        match request {
+            Ok(request) => http::handle(axum::extract::State(self.app.clone()), request).await,
+            Err(_) => axum::http::Response::builder()
+                .status(400)
+                .body(Body::empty())
+                .expect("valid response"),
+        }
+    }
+
+    pub fn home(&self) -> &str {
+        &self.app.home
+    }
+
+    pub fn principal(&self) -> &str {
+        &self.app.principal
+    }
+
+    /// End event streams and stop the scheduler this console started.
+    pub async fn close(&self) {
+        let _ = self.stopping.send(true);
+        self.cli.close().await;
+    }
+}
+
+/// A page file and its media type, for a host that serves the page itself.
+pub fn asset(path: &str) -> Option<(&'static [u8], &'static str)> {
+    assets::get(path)
+}
+
 async fn stop_signal() {
     #[cfg(unix)]
     {

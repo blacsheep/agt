@@ -28,14 +28,21 @@ const COMPACT_TIMEOUT: Duration = Duration::from_secs(86_400);
 
 pub(crate) struct Cli {
     binary: PathBuf,
+    /// Arguments before agt's own, for a host binary that also acts as the CLI.
+    prefix: Vec<String>,
     home: PathBuf,
     scheduler: Mutex<Option<Child>>,
 }
 
 impl Cli {
     pub fn new(binary: PathBuf, home: PathBuf) -> Arc<Self> {
+        Self::with_prefix(binary, Vec::new(), home)
+    }
+
+    pub fn with_prefix(binary: PathBuf, prefix: Vec<String>, home: PathBuf) -> Arc<Self> {
         Arc::new(Self {
             binary,
+            prefix,
             home,
             scheduler: Mutex::new(None),
         })
@@ -43,7 +50,11 @@ impl Cli {
 
     fn command(&self) -> Command {
         let mut command = Command::new(&self.binary);
-        command.arg("--home").arg(&self.home).stdin(Stdio::null());
+        command
+            .args(&self.prefix)
+            .arg("--home")
+            .arg(&self.home)
+            .stdin(Stdio::null());
         #[cfg(windows)]
         command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         command
