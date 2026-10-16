@@ -16,4 +16,4 @@ pub use resource_ref::{
     PACKAGE_COMPONENT_MAX_LEN, PackageName, PackageRef, PackageRefComponent, PackageRefParseError,
     PackageScope, ResourceRef,
 };
-pub use tool::{ToolId, ToolSafetyAnnotations, ToolTarget};
+pub use tool::{ToolId, ToolTarget};

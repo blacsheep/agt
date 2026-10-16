@@ -6,39 +6,6 @@ use crate::{McpId, PackageName};
 
 const TOOL_TARGET_ENCODING_VERSION: u8 = 1;
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct ToolSafetyAnnotations {
-    pub read_only_hint: Option<bool>,
-    pub destructive_hint: Option<bool>,
-    pub open_world_hint: Option<bool>,
-}
-
-impl ToolSafetyAnnotations {
-    pub const fn explicit(
-        read_only_hint: bool,
-        destructive_hint: bool,
-        open_world_hint: bool,
-    ) -> Self {
-        Self {
-            read_only_hint: Some(read_only_hint),
-            destructive_hint: Some(destructive_hint),
-            open_world_hint: Some(open_world_hint),
-        }
-    }
-
-    pub const fn is_complete(self) -> bool {
-        self.read_only_hint.is_some()
-            && self.destructive_hint.is_some()
-            && self.open_world_hint.is_some()
-    }
-
-    pub const fn is_known_safe_read(self) -> bool {
-        matches!(self.read_only_hint, Some(true))
-            && !matches!(self.destructive_hint, Some(true))
-            && !matches!(self.open_world_hint, Some(true))
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
 pub struct ToolId(String);
@@ -191,13 +158,5 @@ mod tests {
 
         assert_ne!(left.id(), right.id());
         assert_ne!(left.canonical_bytes(), right.canonical_bytes());
-    }
-
-    #[test]
-    fn missing_annotations_are_not_known_safe() {
-        assert!(!ToolSafetyAnnotations::default().is_known_safe_read());
-        assert!(ToolSafetyAnnotations::explicit(true, false, false).is_known_safe_read());
-        assert!(!ToolSafetyAnnotations::explicit(true, true, false).is_known_safe_read());
-        assert!(!ToolSafetyAnnotations::explicit(true, false, true).is_known_safe_read());
     }
 }
