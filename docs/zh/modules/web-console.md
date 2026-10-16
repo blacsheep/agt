@@ -123,6 +123,7 @@ Agent 之间消息和任务委派的关系图，支持筛选。点击节点或�
 | `/new`、`/clear` | 重置 Agent 在这里的工作上下文；保留聊天记录 |
 | `/stop` | 结束本轮，停止在这里工作的 Agent |
 | `/status` | 每个 Agent 的状态、执行方式和最近执行 |
+| `/timers` | 本会话的定时任务，可以取消 |
 | `/model` | Codex Agent：选择本会话的模型和推理档位 |
 | `/compact` | Codex Agent：压缩上下文 |
 | `/rename` | Codex Agent：为会话命名 |

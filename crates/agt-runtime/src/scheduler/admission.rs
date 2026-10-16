@@ -45,6 +45,7 @@ pub(super) fn prepare(
     let trigger = messaging.im.get_message(&MessageId::new(&task.message))?;
     let policy = BindingStore::open(home)?.policy(&trigger.conversation_id, &binding)?;
     let engine = EngineKind::resolve(home, &binding.agent)?;
+    let zone = crate::clock::zone(&agt_config::RuntimeConfig::load(home)?);
     let mut eligible = false;
     let mut batch = Vec::new();
     let mut batch_bytes = 0;
@@ -54,7 +55,7 @@ pub(super) fn prepare(
         let effective_policy = backend::response_policy(engine, policy, peer);
         eligible |= messaging.may_respond(&message, effective_policy)?;
         if message.deleted_at.is_none() {
-            let item = json!({"seq":message.seq,"message_id":message.id,"sender":message.sender_id,"body":message.body});
+            let item = json!({"seq":message.seq,"message_id":message.id,"sender":message.sender_id,"body":message.body,"sent_at":crate::clock::local(message.created_at, &zone)});
             batch_bytes += item.to_string().len();
             if batch_bytes > 128 * 1024 {
                 bail!("merged message batch exceeds 128 KiB");

@@ -71,6 +71,16 @@ agt tool call --principal lead task_get --args '{"task_id":"<id>"}'
 
 时间使用 Unix 毫秒。等待期间 Agent 的执行槽会被释放给其他工作。截止时间到达不会取消被等待的任务，也不会编造结果。
 
+### 定时任务
+
+定时任务随 `task_collaboration` 一起提供。行为说明见[定时任务](../guide/timers.md)。
+
+| 工具 | 参数 | 含义 |
+| --- | --- | --- |
+| `timer_create` | `text`，`after_seconds` / `at` / `cron` 三选一，`mentions?`、`name?`、`timezone?`、`conversation?` | 稍后把 `text` 发到会话里，只发一次或按 cron 周期发送。Agent 只能在当前会话设置；人从 CLI 调用时必须指定会话。返回换算后的本地时间 `next_at`。 |
+| `timer_list` | `conversation?`, `include_finished?` | 你所在会话中等待触发的定时任务；`include_finished` 同时列出已触发和已取消的 |
+| `timer_cancel` | `timer_id`, `reason?` | Agent 只能取消自己设置的；人可以取消所在会话里的任何定时任务 |
+
 ### `execution_policy`
 
 ```json

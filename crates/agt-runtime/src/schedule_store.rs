@@ -181,7 +181,7 @@ impl ScheduleStore {
     }
 
     pub(crate) fn authorize_human(
-        &mut self,
+        &self,
         message: &str,
         conversation: &str,
         seq: i64,

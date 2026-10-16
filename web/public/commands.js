@@ -11,6 +11,7 @@ globalThis.AgtCommands = Object.freeze({
     { name: 'skills', requires: 'codex', label: $t('查看 Skills'), description: $t('读取此 Harness 项目的 Codex Skills。') },
     { name: 'mcp', requires: 'codex', label: $t('查看 MCP'), description: $t('读取 Codex MCP 服务器和认证状态。') },
     { name: 'permissions', requires: 'codex', label: $t('查看权限'), description: $t('查看会话保存的文件权限，不提升权限。') },
+    { name: 'timers', label: $t('定时任务'), description: $t('查看本会话的定时任务和下次触发时间，可以取消。') },
     { name: 'stop', label: $t('停止本会话 Agent'), description: $t('确认后结束本轮讨论，停止相关执行。') },
   ]),
   parse(text) {

@@ -20,6 +20,8 @@ pub struct SchedulerConfig {
     pub replies_per_agent: Option<u32>,
     pub discussion_seconds: Option<u32>,
     pub model_steps: Option<u32>,
+    /// IANA zone for model-facing times and timers; `None` uses the host's zone.
+    pub timezone: Option<String>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -82,6 +84,7 @@ impl Default for SchedulerConfig {
             replies_per_agent: Some(100),
             discussion_seconds: Some(1800),
             model_steps: None,
+            timezone: None,
         }
     }
 }
@@ -126,6 +129,11 @@ impl RuntimeConfig {
             || self.execution.timeout_seconds == Some(0)
         {
             bail!("limits must be positive; use null for unlimited");
+        }
+        if let Some(zone) = &self.scheduler.timezone
+            && jiff::tz::TimeZone::get(zone).is_err()
+        {
+            bail!("scheduler.timezone must be an IANA zone such as Asia/Shanghai");
         }
         if !(1..=120).contains(&self.permissions.review_timeout_seconds)
             || !(1..=86400).contains(&self.permissions.request_timeout_seconds)
@@ -215,6 +223,7 @@ impl RuntimeConfig {
             {"key":"scheduler.concurrency","default":3,"description":"同时执行的任务总数；不含保存检查点后的等待。增大可减少排队，但增加模型与本机负载。null 不限。","effective":"调度器重启；CLI --concurrency 可覆盖"},
             {"key":"scheduler.replies_per_agent","default":100,"description":"每个身份在同一讨论中允许进入回复执行的次数，不是工具调用次数。null 不限。","effective":"调度器重启；已用次数保留"},
             {"key":"scheduler.discussion_seconds","default":1800,"description":"一次讨论授权的有效秒数，子任务共享授权。到期只阻止新执行（包括子任务、挂起恢复及通知处理），已经运行的任务可完成并投递结果；长流程可设 null。","effective":"新授权或显式续期；不追改已有到期时间"},
+            {"key":"scheduler.timezone","default":null,"description":"模型看到的时间和定时任务使用的 IANA 时区，例如 Asia/Shanghai。null 使用本机时区。","effective":"新执行和新建的定时任务；已有定时任务保留创建时的时区"},
             {"key":"scheduler.model_steps","default":null,"description":"原生执行器每个 Run 的模型步数上限；不限制 Codex 内部步骤。null 不限。","effective":"新 Run"},
             {"key":"memory.enabled","default":true,"description":"允许按当前身份搜索可见历史和保存带来源的私有主题摘要；不自动共享他人私聊。","effective":"关闭：下次调用即拒绝；开启：新 Run 才提供记忆工具"},
             {"key":"execution.enabled","default":false,"description":"允许挂载 local_execution 的原生 Agent 执行宿主机命令。工作目录不是沙箱，命令拥有服务账号的操作权限。","effective":"关闭：下一条命令即拒绝；开启：新 Run 才提供命令工具"},

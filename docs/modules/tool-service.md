@@ -80,7 +80,7 @@ Prints one JSON line per change, such as a new message or a task update, after a
 | --- | --- | --- | --- |
 | Conversations and messages | yes | yes | [Identities and conversations](./conversations.md#agent-tools) |
 | Memory | yes | yes | [Memory](./memory.md#all-parameters) |
-| Tasks (own tasks only) | yes | yes | [Tasks](./tasks.md#all-parameters) |
+| Tasks (own tasks only) and timers | yes | yes | [Tasks](./tasks.md#all-parameters) |
 | Resources, categories | | yes | [Resources](./resources.md#agent-tools) |
 | Identities and bindings | | yes | [Agent](./agent.md#identities-and-bindings) |
 | Codex sessions | | yes | [Harness](./harness.md#agent-tools) |

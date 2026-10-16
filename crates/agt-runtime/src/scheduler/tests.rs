@@ -1714,6 +1714,8 @@ mod harness_tool_tests;
 
 mod run_input_tests;
 
+mod timer_tests;
+
 #[test]
 fn scheduled_native_uses_mounted_mcp_without_an_opt_in() {
     let (home, user, _) = fixture();

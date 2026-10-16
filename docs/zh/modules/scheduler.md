@@ -70,6 +70,7 @@ agt schedule end <会话>
 | `scheduler.discussion_seconds` | `1800` | 讨论授权的有效期。到期后正在运行的工作会完成，但不再开始新工作，包括子任务和恢复。`null` 不限。 | 新的或续期的讨论 |
 | `scheduler.parallel_work` | `false` | 见[任务](./tasks.md#全部参数) | 调度器重启 |
 | `scheduler.model_steps` | `null` | 见[执行记录](./runs.md#全部参数) | 新的执行 |
+| `scheduler.timezone` | `null` | IANA 时区，例如 `Asia/Shanghai`。用于 Agent 看到的时间和[定时任务](../guide/timers.md)。`null` 使用本机时区。 | 新的执行和新建的定时任务 |
 
 ### 状态值
 

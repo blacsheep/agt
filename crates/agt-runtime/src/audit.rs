@@ -74,6 +74,8 @@ impl CallRecord {
             "memory_forget" => Some("移除主题记忆"),
             "task_execution_policy" => Some("安排任务并行与互斥"),
             "task_request" => Some("安排协作任务"),
+            "timer_create" => Some("设置定时任务"),
+            "timer_cancel" => Some("取消定时任务"),
             _ => None,
         }
         .map(str::to_owned);

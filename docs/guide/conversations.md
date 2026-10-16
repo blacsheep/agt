@@ -68,6 +68,7 @@ Type `/` in the message box to list the commands available in this conversation.
 | `/new`, `/clear` | Reset the agents' working context in this conversation; chat history is kept |
 | `/stop` | End this round: stop the agents working in this conversation |
 | `/status` | Show each agent's state, engine and recent runs |
+| `/timers` | See this conversation's [timers](./timers.md) and cancel them |
 | `/model` | Choose the model and reasoning level of a Codex agent for this conversation |
 | `/compact` | Ask Codex to compact its context |
 | `/rename` | Name the Codex session |
