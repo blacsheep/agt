@@ -745,7 +745,9 @@ fn run_cli(cli: Cli) -> Result<()> {
     dispatch(cli.command, &home, output, cli.yes)
 }
 
-fn ensure_default_home_ready() -> Result<PathBuf> {
+/// The default home (`$AGT_HOME` or `~/.agt`), created with its built-in prompts
+/// when missing, as `agt` does without `--home`.
+pub fn ensure_default_home_ready() -> Result<PathBuf> {
     let summary =
         initialize_default_home().context("初始化默认 agt home（$AGT_HOME 或 ~/.agt）失败")?;
     let default_prompt = summary

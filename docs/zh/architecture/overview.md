@@ -38,7 +38,7 @@
 ## 代码入口
 
 - [Workspace](../../../Cargo.toml)：crate 列表与依赖。
-- [Web 服务](../../../crates/agt-cli/src/web/mod.rs)：启动与关闭；[HTTP 接口](../../../crates/agt-cli/src/web/http.rs)；[CLI 调用](../../../crates/agt-cli/src/web/cli.rs)：`Cli`、`watch_events`。
+- [Web 服务](../../../crates/agt-console/src/lib.rs)：启动与关闭；[HTTP 接口](../../../crates/agt-console/src/http.rs)；[CLI 调用](../../../crates/agt-console/src/cli.rs)：`Cli`、`watch_events`。
 - [共享资源服务](../../../crates/agt-service/src/resources/mod.rs)与[更新/版本检查](../../../crates/agt-service/src/resources/mutation.rs)。
 - [能力刷新](../../../crates/agt-runtime/src/engine/native/refresh.rs)：批次边界装配与应用。
 - [Agent 配置](../../../crates/agt-agent/src/config.rs)：`AgentConfig::validate`。

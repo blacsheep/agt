@@ -38,7 +38,7 @@ for (const name of Object.keys(layoutPreferences)) {
 renderLayout();
 
 async function api(path, data) {
-  const response = await fetch(`/api/${path}`, { method: data === undefined ? 'GET' : 'POST', headers: { 'X-AGT-Token': token || '', ...(data === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
+  const response = await agtFetch(`/api/${path}`, { method: data === undefined ? 'GET' : 'POST', headers: { 'X-AGT-Token': token || '', ...(data === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
   const value = await response.json();
   if (!response.ok) { const error = new Error(value.error?.message || $t('请求失败')); error.code = value.error?.code; error.field = value.error?.field; throw error; }
   return value;
@@ -1326,7 +1326,7 @@ async function consumeEvents(subscription) {
     try {
       const query = new URLSearchParams({ viewer });
       if (subscription.cursor) query.set('after', subscription.cursor);
-      const response = await fetch(`/api/events?${query}`, { headers: { 'X-AGT-Token': token || '' }, signal: controller.signal });
+      const response = await agtFetch(`/api/events?${query}`, { headers: { 'X-AGT-Token': token || '' }, signal: controller.signal });
       if (!response.ok) { if ([401,403].includes(response.status)) { $('#connection').textContent = $t('订阅权限已失效'); return; } throw new Error('stream unavailable'); }
       const reader = response.body.getReader(), decoder = new TextDecoder();
       let buffer = '';
