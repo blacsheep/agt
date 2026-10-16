@@ -59,10 +59,13 @@ impl ClaudeCode {
             // agt authorizes its own tools; Claude Code need not ask about them.
             .arg("--allowed-tools")
             .arg(format!("{PREFIX}*"))
-            .args([
-                "--permission-prompts",
-                if prompts { "host" } else { "none" },
-            ])
+            // Prompts reach agt as `can_use_tool` only through the stdio prompt
+            // tool; without one, Claude Code refuses anything that would ask.
+            .args(if prompts {
+                ["--permission-prompt-tool", "stdio"]
+            } else {
+                ["--permission-prompts", "none"]
+            })
             .arg("--append-system-prompt")
             .arg(execution.instructions);
         match harness.sandbox {

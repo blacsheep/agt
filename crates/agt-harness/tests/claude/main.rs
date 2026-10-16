@@ -208,9 +208,13 @@ fn permission_prompts_go_through_agt_approvals() {
         );
         let a = args(&dir);
         assert_eq!(
-            a[a.iter().position(|x| x == "--permission-prompts").unwrap() + 1],
-            "host"
+            a[a.iter()
+                .position(|x| x == "--permission-prompt-tool")
+                .unwrap()
+                + 1],
+            "stdio"
         );
+        assert!(!a.contains(&"--permission-prompts".to_owned()));
     }
 }
 
