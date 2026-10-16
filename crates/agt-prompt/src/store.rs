@@ -17,6 +17,26 @@ pub const DEFAULT_PROMPT_BODY: &str = "You are a helpful assistant.";
 /// Seeded at init for a team lead that knows the framework workflow; editable and deletable.
 pub const LEAD_PROMPT_NAME: &str = "lead";
 pub const LEAD_PROMPT_BODY: &str = include_str!("lead.md");
+/// Lead prompts earlier releases seeded, by [`fingerprint`]. A home still holding
+/// one never edited it, so [`PromptStore::upgrade_builtin_prompts`] replaces it.
+/// When changing `lead.md`, move `CURRENT_LEAD` here and update it.
+const SHIPPED_LEAD: &[&str] = &[
+    "f70d1e28ac858010ec39e3850e6fc39407d91cff513b50bf0dca5d57584efc4f",
+    "3fa6bc01b7de179566e049a7cc394b0ddfa77c8f4282047d2236b01033e7505a",
+    "754d6c7312c87f89581f02a4ef079221370ffa13e10001596285e4848cfd0f0d",
+    "50e68fab04d1c5cc96cfbb534df68e89dae9a46840bf363822e444a66401b1c5",
+    "862b949d40be3f03e06fec03288fa71fe524776b07aa9f606303a323783f946d",
+    "35f959cd00858c2bc60021e37e5e56a48f8b3de0646c5897a20bea50fd652de0",
+];
+#[cfg(test)]
+const CURRENT_LEAD: &str = "21ffb386f316134547464666ef943156f50f511ef3db458b161e7eb6c653ba74";
+
+/// SHA-256 of a prompt with LF line endings and no trailing whitespace, as hex.
+/// Windows checkouts and builds carry CRLF; both spellings are the same prompt.
+fn fingerprint(text: &str) -> String {
+    let text = text.replace("\r\n", "\n");
+    format!("{:x}", Sha256::digest(text.trim_end().as_bytes()))
+}
 pub const PROMPT_DOCUMENT_MAX_BYTES: u64 = 256 * 1024;
 
 #[derive(Clone, Debug)]
@@ -91,6 +111,20 @@ impl PromptStore {
             Err(source) => return Err(PromptError::io(&dir, source)),
         }
         Ok(default)
+    }
+
+    /// Bring an unedited built-in lead prompt up to date. Returns whether it changed;
+    /// an edited, missing or unreadable prompt is left as it is.
+    pub fn upgrade_builtin_prompts(&self) -> Result<bool> {
+        let category = CategoryName::default();
+        let Ok(stored) = self.read_in(&category, LEAD_PROMPT_NAME) else {
+            return Ok(false);
+        };
+        if !SHIPPED_LEAD.contains(&fingerprint(&stored.content).as_str()) {
+            return Ok(false);
+        }
+        self.update_in(&category, LEAD_PROMPT_NAME, LEAD_PROMPT_BODY)?;
+        Ok(true)
     }
 
     pub fn create(&self, name: &str, content: &str) -> Result<StoredPrompt> {
@@ -481,6 +515,32 @@ mod tests {
         store.ensure_builtin_prompts().unwrap();
         assert_eq!(store.read(LEAD_PROMPT_NAME).unwrap().content, "my lead");
         store.delete(LEAD_PROMPT_NAME).unwrap();
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn unedited_lead_prompts_from_earlier_releases_are_upgraded() {
+        assert_eq!(
+            fingerprint(LEAD_PROMPT_BODY),
+            CURRENT_LEAD,
+            "lead.md changed: add CURRENT_LEAD to SHIPPED_LEAD and update it"
+        );
+        let home = test_home("lead-upgrade");
+        let store = PromptStore::new(&home);
+        store.ensure_builtin_prompts().unwrap();
+        assert!(!store.upgrade_builtin_prompts().unwrap());
+        // The text an earlier release seeded, as a Windows build would have written it.
+        let previous = include_str!("../tests/fixtures/lead-previous.md");
+        let windows = previous.replace("\r\n", "\n").replace('\n', "\r\n");
+        store.update(LEAD_PROMPT_NAME, &windows).unwrap();
+        assert!(store.upgrade_builtin_prompts().unwrap());
+        assert_eq!(
+            store.read(LEAD_PROMPT_NAME).unwrap().content,
+            LEAD_PROMPT_BODY
+        );
+        store.update(LEAD_PROMPT_NAME, "my lead").unwrap();
+        assert!(!store.upgrade_builtin_prompts().unwrap());
+        assert_eq!(store.read(LEAD_PROMPT_NAME).unwrap().content, "my lead");
         let _ = fs::remove_dir_all(home);
     }
 
