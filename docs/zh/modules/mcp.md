@@ -114,6 +114,7 @@ agt agent update researcher --add-mcp files
 
 - 工具参数首先按服务的输入 schema（默认 JSON Schema 2020-12）校验。无效调用会把错误返回给模型，不会到达服务或审批队列。
 - schema 不能加载外部引用。
+- 每次调用都要经过[审批](./permissions.md)。如果想让服务自己的 `readOnlyHint` 生效，在它的 `mcpServers` 配置里加上 `"trust_read_only_hint": true`（stdio 和 HTTP 都支持）。之后这个服务标为只读的工具不再需要审批，其他工具照常审批。这个标注来自服务本身，只对你信任的服务开启。
 - 拥有 `resource_management` 的 Agent 修改自己的 MCP 服务时，新工具在当前这批工具调用结束后加载。加载失败时保留旧工具，并告知原因。
 
 ## 相关模块

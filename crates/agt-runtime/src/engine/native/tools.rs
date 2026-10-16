@@ -108,8 +108,12 @@ impl NativeRun<'_, '_> {
         Ok(ToolFlow::Continue)
     }
 
-    /// Framework reads of agt's own data run without approval; everything else is reviewed.
+    /// Framework reads of agt's own data, and tools a trusted MCP server marks
+    /// read-only, run without approval; everything else is reviewed.
     fn needs_approval(&self, name: &str) -> bool {
+        if self.tools.read_only.contains(name) {
+            return false;
+        }
         !self.is_framework(name)
             || agt_service::catalog::hosted_tool(name).is_none_or(|t| t.needs_approval())
     }
