@@ -5,10 +5,17 @@
 | 依赖 | 说明 |
 | --- | --- |
 | Linux、macOS 或 Windows | 提供 x86_64 和 ARM64 的预编译程序（Windows 为 x86_64） |
-| 模型接口 | 任意 OpenAI 兼容 API，模型需支持工具调用 |
-| Codex CLI（可选） | 仅 [Codex Agent](./codex.md) 需要；agt 以 `codex app-server` 方式启动它 |
+| 模型接口 | OpenAI 或兼容服务、Anthropic、Google Gemini，模型需支持工具调用；见[接入模型](./models.md) |
+| 编程 Agent 工具（可选） | 仅运行在这些工具上的 Agent 需要：[Codex Agent](./codex.md) 需要 Codex CLI，以及 [Claude Code](./claude-code.md)、[DeepSeek Harness](./deepseek-harness.md) |
 
 ## 安装
+
+agt 有两种形式，两者使用同一个[工作空间](#数据存放位置)，可以只用一种，也可以都用：
+
+- **命令行（`agt`）**：用下面一条命令安装，已经内置 Web 控制台（`agt web`）。
+- **桌面应用（AGT Studio）**：支持 macOS、Windows 和 Linux，从[最新发布](https://github.com/blacsheep/agt/releases/latest)下载对应系统的安装包。见[桌面客户端](./desktop.md)。
+
+本页下面的内容都是关于命令行的。
 
 **macOS 和 Linux：**
 
@@ -55,10 +62,6 @@ git clone https://github.com/blacsheep/agt.git
 cd agt
 cargo build -p agt-cli        # target/debug/agt
 ```
-
-::: tip 想用桌面应用？
-[AGT Studio](./desktop.md) 把控制台做成了 macOS、Windows 和 Linux 上的应用，带托盘和系统通知，和命令行使用同一个工作空间。
-:::
 
 ## 启动 Web 控制台
 

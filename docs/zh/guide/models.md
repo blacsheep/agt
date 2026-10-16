@@ -4,7 +4,7 @@ Native Agent 通过两种资源访问模型：**Provider**（请求发往哪里�
 
 ## Provider
 
-Provider 是一个 OpenAI 兼容接口。OpenAI、API 网关以及 Ollama、vLLM 等本地服务都可以，只要它们实现了 OpenAI API。
+Provider 是一个模型接口及其密钥：OpenAI、Anthropic、Google Gemini，以及实现了 OpenAI API 的 API 网关或本地服务（如 Ollama、vLLM）都可以。每个模型选择它的 Provider 使用的[接口格式](#model)。
 
 **Web 控制台：** **资源库** → **新建资源** → Provider。填写名称、base URL 和 API Key。
 

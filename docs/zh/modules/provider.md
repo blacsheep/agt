@@ -2,7 +2,7 @@
 
 | 概览 | |
 | --- | --- |
-| **是什么** | 一个 OpenAI 兼容接口及访问它的 API Key |
+| **是什么** | 一个模型接口（OpenAI 兼容、Anthropic 或 Gemini）及访问它的 API Key |
 | **CLI** | `agt provider` |
 | **Agent 工具** | `kind: "provider"` 的 `resource_*`、`provider_models`、`resource_test` |
 | **Web 控制台** | **资源库** → Provider |

@@ -50,6 +50,10 @@ Your system may ask once whether AGT Studio may show notifications.
 
 When a release is published with update signatures, the app downloads and installs the update at startup and tells you; it takes effect the next time you open it. Releases without signatures are installed by downloading the new installer.
 
+## Uninstall
+
+Remove the app the usual way for your system: drag it out of Applications on macOS, use **Installed apps** on Windows, or remove the package or AppImage on Linux. Your data stays in `~/.agt` (or `$AGT_HOME`) until you delete it.
+
 ## Build from source
 
 ```bash

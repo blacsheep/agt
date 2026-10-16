@@ -14,7 +14,7 @@ Resources are the files that describe agents. There are seven types, each with i
 
 | Type | Describes | Page |
 | --- | --- | --- |
-| Provider | An OpenAI-compatible endpoint and its key | [Provider](./provider.md) |
+| Provider | A model API endpoint and its key | [Provider](./provider.md) |
 | Model | A model on a provider and how to call it | [Model](./model.md) |
 | Prompt | A role description | [Prompt](./prompt.md) |
 | Skill | A reusable instruction package | [Skill](./skill.md) |

@@ -5,10 +5,17 @@
 | Requirement | Notes |
 | --- | --- |
 | Linux, macOS or Windows | Prebuilt binaries for x86_64 and ARM64 (Windows: x86_64) |
-| A model endpoint | Any OpenAI-compatible API whose model supports tool calls |
-| Codex CLI (optional) | Only for [Codex agents](./codex.md); agt starts it as `codex app-server` |
+| A model API | OpenAI or a compatible service, Anthropic, or Google Gemini, with a model that supports tool calls; see [Connect models](./models.md) |
+| A coding agent tool (optional) | Only for agents that run on one: the Codex CLI for [Codex agents](./codex.md), [Claude Code](./claude-code.md) or [DeepSeek Harness](./deepseek-harness.md) |
 
 ## Install
+
+agt comes in two forms. Both use the same [home](#where-data-lives), so you can use either or both:
+
+- **Command line (`agt`)**, installed with one command below. It includes the Web console (`agt web`).
+- **Desktop app (AGT Studio)** for macOS, Windows and Linux: download the installer for your system from the [latest release](https://github.com/blacsheep/agt/releases/latest). See [Desktop app](./desktop.md).
+
+The rest of this page is about the command line.
 
 **macOS and Linux:**
 
@@ -55,10 +62,6 @@ git clone https://github.com/blacsheep/agt.git
 cd agt
 cargo build -p agt-cli        # target/debug/agt
 ```
-
-::: tip Prefer a desktop app?
-[AGT Studio](./desktop.md) packages the console as an app for macOS, Windows and Linux, with tray and notifications. It uses the same home as the CLI.
-:::
 
 ## Start the Web console
 
