@@ -85,6 +85,7 @@ agt config apply config.yaml       # 校验并替换整个文件
 | `scheduler.replies_per_agent` | `100` | 每个 Agent 在一轮讨论中的回复次数 | [调度器](./scheduler.md#全部参数) |
 | `scheduler.discussion_seconds` | `1800` | 一轮讨论的授权时长 | [调度器](./scheduler.md#全部参数) |
 | `scheduler.model_steps` | `null` | 单次 Native 执行的模型调用次数 | [执行记录](./runs.md#全部参数) |
+| `scheduler.timezone` | `null` | Agent 和定时任务使用的时区；`null` 使用本机时区 | [调度器](./scheduler.md#全部参数) |
 | `permissions.mode` | `model_review` | Native 工具调用的审批策略 | [权限审批](./permissions.md#全部参数) |
 | `permissions.reviewer_model` | `null` | 模型审核使用的模型 | [权限审批](./permissions.md#全部参数) |
 | `permissions.review_timeout_seconds` | `30` | 审核模型的时限 | [权限审批](./permissions.md#全部参数) |

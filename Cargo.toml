@@ -43,8 +43,10 @@ agt-skill = { path = "crates/agt-skill" }
 agt-storage = { path = "crates/agt-storage" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+croner = { version = "4", default-features = false, features = ["jiff"] }
 futures-util = "0.3"
 http = "1"
+jiff = "0.2"
 jsonschema = { version = "0.58.6", default-features = false }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls", "stream"] }
 rmcp = { version = "=2.2.0", default-features = false, features = ["client", "transport-streamable-http-client"] }

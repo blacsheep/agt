@@ -80,7 +80,7 @@ MCP 客户端配置：
 | --- | --- | --- | --- |
 | 会话与消息 | 是 | 是 | [身份与会话](./conversations.md#agent-工具) |
 | 记忆 | 是 | 是 | [记忆](./memory.md#全部参数) |
-| 任务（仅自己的任务） | 是 | 是 | [任务](./tasks.md#全部参数) |
+| 任务（仅自己的任务）与定时任务 | 是 | 是 | [任务](./tasks.md#全部参数) |
 | 资源、分类 | | 是 | [资源通用操作](./resources.md#agent-工具) |
 | 身份与绑定 | | 是 | [Agent](./agent.md#身份与绑定) |
 | Codex 会话 | | 是 | [Harness](./harness.md#agent-工具) |

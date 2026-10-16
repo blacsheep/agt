@@ -68,6 +68,7 @@ Codex Agent 支持 `mentioned` 和 `manual`。
 | `/new`、`/clear` | 重置 Agent 在本会话中的工作上下文；保留聊天记录 |
 | `/stop` | 结束本轮：停止在本会话中工作的 Agent |
 | `/status` | 查看每个 Agent 的状态、执行方式和最近执行 |
+| `/timers` | 查看本会话的[定时任务](./timers.md)，可以取消 |
 | `/model` | 为 Codex Agent 选择本会话使用的模型和推理档位 |
 | `/compact` | 让 Codex 压缩上下文 |
 | `/rename` | 为 Codex 会话命名 |

@@ -338,6 +338,9 @@ impl WorkControl for TaskControl {
         ) {
             return self.edit_queue(name, args);
         }
+        if name.starts_with("timer_") {
+            return crate::timers::call(&self.home, &self.actor, self.task.as_ref(), name, args);
+        }
         if name == "task_request" {
             return self.request(args);
         }

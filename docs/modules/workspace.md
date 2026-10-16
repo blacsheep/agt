@@ -85,6 +85,7 @@ Initializes a home: creates the resource directories, the conversation database,
 | `scheduler.replies_per_agent` | `100` | Replies per agent per discussion | [Scheduler](./scheduler.md#all-parameters) |
 | `scheduler.discussion_seconds` | `1800` | How long a discussion stays authorized | [Scheduler](./scheduler.md#all-parameters) |
 | `scheduler.model_steps` | `null` | Model calls per native run | [Runs](./runs.md#all-parameters) |
+| `scheduler.timezone` | `null` | Time zone for agents and timers; `null` uses the host's | [Scheduler](./scheduler.md#all-parameters) |
 | `permissions.mode` | `model_review` | Approval policy for native tool calls | [Permissions](./permissions.md#all-parameters) |
 | `permissions.reviewer_model` | `null` | Model used for model review | [Permissions](./permissions.md#all-parameters) |
 | `permissions.review_timeout_seconds` | `30` | Time limit for the reviewer | [Permissions](./permissions.md#all-parameters) |

@@ -129,6 +129,7 @@ impl Scheduler {
                 UNION ALL SELECT created_at+300000 FROM work_reports WHERE body IS NULL AND message_id IS NULL AND attention_at IS NULL
                 UNION ALL SELECT json_extract(record,'$.deferred.not_before') FROM work_items WHERE json_extract(record,'$.state')='queued'
                 UNION ALL SELECT json_extract(record,'$.deferred.deadline') FROM work_items WHERE json_extract(record,'$.state')='queued'
+                UNION ALL SELECT next_at FROM timers WHERE state='active'
              ) WHERE due>?1", [now], |r| r.get(0))?;
         if let Some(timer) = timer {
             next = next.min(timer);
@@ -145,6 +146,7 @@ impl Scheduler {
         }
         self.poll_jobs()?;
         crate::work::reconcile(&self.home)?;
+        crate::timers::fire_due(&self.home, &self.store)?;
         self.scan()?;
         let im = im(&self.home)?;
         self.store.expire(now_ms())?;

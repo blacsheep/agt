@@ -21,3 +21,12 @@ fn configuration_roundtrip_unlimited_and_validation() {
     assert!(RuntimeConfig::load(&home).is_err());
     std::fs::remove_dir_all(home).unwrap();
 }
+#[test]
+fn timezone_must_be_an_iana_zone() {
+    let mut config = RuntimeConfig::default();
+    assert!(config.scheduler.timezone.is_none());
+    config.scheduler.timezone = Some("Asia/Shanghai".into());
+    config.validate().unwrap();
+    config.scheduler.timezone = Some("Mars/Base".into());
+    assert!(config.validate().is_err());
+}

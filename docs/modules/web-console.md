@@ -123,6 +123,7 @@ Type `/` in the message box for the commands available in this conversation. Com
 | `/new`, `/clear` | Reset the agents' working context here; chat history is kept |
 | `/stop` | End this round and stop the agents working here |
 | `/status` | Each agent's state, engine and recent runs |
+| `/timers` | This conversation's timers, with cancel |
 | `/model` | Codex agents: choose model and reasoning level for this conversation |
 | `/compact` | Codex agents: compact the context |
 | `/rename` | Codex agents: name the session |

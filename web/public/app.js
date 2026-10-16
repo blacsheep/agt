@@ -726,7 +726,7 @@ function renderMessages() {
     lastDay = day;
     const previous = timeline[timeline.indexOf(entry) - 1]?.message;
     const grouped = previous && previous.sender_id === m.sender_id && m.created_at - previous.created_at < 5 * 60 * 1000;
-    return divider + `<article class="message ${own ? 'own' : ''} ${grouped && !divider ? 'grouped' : ''}" data-tone="${toneOf(m.sender_id)}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${esc(own ? $t('你') : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time title="${esc(new Date(m.created_at).toLocaleString(AgtI18n.locale))}">${esc(new Date(m.created_at).toLocaleTimeString(AgtI18n.locale, { hour: '2-digit', minute: '2-digit' }))}</time></div>${m.deleted_at ? `<div class="bubble deleted">${$t('此消息已删除')}</div>` : `<div class="bubble md">${AgtMarkdown.render(m.body)}</div>`}<div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? $t('查看投递 ↗') : $t('回复情况')}</button></div><div class="run-threads" data-thread-anchor="${esc(m.id)}"></div></div></article>`;
+    return divider + `<article class="message ${own ? 'own' : ''} ${grouped && !divider ? 'grouped' : ''}" data-tone="${toneOf(m.sender_id)}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${esc(own ? $t('你') : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(nameOf(m.sender_id))}</span><time title="${esc(new Date(m.created_at).toLocaleString(AgtI18n.locale))}">${esc(new Date(m.created_at).toLocaleTimeString(AgtI18n.locale, { hour: '2-digit', minute: '2-digit' }))}</time>${m.metadata?.timer ? `<span class="tag">${$t('定时任务 · 由 {0} 设置', [esc(nameOf(m.metadata.timer.creator))])}</span>` : ''}</div>${m.deleted_at ? `<div class="bubble deleted">${$t('此消息已删除')}</div>` : `<div class="bubble md">${AgtMarkdown.render(m.metadata?.timer ? m.body.replace(/^\[AGT timer [^\]\n]*\]\n/, '') : m.body)}</div>`}<div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? $t('查看投递 ↗') : $t('回复情况')}</button></div><div class="run-threads" data-thread-anchor="${esc(m.id)}"></div></div></article>`;
   }).join('') || empty($t('会话已就绪'), $t('发送第一条消息，邀请 Agent 回应。'));
   $$('[data-status]').forEach(button => button.onclick = () => showStatus(button.dataset.status));
   AgtRunThreads.render();
@@ -1464,7 +1464,7 @@ function commandPanel(title, content, kind = 'help') {
   document.body.classList.add('command-panel-open');
   $('#chat-commands').setAttribute('aria-expanded',String(!['tasks','approvals','run'].includes(kind)));
   $('#chat-tasks').setAttribute('aria-expanded',String(kind==='tasks'));
-  $('#command-panel-kind').textContent={tasks:$t('任务'),approvals:$t('权限审批'),run:$t('执行记录')}[kind] || $t('会话控制');
+  $('#command-panel-kind').textContent={tasks:$t('任务'),approvals:$t('权限审批'),run:$t('执行记录'),timers:$t('定时任务')}[kind] || $t('会话控制');
   $('#command-panel-title').textContent=title;
   $('#command-panel-context').textContent=kind==='approvals' ? $t('当前观察身份可见的审批') : state.conversation ? conversationName(state.conversation) : '';
   $('#command-panel-body').innerHTML=content;
@@ -1512,6 +1512,7 @@ async function showChatCommand(command) {
   if (supported?.requires && !codexCommandTargets().length) { showUnavailableCommand(command.name); return; }
   if (supported && !command.args && ['new','clear'].includes(command.name)) { showCommandAction(command.name); return; }
   if (supported && !command.args && command.name==='stop') { showCommandAction('stop'); return; }
+  if (supported && !command.args && command.name==='timers') { await AgtTimers.open(); return; }
   if (supported && !command.args && ['model','status','compact','rename','skills','mcp','permissions'].includes(command.name)) { await showHarnessCommand(command.name); return; }
   const heading = command.name==='help' && !command.args ? $t('会话命令') : supported ? $t('此命令暂不支持参数') : $t('此命令尚未接入 Web');
   commandPanel(heading, `<p class="form-note">${$t('以下只列出当前会话可用的操作。重置和停止作用于整个会话；标注 Codex 的操作仅作用于所选 Codex Agent。')}</p><div class="chat-command-list">${availableChatCommands().map(c=>`<button type="button" class="chat-command" data-chat-command="${c.name}"><code>/${esc(c.name)}</code><span><strong>${esc(c.label)}</strong><small>${esc(c.description)}</small></span></button>`).join('')}</div><details class="harness-options"><summary>${$t('其他 Codex 命令如何处理？')}</summary><p class="form-note">${$t('/review、/diff、/resume、/fork 和交互审批尚未映射。请在对应 Codex 客户端操作，或用自然语言提出任务。带参数的命令目前不会执行；群内命令不支持 @ 定向控制。')}</p></details><div class="form-actions"><button id="command-as-text" class="secondary" type="button" ${AgtCommands.parse($('#message-body').value)?.type==='command'?'':'disabled'}>${$t('改为普通文本草稿')}</button></div><p class="form-note">${$t('要讨论命令本身，可输入 //model 等双斜杠文本，再点击发送。')}</p>`);

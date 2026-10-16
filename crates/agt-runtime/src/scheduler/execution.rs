@@ -128,7 +128,9 @@ fn prepare_input(
     let instruction =
         crate::conversation_instructions::execution(task.work_id.is_some(), task.work_notification);
     let report_obligation = crate::work::notification_obligation(home, store, task)?;
-    let input=json!({"instruction":instruction,"report_obligation":report_obligation,"discussion":task.discussion,"last_decision":task.reason,"now":now_ms(),"your_principal":task.principal,"conversation":task.conversation,"trigger":{"id":admitted.trigger.id},"messages":admitted.batch,"history":history,"conversation_summary":context["summary"],"context_reset_through_seq":context["reset_through_seq"],"presence":presence}).to_string();
+    let zone = crate::clock::zone(&agt_config::RuntimeConfig::load(home)?);
+    let now = now_ms();
+    let input=json!({"instruction":instruction,"report_obligation":report_obligation,"discussion":task.discussion,"last_decision":task.reason,"now":crate::clock::local(now, &zone),"timezone":crate::clock::zone_name(&zone),"now_unix_ms":now,"your_principal":task.principal,"conversation":task.conversation,"trigger":{"id":admitted.trigger.id},"messages":admitted.batch,"history":history,"conversation_summary":context["summary"],"context_reset_through_seq":context["reset_through_seq"],"presence":presence}).to_string();
     engine.validate_input(&input)?;
     Ok(Some((input, active)))
 }

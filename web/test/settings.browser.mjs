@@ -36,7 +36,7 @@ try {
   await click('[data-page="settings"]');
   await wait('!!document.querySelector("#runtime-config-form")');
   assert.match(await evaluate('document.querySelector("#runtime-settings").textContent'), /工作目录不是沙箱/);
-  assert.equal(await evaluate('document.querySelectorAll("[data-setting]").length'),14);
+  assert.equal(await evaluate('document.querySelectorAll("[data-setting]").length'),15);
   assert.match(await evaluate('document.querySelector("#permission-review-status").textContent'),/尚未选择审核模型/);
   assert.equal(await evaluate(`document.querySelector('[data-setting="permissions.reviewer_model"]').tagName`),'SELECT');
   assert.deepEqual(await evaluate(`Array.from(document.querySelector('[data-setting="permissions.reviewer_model"]').options,o=>o.value)`),['','default/reviewer']);

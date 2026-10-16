@@ -70,6 +70,7 @@ Run only one scheduler per home. If the Web console is running, it already runs 
 | `scheduler.discussion_seconds` | `1800` | Lifetime of a discussion's authorization. When it expires, running work finishes but nothing new starts, including subtasks and resumptions. `null` for no limit. | New or renewed discussions |
 | `scheduler.parallel_work` | `false` | See [Tasks](./tasks.md#all-parameters) | Scheduler restart |
 | `scheduler.model_steps` | `null` | See [Runs](./runs.md#all-parameters) | New runs |
+| `scheduler.timezone` | `null` | IANA time zone, such as `Asia/Shanghai`, for the times agents see and for [timers](../guide/timers.md). `null` uses the host's zone. | New runs and new timers |
 
 ### Status values
 

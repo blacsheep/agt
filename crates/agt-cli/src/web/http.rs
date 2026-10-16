@@ -23,7 +23,7 @@ use super::commands;
 use super::error::ApiError;
 use super::js;
 
-const READ_TOOLS: [&str; 8] = [
+const READ_TOOLS: [&str; 9] = [
     "conversation_list",
     "member_list",
     "message_history",
@@ -32,8 +32,9 @@ const READ_TOOLS: [&str; 8] = [
     "task_get",
     "task_list",
     "task_attention",
+    "timer_list",
 ];
-const WRITE_TOOLS: [&str; 18] = [
+const WRITE_TOOLS: [&str; 19] = [
     "direct_create",
     "group_create",
     "message_send",
@@ -52,6 +53,7 @@ const WRITE_TOOLS: [&str; 18] = [
     "task_resolve",
     "task_retry",
     "task_report",
+    "timer_cancel",
 ];
 const KINDS: [&str; 7] = [
     "provider", "model", "prompt", "skill", "mcp", "agent", "harness",
