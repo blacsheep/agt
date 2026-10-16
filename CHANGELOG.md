@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.0 - 2026-10-16
+
+### Desktop app
+
+AGT Studio is the agt console as a desktop app for macOS, Windows and Linux. It shows the same pages as `agt web` without a local web server, keeps agents and timers running from the system tray when you close the window, and notifies you of new messages, timers that fire and approvals waiting for you. It uses the same home as the CLI and updates itself.
+
+Installers are attached to each release. They are not signed yet; see [Desktop app](docs/guide/desktop.md) for how to open them the first time.
+
+### More engines
+
+Besides Codex, an agent can now run on another agent harness, which brings its own tools and session, while agt keeps its framework tools, tasks and approvals:
+
+- `claude-code`: [Claude Code](docs/guide/claude-code.md). Its permission prompts go through agt's approval queue.
+- `deepseek-harness`: [DeepSeek Harness](docs/guide/deepseek-harness.md) (`dsh`, Node.js 24 or later).
+- `acp`: any agent that speaks the Agent Client Protocol, such as `codex-acp`, with its command in `executable` and `args`.
+
+### Models
+
+- Two new API formats: `anthropic-messages` for Claude and `gemini` for the Google Gemini API, next to `chat-completions` and `responses`.
+- The model input keeps fields that never change first and those that change on every call last, so providers can reuse more of their prompt cache.
+
+### Permissions
+
+- **Always allow this agent to use this tool** when approving a call. Later calls of that tool by that agent run without asking. See and remove rules in the Approvals panel or with `agt permission rules` and `agt permission forget`.
+- An MCP server entry can set `"trust_read_only_hint": true`; tools that server marks read-only then run without approval. Its other tools are still reviewed.
+
+### Time and timers
+
+- `task_defer`, `task_yield`, `task_input` and `task_await` accept a local time such as `2026-11-01T09:00`, or one with an offset, instead of Unix milliseconds, which still work.
+- Agents see when each message in the history was sent, including messages that arrive while they work.
+- Create timers in the Web console from `/timers`, once or with a cron expression. A timer can set its own `discussion_seconds` for long jobs.
+
+### Lead
+
+- Built-in lead prompts you have not edited are upgraded to the current version when the scheduler starts. Edited prompts are left alone.
+
+### Web console
+
+- When a discussion is active but nobody is working, the reply status says it is idle and until when it stays open.
+
+### Docs
+
+- Desktop app, Claude Code and DeepSeek Harness guides, in English and Chinese.
+
 ## 0.4.0 - 2026-10-16
 
 ### Timers
