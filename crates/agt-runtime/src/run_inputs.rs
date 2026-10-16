@@ -170,6 +170,8 @@ pub(crate) fn take(
                 save_task(&store.connection, &input).map_err(unavailable)?;
                 continue;
             }
+            let zone =
+                crate::clock::zone(&agt_config::RuntimeConfig::load(home).map_err(unavailable)?);
             let mut messages = Vec::new();
             for id in &input.triggers {
                 let m = messaging
@@ -178,7 +180,7 @@ pub(crate) fn take(
                     .map_err(unavailable)?;
                 if m.deleted_at.is_none() && m.seq > cutoff {
                     messages.push(
-                        json!({"seq":m.seq,"message_id":m.id,"sender":m.sender_id,"body":m.body}),
+                        json!({"seq":m.seq,"message_id":m.id,"sender":m.sender_id,"body":m.body,"sent_at":crate::clock::local(m.created_at, &zone)}),
                     );
                 }
             }
