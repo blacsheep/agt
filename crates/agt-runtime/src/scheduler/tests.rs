@@ -1322,6 +1322,120 @@ fn external_fixture() -> (tempfile::TempDir, ToolService, String) {
 }
 #[cfg(unix)]
 #[test]
+fn deepseek_harness_agent_replies_through_acp_and_resumes_its_session() {
+    let (home, user, _) = fixture();
+    let path = home.path();
+    let exe = path.join("dsh-fixture");
+    write_executable(
+        &exe,
+        include_str!("../../../agt-harness/tests/fixtures/acp.py"),
+    );
+    agt_harness::HarnessStore::new(path)
+        .write_in(
+            &agt_core::CategoryName::default(),
+            "dsh",
+            &agt_harness::HarnessConfig {
+                engine: "deepseek-harness".into(),
+                executable: exe,
+                working_directory: path.into(),
+                model: None,
+                description: String::new(),
+                reasoning_effort: None,
+                sandbox: agt_harness::Sandbox::WorkspaceWrite,
+                timeout_seconds: 10,
+            },
+            true,
+        )
+        .unwrap();
+    AgentStore::new(path)
+        .update_in(&agt_core::CategoryName::default(), "a", |a| {
+            a.model = None;
+            a.harness = Some(agt_core::QualifiedRef::in_default(
+                agt_core::HarnessId::new("dsh"),
+            ));
+            Ok(())
+        })
+        .unwrap();
+    let chat = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut scheduler = begin(path, &user, &chat);
+    for (round, key) in ["first", "follow-up"].into_iter().enumerate() {
+        if round > 0 {
+            let sent = user
+                .call(
+                    "message_send",
+                    json!({"conversation":chat,"body":key,"request_key":key}),
+                )
+                .unwrap();
+            start_discussion(path, &chat, Some(sent["message"]["id"].as_str().unwrap())).unwrap();
+            scheduler.scan().unwrap();
+        }
+        let task = claim(&mut scheduler, "a");
+        execute(
+            path,
+            task.clone(),
+            &mut Answer(json!({})),
+            &CancellationToken::new(),
+        )
+        .unwrap();
+        let done = scheduler.store.get(&task.id).unwrap();
+        assert_eq!(done.state, TaskState::Completed, "{:?}", done.reason);
+    }
+    let replies: Vec<String> = im(path)
+        .unwrap()
+        .list_messages(
+            &ConversationId::new(&chat),
+            &PrincipalId::new("user"),
+            agt_im::MessageListOptions {
+                limit: 50,
+                before: None,
+                after: None,
+            },
+        )
+        .unwrap()
+        .messages
+        .into_iter()
+        .filter(|m| m.sender_id.as_str() == "a")
+        .map(|m| m.body)
+        .collect();
+    assert_eq!(replies.len(), 2);
+    assert!(
+        replies.iter().all(|r| r.ends_with("session:acp-session-1")),
+        "{replies:?}"
+    );
+    let session = crate::HarnessSessions::open(path)
+        .unwrap()
+        .current(path, "a", &chat)
+        .unwrap();
+    assert_eq!(session.session_id.as_deref(), Some("acp-session-1"));
+    assert_eq!(session.config.model.as_deref(), Some("deepseek-v4-flash"));
+    let frames: Vec<Value> = std::fs::read_to_string(path.join("protocol.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(
+        frames
+            .iter()
+            .filter(|f| f["method"] == "session/new")
+            .count(),
+        1
+    );
+    assert_eq!(
+        frames
+            .iter()
+            .filter(|f| f["method"] == "session/resume")
+            .count(),
+        1
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn claude_code_agent_replies_and_resumes_its_session() {
     let (home, user, _) = fixture();
     let path = home.path();

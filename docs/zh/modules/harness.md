@@ -2,7 +2,7 @@
 
 | 概览 | |
 | --- | --- |
-| **是什么** | 外部执行引擎（Codex 或 Claude Code）及其工作的项目目录 |
+| **是什么** | 外部执行引擎（Codex、Claude Code 或 DeepSeek Harness）及其工作的项目目录 |
 | **CLI** | `agt harness` |
 | **Agent 工具** | `kind: "harness"` 的 `resource_*`、`harness_models`、`harness_session_*` |
 | **Web 控制台** | **资源库** → Harness；Agent 表单中的**外部 Harness**；会话中的 `/model`、`/status` 等命令 |
@@ -15,7 +15,7 @@ Harness 让 Agent 运行在 [Codex](https://github.com/openai/codex) 上，而�
 
 agt 启动 `codex app-server`，为每个 Agent 在每个会话中保持一个 Codex 会话，把 Codex 的审批请求转发到 [审批队列](./permissions.md)，并把 Codex 的最终答复发布为 Agent 的回复。Codex 使用自己的登录和配置；agt 不保存 Codex 凭据。
 
-Harness 也可以改用 [Claude Code](../guide/claude-code.md)（`"engine": "claude-code"`）。agt 以无界面模式运行它，每一轮一个进程，以进程内 MCP 服务的方式把 agt 工具提供给它，并把它的权限请求发到同一个审批队列。
+Harness 也可以改用 [Claude Code](../guide/claude-code.md)（`"engine": "claude-code"`）。agt 以无界面模式运行它，每一轮一个进程，以进程内 MCP 服务的方式把 agt 工具提供给它，并把它的权限请求发到同一个审批队列。[DeepSeek Harness](../guide/deepseek-harness.md)（`"engine": "deepseek-harness"`）通过 Agent Client Protocol 驱动，每一轮把 agt 工具作为本机 HTTP MCP 服务挂载给它。
 
 ## 怎么用
 
@@ -58,8 +58,8 @@ agt harness models toolsmith
 
 | 字段 | 必填 | 默认值 | 含义 |
 | --- | --- | --- | --- |
-| `engine` | 是 | | `codex` 或 `claude-code` |
-| `executable` | 是 | | 已存在的 Codex 或 Claude Code 程序的绝对路径 |
+| `engine` | 是 | | `codex`、`claude-code` 或 `deepseek-harness` |
+| `executable` | 是 | | 已存在的 Codex、Claude Code 或 `dsh` 程序的绝对路径 |
 | `working_directory` | 是 | | 已存在目录的绝对路径 |
 | `sandbox` | 是 | | `read_only` 或 `workspace_write` |
 | `model` | 否 | Codex 的默认值 | 新会话的默认模型 |

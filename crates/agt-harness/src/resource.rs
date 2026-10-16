@@ -42,7 +42,7 @@ fn default_timeout() -> u64 {
 impl HarnessConfig {
     pub fn validate(&self) -> Result<()> {
         if !crate::ENGINES.contains(&self.engine.as_str()) {
-            bail!("supported execution engines: codex, claude-code");
+            bail!("supported execution engines: codex, claude-code, deepseek-harness");
         }
         if !self.executable.is_absolute() || !self.executable.is_file() {
             bail!("executable must be an existing absolute file path on the server");

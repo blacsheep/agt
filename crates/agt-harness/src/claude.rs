@@ -10,7 +10,6 @@ use crate::{
 };
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -94,21 +93,8 @@ impl ClaudeCode {
         mut approvals: Option<&mut dyn ApprovalHandler>,
     ) -> Result<String> {
         harness.validate()?;
-        let validators = execution
-            .tools
-            .iter()
-            .map(|tool| {
-                agt_core::tool_schema::ToolSchema::compile(&tool.input_schema)
-                    .map(|schema| (tool.name.clone(), schema))
-            })
-            .collect::<std::result::Result<BTreeMap<_, _>, _>>()?;
-        let tools: Vec<Value> = execution
-            .tools
-            .iter()
-            .map(
-                |t| json!({"name":t.name,"description":t.description,"inputSchema":t.input_schema}),
-            )
-            .collect();
+        let validators = crate::tools::validators(execution.tools)?;
+        let tools = crate::tools::descriptors(execution.tools);
         let process = Lines::spawn(
             Self::command(harness, &execution, approvals.is_some()),
             "Claude Code",
@@ -333,48 +319,14 @@ impl ClaudeCode {
                 "serverInfo": {"name": "agt", "version": env!("CARGO_PKG_VERSION")},
             }),
             Some("tools/list") => json!({"tools": state.tools}),
-            Some("tools/call") => {
-                let name = message["params"]["name"].as_str().unwrap_or("");
-                let arguments = message["params"]["arguments"].clone();
-                let call = format!("agt-{}", uuid_like(&id));
-                event(Event::ToolDetail {
-                    id: &call,
-                    item: &json!({"arguments": arguments}),
-                })?;
-                event(Event::Activity {
-                    tool_name: None,
-                    id: &call,
-                    kind: "framework",
-                    status: "running",
-                })?;
-                let outcome = match state.validators.get(name) {
-                    Some(validator) => validator
-                        .validate(&arguments)
-                        .map_err(anyhow::Error::from)
-                        .and_then(|()| tool(name, arguments)),
-                    None => Err(anyhow::anyhow!("tool unavailable")),
-                };
-                let success = outcome.is_ok();
-                let payload = match &outcome {
-                    Ok(value) => json!({"result": value}),
-                    Err(error) => json!({"error": error.to_string()}),
-                };
-                event(Event::ToolDetail {
-                    id: &call,
-                    item: &payload,
-                })?;
-                event(Event::Activity {
-                    tool_name: None,
-                    id: &call,
-                    kind: "framework",
-                    status: if success { "completed" } else { "failed" },
-                })?;
-                let text = match outcome {
-                    Ok(value) => value.to_string(),
-                    Err(error) => error.to_string(),
-                };
-                json!({"content":[{"type":"text","text":text}],"isError":!success})
-            }
+            Some("tools/call") => crate::tools::call(
+                &format!("agt-{}", uuid_like(&id)),
+                message["params"]["name"].as_str().unwrap_or(""),
+                message["params"]["arguments"].clone(),
+                state.validators,
+                event,
+                tool,
+            )?,
             // Notifications need no result; the control request still needs a reply.
             _ if message.get("id").is_none() => json!({}),
             _ => {
@@ -492,7 +444,7 @@ impl ClaudeCode {
 
 struct Turn<'a> {
     tools: &'a [Value],
-    validators: &'a BTreeMap<String, agt_core::tool_schema::ToolSchema>,
+    validators: &'a crate::tools::Validators,
     pending: Vec<Pending>,
     initialized: bool,
     init: String,

@@ -2,7 +2,7 @@
 
 | Overview | |
 | --- | --- |
-| **What it is** | An external execution engine (Codex or Claude Code) and the project directory it works in |
+| **What it is** | An external execution engine (Codex, Claude Code or DeepSeek Harness) and the project directory it works in |
 | **CLI** | `agt harness` |
 | **Agent tools** | `resource_*` with `kind: "harness"`, `harness_models`, `harness_session_*` |
 | **Web console** | **Resources** → Harness; **External harness** in the agent form; `/model`, `/status` and other commands in conversations |
@@ -15,7 +15,7 @@ A harness lets an agent run on [Codex](https://github.com/openai/codex) instead 
 
 agt starts `codex app-server`, keeps one Codex session per agent per conversation, forwards Codex's approval requests to the [approval queue](./permissions.md), and publishes Codex's final answer as the agent's reply. Codex uses its own login and configuration; agt stores no Codex credentials.
 
-A harness can use [Claude Code](../guide/claude-code.md) instead (`"engine": "claude-code"`). agt runs it headless, one process per turn, offers agt's tools to it as an in-process MCP server, and sends its permission prompts to the same approval queue.
+A harness can use [Claude Code](../guide/claude-code.md) instead (`"engine": "claude-code"`). agt runs it headless, one process per turn, offers agt's tools to it as an in-process MCP server, and sends its permission prompts to the same approval queue. [DeepSeek Harness](../guide/deepseek-harness.md) (`"engine": "deepseek-harness"`) is driven over the Agent Client Protocol, with agt's tools mounted as a loopback HTTP MCP server for each turn.
 
 ## How to use it
 
@@ -58,8 +58,8 @@ agt harness models toolsmith
 
 | Field | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `engine` | yes | | `codex` or `claude-code` |
-| `executable` | yes | | Absolute path of an existing Codex or Claude Code binary |
+| `engine` | yes | | `codex`, `claude-code` or `deepseek-harness` |
+| `executable` | yes | | Absolute path of an existing Codex, Claude Code or `dsh` binary |
 | `working_directory` | yes | | Absolute path of an existing directory |
 | `sandbox` | yes | | `read_only` or `workspace_write` |
 | `model` | no | Codex's default | Default model for new sessions |
