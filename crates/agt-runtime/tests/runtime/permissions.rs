@@ -99,11 +99,14 @@ fn switching_mode_releases_waiting_native_call_and_applies_to_next_call() {
     mount_resources(home.path(), "a");
     let mut config = agt_config::RuntimeConfig::load(home.path()).unwrap();
     config.permissions.mode = PermissionMode::Manual;
-    config.permissions.request_timeout_seconds = 5;
+    // Switching the mode releases the waiting call, so a long timeout costs nothing
+    // and keeps slow Windows runners from timing out first.
+    config.permissions.request_timeout_seconds = 60;
     config.save(home.path()).unwrap();
     let path = home.path().to_owned();
     let changer = std::thread::spawn(move || {
-        for _ in 0..200 {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while std::time::Instant::now() < deadline {
             if !ApprovalStore::open(&path)
                 .unwrap()
                 .list(None, None)
