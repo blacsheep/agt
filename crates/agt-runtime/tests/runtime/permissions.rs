@@ -124,16 +124,16 @@ fn switching_mode_releases_waiting_native_call_and_applies_to_next_call() {
             "default/a",
             calls(vec![call(
                 "one",
-                "framework_resource_list",
-                json!({"kind":"harness"}),
+                "framework_resource_write",
+                json!({"kind":"prompt","reference":"one","create":true,"data":{"text":"one"}}),
             )]),
         ),
         (
             "default/a",
             calls(vec![call(
                 "two",
-                "framework_resource_list",
-                json!({"kind":"harness"}),
+                "framework_resource_write",
+                json!({"kind":"prompt","reference":"two","create":true,"data":{"text":"two"}}),
             )]),
         ),
         ("default/a", text("done")),
@@ -154,5 +154,47 @@ fn switching_mode_releases_waiting_native_call_and_applies_to_next_call() {
             .iter()
             .all(|a| a.decision_origin == Some(DecisionOrigin::AutoAllow)
                 && a.delivery == Delivery::Resolved)
+    );
+}
+
+#[test]
+fn framework_reads_skip_approval_even_in_manual_mode() {
+    let home = home();
+    mount_resources(home.path(), "a");
+    let mut config = agt_config::RuntimeConfig::load(home.path()).unwrap();
+    config.permissions.mode = PermissionMode::Manual;
+    config.save(home.path()).unwrap();
+    let mut model = Script::new(vec![
+        (
+            "default/a",
+            calls(vec![
+                call("list", "framework_resource_list", json!({"kind":"harness"})),
+                call(
+                    "mounts",
+                    "framework_agent_mcp_list",
+                    json!({"agent":"default/a"}),
+                ),
+            ]),
+        ),
+        ("default/a", text("done")),
+    ]);
+    let run = Runtime::open(home.path(), &mut model, &DefaultMcpClientFactory)
+        .unwrap()
+        .run(request(), &CancellationToken::new())
+        .unwrap();
+    assert_eq!(run.state, RunState::Completed, "{:?}", run.error);
+    let transcript = &model.seen[1].1;
+    assert!(
+        transcript
+            .iter()
+            .filter(|v| v["role"] == "tool")
+            .all(|v| !v["content"].as_str().unwrap().contains("not executed"))
+    );
+    assert!(
+        ApprovalStore::open(home.path())
+            .unwrap()
+            .list(None, None)
+            .unwrap()
+            .is_empty()
     );
 }

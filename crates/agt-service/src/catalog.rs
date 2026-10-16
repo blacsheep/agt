@@ -43,6 +43,12 @@ impl ToolSpec {
     pub fn fenced(&self) -> bool {
         !self.external && !matches!(self.group, ToolGroup::Task | ToolGroup::Harness)
     }
+
+    /// Reads of agt's own data skip native approval: service authorization already
+    /// limits them to what the caller may see. Writes and external calls are reviewed.
+    pub fn needs_approval(&self) -> bool {
+        self.effect == Effect::Write || self.external
+    }
 }
 
 const fn spec(name: &'static str, group: ToolGroup, effect: Effect) -> ToolSpec {
