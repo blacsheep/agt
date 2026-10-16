@@ -36,7 +36,7 @@ try {
     state.conversation = chat;
     state.conversations = [{ conversation: chat }];
     state.boot.principals.push(...Array.from({length: 14}, (_, i) => ({id: 'sample-' + i, name: i === 0 ? 'tech_lead_长名称展示检查' : '成员 ' + i, kind: 'agent'})));
-    state.scheduler = { online: true, discussions: [{id: 'round', conversation: chat.id, state: 'active'}], tasks: Array.from({length: 14}, (_, i) => ({id: 'task-' + i, principal: 'sample-' + i, conversation: chat.id, discussion: 'round', state: i === 0 ? 'waiting' : i === 1 ? 'ready_to_reply' : 'silent', through_seq: 3, due_at: Date.now() + 30000, quiet: false, last_decision: {action: i === 0 ? 'wait' : i === 1 ? 'participate' : 'silent', reason_code: i === 0 ? 'observe_discussion' : 'already_answered', public_reason: i === 0 ? '示例说明：<script>window.injected = true</script>' + '等待其他成员补充评估。'.repeat(15) : '', decided_at: Date.now(), through_seq: 3, ...(i === 0 ? {wake: {type: 'after', seconds: 30}} : {})}})), usage: [] };
+    state.scheduler = { online: true, discussions: [{id: 'round', conversation: chat.id, state: 'active'}], tasks: Array.from({length: 14}, (_, i) => ({id: 'task-' + i, principal: 'sample-' + i, conversation: chat.id, discussion: 'round', state: i === 0 ? 'waiting' : i === 1 ? 'ready_to_reply' : 'silent', through_seq: 3, due_at: Date.now() + 30000, quiet: false, last_decision: {action: i === 0 ? 'wait' : i === 1 ? 'participate' : 'silent', reason_code: i === 0 ? 'observe_discussion' : 'already_answered', public_reason: i === 0 ? '示例说明：<script>window.injected = true</script>' + '等待其他成员补充评估。'.repeat(15) : '', decided_at: Date.now(), through_seq: 3, }, ...(i === 0 ? {blocked_on: ['sample-1']} : {})})), usage: [] };
     state.runs = [];
     renderReplyStatus(); renderActivity();
   `);

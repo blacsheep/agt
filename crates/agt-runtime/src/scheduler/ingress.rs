@@ -117,6 +117,7 @@ pub(crate) fn scan_inputs(home: &Path, store: &mut ScheduleStore) -> Result<()> 
                     work_input_id: message.metadata["input_request_id"]
                         .as_str()
                         .map(str::to_owned),
+                    blocked_on: Vec::new(),
                 })?;
             }
         }

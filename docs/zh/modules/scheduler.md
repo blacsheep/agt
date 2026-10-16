@@ -81,7 +81,7 @@ agt schedule end <会话>
 | `evaluating` | 正在判断是否参与 |
 | `ready_to_reply` | 已决定回复，等待轮到自己 |
 | `responding` | 正在回复 |
-| `waiting` | 等待计时器或条件 |
+| `waiting` | 等待正在做事的成员完成当前一步，或等待新消息 |
 | `input` | 等待问题的答复（任务） |
 | `suspended` | 保存了检查点，正在等待（任务） |
 | `limited` | 达到回复上限；人发送新消息会重置 |

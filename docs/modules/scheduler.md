@@ -81,7 +81,7 @@ Run only one scheduler per home. If the Web console is running, it already runs 
 | `evaluating` | Deciding whether to take part |
 | `ready_to_reply` | Decided to reply, waiting for its turn |
 | `responding` | Replying |
-| `waiting` | Waiting for a timer or condition |
+| `waiting` | Waiting for a working member to finish its step, or for a new message |
 | `input` | Waiting for an answer to a question (tasks) |
 | `suspended` | Waiting with a saved checkpoint (tasks) |
 | `limited` | Reached the reply limit; a new message from a person resets it |

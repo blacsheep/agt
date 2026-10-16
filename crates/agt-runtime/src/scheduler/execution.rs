@@ -34,7 +34,7 @@ pub(crate) fn execute(
         store.update(&task, now_ms())?;
         return Ok(());
     }
-    let Some(input) = prepare_input(
+    let Some((input, active)) = prepare_input(
         home,
         &mut store,
         &mut task,
@@ -53,7 +53,7 @@ pub(crate) fn execute(
         ..
     } = admitted;
     if task.state == TaskState::Evaluating {
-        return engine.evaluate(&mut store, &mut task, &mut scheduled_model, &input);
+        return engine.evaluate(&mut store, &mut task, &mut scheduled_model, &input, &active);
     }
     let depth = trigger.metadata["automated_depth"]
         .as_u64()
@@ -107,21 +107,22 @@ fn prepare_input(
     engine: &ScheduledEngine,
     model: &mut dyn ModelClient,
     token: &CancellationToken,
-) -> Result<Option<String>> {
+) -> Result<Option<(String, Vec<String>)>> {
     let Some(context) =
         engine.prepare_context(home, store, task, &admitted.messaging.im, model, token)?
     else {
         return Ok(None);
     };
+    let active = store.active_members(&task.conversation, &task.principal)?;
+    // Only members who are working: a member who is deciding or waiting is not
+    // something to wait for.
     let presence: Vec<_> = store
         .tasks()?
         .into_iter()
         .filter(|t| {
-            t.conversation == task.conversation
-                && t.id != task.id
-                && matches!(t.state, TaskState::Evaluating | TaskState::ReadyToReply | TaskState::Responding | TaskState::Waiting)
+            t.conversation == task.conversation && active.contains(&t.principal) && t.is_active()
         })
-        .map(|t| json!({"principal":t.principal,"state":t.state,"wake_at":t.due_at,"waiting_for_quiet":t.quiet}))
+        .map(|t| json!({"principal":t.principal,"state":t.state}))
         .collect();
     let history = engine.input_history(&context, task);
     let instruction =
@@ -129,5 +130,5 @@ fn prepare_input(
     let report_obligation = crate::work::notification_obligation(home, store, task)?;
     let input=json!({"instruction":instruction,"report_obligation":report_obligation,"discussion":task.discussion,"last_decision":task.reason,"now":now_ms(),"your_principal":task.principal,"conversation":task.conversation,"trigger":{"id":admitted.trigger.id},"messages":admitted.batch,"history":history,"conversation_summary":context["summary"],"context_reset_through_seq":context["reset_through_seq"],"presence":presence}).to_string();
     engine.validate_input(&input)?;
-    Ok(Some(input))
+    Ok(Some((input, active)))
 }

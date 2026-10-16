@@ -12,8 +12,9 @@ pub(super) fn evaluate(
     model: &mut dyn ModelClient,
     agent: &ResolvedAgent,
     input: &str,
+    active: &[String],
 ) -> Result<()> {
-    let result = decide(model, agent, input);
+    let result = decide(model, agent, input, !active.is_empty());
     let decision = match result {
         Ok(value) => value,
         Err(error) => {
@@ -26,7 +27,7 @@ pub(super) fn evaluate(
             return Ok(());
         }
     };
-    task.finish_scheduled_decision(&decision)?;
+    task.finish_scheduled_decision(&decision, active)?;
     store.update(task, now_ms())?;
     Ok(())
 }
