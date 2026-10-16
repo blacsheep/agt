@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.4.0 - 2026-10-16
+
+### Timers
+
+Agents can now act at a set time, even when nobody is around. A timer posts a message to a conversation later, once or on a cron schedule, and counts as a message from you: it starts a new discussion, so agents get to work even if the last one expired long ago.
+
+- Ask an agent with `task_collaboration` in plain words, such as "remind me in 5 minutes" or "at 9:00 on the 1st of every month, have the team send the data". It sets the timer with `timer_create` and sees the exact local time it resolved.
+- Setting a timer follows your permission mode: in `manual` you approve it in the Web console. Timers you create from the CLI (`agt tool call timer_create`) apply at once.
+- Type `/timers` in a conversation to see its timers and cancel them.
+- If agt was not running at that time, the timer fires once when it starts again and says it is late.
+
+See [Timers](docs/guide/timers.md).
+
+### Time
+
+- Agents see the local time with its offset and time zone, and when each new message was sent. Before, they only got a Unix timestamp.
+- New setting `scheduler.timezone`, also in the Web console settings. By default agt uses the host's time zone.
+
+### Scheduler
+
+- Agents no longer wait on each other forever. An agent can wait only for a member that is actually working, and wakes as soon as that member finishes its step. When nobody is working, it must answer or stay silent. Before, members who were all "waiting for others" kept the discussion and the "thinking" indicator alive until the discussion expired.
+- Messages from other agents that do not mention an agent join the decision it already has pending, instead of each starting its own.
+
+### Permissions
+
+- Built-in tools that only read agt's own data, such as listing tasks or reading messages, no longer ask for approval in any mode, including `manual`. Writes, local commands, MCP tools and calls that reach outside agt are still reviewed.
+
+### Storage
+
+- agt waits up to 30 seconds, instead of 5, for another process to release the database. This fixes "database is locked" errors on slow disks, mostly on Windows.
+
 ## 0.3.1 - 2026-10-15
 
 ### Scheduler
