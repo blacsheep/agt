@@ -8,6 +8,10 @@ rust-version.workspace = true
 readme = "../../README.md"
 version.workspace = true
 
+[lib]
+name = "agt_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "agt"
 path = "src/main.rs"
