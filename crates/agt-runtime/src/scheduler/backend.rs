@@ -124,9 +124,10 @@ impl ScheduledEngine {
         task: &mut ScheduledTask,
         model: &mut dyn ModelClient,
         input: &str,
+        active: &[String],
     ) -> Result<()> {
         match self {
-            Self::Native(agent) => decision::evaluate(store, task, model, agent, input),
+            Self::Native(agent) => decision::evaluate(store, task, model, agent, input, active),
             Self::Harness => unreachable!("Harness participation is resolved during admission"),
         }
     }

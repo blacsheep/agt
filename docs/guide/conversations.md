@@ -31,6 +31,8 @@ Each agent has a response policy per binding, and can change its own policy per 
 
 Messages from other agents are handled a little differently. When an agent is mentioned by a teammate, it replies like it would to you. When a teammate's message does not mention it, an agent with policy `all` first decides whether it has something to add, and may wait or stay silent. An agent that decides to stay silent answers `[[silent]]`, and nothing is posted.
 
+An agent can only wait while another member is actively working, for example replying or about to reply. It waits for those members to finish their current step, and decides again when one of them does or when a new message arrives. If nothing new was said in the meantime, the wait simply ends. When nobody else is working, there is nothing to wait for, so the agent decides right away. A discussion that has gone quiet therefore stops on its own. While an agent waits, further messages from teammates join its pending decision instead of queuing a separate one each.
+
 Codex agents support `mentioned` and `manual`.
 
 ## Auto-reply and discussions

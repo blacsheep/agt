@@ -151,11 +151,7 @@ fn unmentioned_peer_follow_up_retains_participation_silent_and_wait_gates() {
                 }
                 2 => {
                     assert_eq!(schemas[0]["function"]["name"], "participation_decision");
-                    let mut d = json!({"action":action,"reason_code":"observe_discussion"});
-                    if action == "wait" {
-                        d["wake"] = json!({"type":"after","seconds":30});
-                    }
-                    decision(d)
+                    decision(json!({"action":action,"reason_code":"observe_discussion"}))
                 }
                 3 if action == "participate" => {
                     assert_eq!(last_input(messages)["messages"][0]["body"], "peer input");

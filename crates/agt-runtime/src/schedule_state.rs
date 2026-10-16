@@ -1,11 +1,14 @@
 //! Scheduled-task transitions. These operations only mutate the in-memory record.
 //! Callers retain admission checks, transactions, accounting and persistence.
 use crate::TaskState;
-use crate::participation::{ParticipationDecision, WakeCondition};
+use crate::participation::ParticipationDecision;
 use crate::schedule_store::{RecordedDecision, now_ms};
 use crate::{RunRecord, RunState, ScheduledTask};
 use agt_service::InputMode;
 use serde_json::Value;
+
+/// Upper bound for a wait whose members never settle; normally a peer finishing wakes it.
+pub(crate) const WAIT_WATCHDOG_MS: i64 = 300_000;
 
 /// Reasons to release a claimed task without consuming its reply allowance.
 /// The store still owns the atomic refund and epoch check.
@@ -138,9 +141,11 @@ impl ScheduledTask {
     }
 
     /// A scheduled decision releases its slot; participation never executes inline.
+    /// A wait blocks on the members who were actively working when it was decided.
     pub(crate) fn finish_scheduled_decision(
         &mut self,
         decision: &ParticipationDecision,
+        active: &[String],
     ) -> serde_json::Result<()> {
         self.record_decision(decision)?;
         match decision {
@@ -150,36 +155,31 @@ impl ScheduledTask {
                 self.due_at = now_ms();
                 self.quiet = false;
             }
-            ParticipationDecision::Wait { wake, .. } => {
-                self.wait_for(wake);
+            ParticipationDecision::Wait { .. } => {
+                self.wait_on(active);
                 self.decision_required = true;
             }
         }
         Ok(())
     }
 
-    fn wait_for(&mut self, wake: &WakeCondition) {
+    /// Block until one of `members` finishes its current step or a new message arrives.
+    /// The watchdog only covers a member that never settles.
+    fn wait_on(&mut self, members: &[String]) {
         self.state = TaskState::Waiting;
-        match wake {
-            WakeCondition::After { seconds } => {
-                self.quiet = false;
-                self.due_at = now_ms() + i64::from(*seconds) * 1000;
-                self.deadline = self.due_at;
-            }
-            WakeCondition::ConversationQuiet {
-                quiet_seconds,
-                max_wait_seconds,
-            } => {
-                self.quiet = true;
-                self.quiet_ms = i64::from(*quiet_seconds) * 1000;
-                self.due_at = now_ms() + self.quiet_ms;
-                self.deadline = now_ms() + i64::from(*max_wait_seconds) * 1000;
-            }
-        }
+        self.blocked_on = members.to_vec();
+        self.quiet = false;
+        self.due_at = now_ms() + WAIT_WATCHDOG_MS;
+        self.deadline = self.due_at;
     }
 
-    pub(crate) fn wait_from_input(&mut self, wake: &WakeCondition) {
-        self.wait_for(wake);
+    pub(crate) fn end_quiet_wait(&mut self) {
+        self.state = TaskState::Silent;
+        self.reason = Some("wait ended with no new messages".into());
+    }
+
+    pub(crate) fn wait_from_input(&mut self, members: &[String]) {
+        self.wait_on(members);
         self.owner = None;
     }
 
@@ -204,6 +204,32 @@ impl ScheduledTask {
             serde_json::to_value(mode)?
         ));
         Ok(())
+    }
+
+    /// Whether this task means its member is working now. A queued task counts only when
+    /// it will run without first deciding to participate; deciding and waiting do not.
+    pub(crate) fn is_active(&self) -> bool {
+        match self.state {
+            TaskState::ReadyToReply | TaskState::Responding | TaskState::Input => true,
+            TaskState::Queued => !self.decision_required,
+            _ => false,
+        }
+    }
+
+    /// Join a newer peer message to this pending decision. The next decision sees both
+    /// messages, and the reply, if any, answers the newest.
+    pub(crate) fn absorb(&mut self, newer: &Self) {
+        self.triggers.extend(newer.triggers.iter().cloned());
+        self.deliveries.extend(newer.deliveries.iter().copied());
+        self.message = newer.message.clone();
+        if self.state == TaskState::Waiting {
+            self.due_at = newer.due_at;
+        } else {
+            self.due_at = self.due_at.min(newer.due_at);
+        }
+        self.state = TaskState::Queued;
+        self.blocked_on.clear();
+        self.quiet = false;
     }
 
     pub(crate) fn is_terminal(&self) -> bool {

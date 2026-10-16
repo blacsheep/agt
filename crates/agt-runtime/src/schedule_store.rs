@@ -84,6 +84,9 @@ pub struct ScheduledTask {
     pub work_event: Option<String>,
     #[serde(default)]
     pub work_input_id: Option<String>,
+    /// Members this waiting task waits for; any of them settling wakes it.
+    #[serde(default)]
+    pub blocked_on: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -363,6 +366,17 @@ impl ScheduleStore {
             return Ok(());
         }
         let delivery = task.deliveries[0];
+        if let Some(mut pending) = pending_decision(&tx, &task)? {
+            pending.absorb(&task);
+            save_task(&tx, &pending)?;
+            tx.execute(
+                "INSERT INTO assigned VALUES(?1,?2)",
+                params![delivery, pending.id],
+            )?;
+            tx.commit()?;
+            agt_storage::wake::notify(&self.home);
+            return Ok(());
+        }
         tx.execute(
             "INSERT INTO tasks VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
             params![
@@ -385,6 +399,18 @@ impl ScheduleStore {
         tx.commit()?;
         agt_storage::wake::notify(&self.home);
         Ok(())
+    }
+
+    /// Members other than `except` who are working in `conversation` now.
+    pub(crate) fn active_members(&self, conversation: &str, except: &str) -> Result<Vec<String>> {
+        let mut members: Vec<String> = active_tasks(&self.connection, conversation)?
+            .into_iter()
+            .map(|t| t.principal)
+            .filter(|p| p != except)
+            .collect();
+        members.sort();
+        members.dedup();
+        Ok(members)
     }
 
     pub(crate) fn candidates(&self) -> Result<Vec<ScheduledTask>> {
@@ -667,6 +693,88 @@ fn query_tasks(c: &Connection, sql: &str) -> Result<Vec<ScheduledTask>> {
         .collect()
 }
 pub(crate) fn save_task(c: &Connection, t: &ScheduledTask) -> Result<()> {
+    write_task(c, t)?;
+    crate::run_inputs::settle(c, t)?;
+    if t.state == TaskState::Waiting || !t.is_active() {
+        release_waiters(c, &t.conversation)?;
+    }
+    Ok(())
+}
+
+/// Most pending peer messages a decision task absorbs before new ones get their own task.
+const MERGED_TRIGGERS: usize = 20;
+
+/// The pending decision task a new peer message should join instead of starting another
+/// one for the same member, conversation and discussion. Direct work and replies to
+/// people or mentions keep their own tasks.
+fn pending_decision(c: &Connection, task: &ScheduledTask) -> Result<Option<ScheduledTask>> {
+    if !task.decision_required || task.work_id.is_some() {
+        return Ok(None);
+    }
+    let mut stmt = c.prepare(
+        "SELECT record FROM tasks WHERE principal=?1 AND conversation=?2 AND discussion=?3 AND state IN ('queued','waiting') AND json_extract(record,'$.decision_required')=1 AND json_extract(record,'$.work_id') IS NULL ORDER BY rowid DESC LIMIT 1",
+    )?;
+    let found = stmt
+        .query_row(
+            params![task.principal, task.conversation, task.discussion],
+            |r| r.get::<_, String>(0),
+        )
+        .optional()?;
+    Ok(found
+        .map(|r| serde_json::from_str::<ScheduledTask>(&r))
+        .transpose()?
+        .filter(|t| t.triggers.len() < MERGED_TRIGGERS))
+}
+
+/// Tasks whose member is working in `conversation`: replying, about to reply, steering a
+/// running reply, or queued to answer without a participation decision.
+fn active_tasks(c: &Connection, conversation: &str) -> Result<Vec<ScheduledTask>> {
+    let mut stmt = c.prepare(
+        "SELECT record FROM tasks WHERE conversation=?1 AND state IN ('queued','ready_to_reply','responding','input')",
+    )?;
+    let records = stmt
+        .query_map([conversation], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut tasks = Vec::new();
+    for record in records {
+        let task: ScheduledTask = serde_json::from_str(&record)?;
+        if task.is_active() {
+            tasks.push(task);
+        }
+    }
+    Ok(tasks)
+}
+
+/// Make a waiting task due as soon as any member it waits on has stopped working.
+/// Runs on every save that can end someone's work, and when a wait is registered,
+/// so a member that finished before the wait was saved still wakes it.
+fn release_waiters(c: &Connection, conversation: &str) -> Result<()> {
+    let mut stmt = c.prepare(
+        "SELECT record FROM tasks WHERE conversation=?1 AND state='waiting' AND json_array_length(json_extract(record,'$.blocked_on'))>0",
+    )?;
+    let waiting = stmt
+        .query_map([conversation], |r| r.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if waiting.is_empty() {
+        return Ok(());
+    }
+    let active: std::collections::HashSet<String> = active_tasks(c, conversation)?
+        .into_iter()
+        .map(|t| t.principal)
+        .collect();
+    let now = now_ms();
+    for record in waiting {
+        let mut task: ScheduledTask = serde_json::from_str(&record)?;
+        if task.due_at > now && task.blocked_on.iter().any(|p| !active.contains(p)) {
+            task.due_at = now;
+            task.blocked_on.clear();
+            write_task(c, &task)?;
+        }
+    }
+    Ok(())
+}
+
+fn write_task(c: &Connection, t: &ScheduledTask) -> Result<()> {
     c.execute(
         "UPDATE tasks SET state=?2,due=?3,quiet=?4,version=?5,owner=?6,record=?7 WHERE id=?1",
         params![
@@ -679,7 +787,6 @@ pub(crate) fn save_task(c: &Connection, t: &ScheduledTask) -> Result<()> {
             serde_json::to_string(t)?
         ],
     )?;
-    crate::run_inputs::settle(c, t)?;
     Ok(())
 }
 
@@ -713,6 +820,7 @@ mod tests {
             work_notification: false,
             work_event: None,
             work_input_id: None,
+            blocked_on: Vec::new(),
         }
     }
     fn fixture() -> (tempfile::TempDir, ScheduleStore) {
@@ -741,11 +849,12 @@ mod tests {
         let mut waiting = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
         let decision = serde_json::from_value(serde_json::json!({
             "action":"wait", "reason_code":"observe_discussion",
-            "public_reason":"waiting for additional information",
-            "wake":{"type":"conversation_quiet","quiet_seconds":3,"max_wait_seconds":20}
+            "public_reason":"waiting for additional information"
         }))
         .unwrap();
-        waiting.finish_scheduled_decision(&decision).unwrap();
+        waiting
+            .finish_scheduled_decision(&decision, &["b".into()])
+            .unwrap();
         let audit = serde_json::to_value(&waiting.last_decision).unwrap();
         assert!(store.update(&waiting, 1).unwrap());
         assert_eq!(store.status(1).unwrap().usage[0].replies, 0);
@@ -765,6 +874,51 @@ mod tests {
         assert_eq!(next.state, TaskState::Evaluating);
         assert_eq!(next.usage_epoch, 2);
         assert_eq!(store.status(3).unwrap().usage[0].replies, 0);
+    }
+
+    #[test]
+    fn only_working_members_are_active_and_a_settled_member_wakes_its_waiters() {
+        let (_home, mut store) = fixture();
+        // b replies without deciding first; a decides, then waits for b.
+        store.ingest(task(1, "b", "chat", false)).unwrap();
+        store.ingest(task(2, "a", "chat", true)).unwrap();
+        store.ingest(task(3, "c", "chat", true)).unwrap();
+        assert_eq!(store.active_members("chat", "a").unwrap(), vec!["b"]);
+        let mut a = store.claim("2", "scheduler:one", 0).unwrap().unwrap();
+        assert!(store.active_members("chat", "b").unwrap().is_empty());
+        let wait = serde_json::from_value(
+            serde_json::json!({"action":"wait","reason_code":"observe_discussion"}),
+        )
+        .unwrap();
+        a.finish_scheduled_decision(&wait, &["b".into()]).unwrap();
+        assert!(store.update(&a, 0).unwrap());
+        let a = store.get("2").unwrap();
+        assert_eq!(a.blocked_on, vec!["b"]);
+        assert!(a.due_at > now_ms());
+        // A waiting member is not someone to wait for.
+        assert_eq!(store.active_members("chat", "c").unwrap(), vec!["b"]);
+        let mut b = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
+        assert_eq!(store.get("2").unwrap().state, TaskState::Waiting);
+        b.state = TaskState::Completed;
+        assert!(store.update(&b, 0).unwrap());
+        let a = store.get("2").unwrap();
+        assert!(a.due_at <= now_ms());
+        assert!(a.blocked_on.is_empty());
+    }
+
+    #[test]
+    fn a_wait_saved_after_its_member_settled_is_due_at_once() {
+        let (_home, mut store) = fixture();
+        store.ingest(task(1, "a", "chat", true)).unwrap();
+        let mut a = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
+        let wait = serde_json::from_value(
+            serde_json::json!({"action":"wait","reason_code":"observe_discussion"}),
+        )
+        .unwrap();
+        // b was working when the decision started and has finished since.
+        a.finish_scheduled_decision(&wait, &["b".into()]).unwrap();
+        assert!(store.update(&a, 0).unwrap());
+        assert!(store.get("1").unwrap().due_at <= now_ms());
     }
 
     #[test]
@@ -812,7 +966,7 @@ mod tests {
     }
 
     #[test]
-    fn pending_inputs_are_independent_and_idempotent_across_restart() {
+    fn pending_peer_inputs_merge_idempotently_across_restart() {
         let (home, mut store) = fixture();
         store.ingest(task(1, "a", "chat", true)).unwrap();
         let mut waiting = store.claim("1", "scheduler:one", 0).unwrap().unwrap();
@@ -821,11 +975,21 @@ mod tests {
         store.update(&waiting, 0).unwrap();
         drop(store);
         let mut store = ScheduleStore::open(home.path()).unwrap();
-        store.ingest(task(2, "a", "chat", true)).unwrap();
-        store.ingest(task(2, "a", "chat", true)).unwrap();
-        assert_eq!(store.get("1").unwrap().deliveries, vec![1]);
-        assert_eq!(store.get("1").unwrap().due_at, 30_000);
-        assert_eq!(store.get("2").unwrap().deliveries, vec![2]);
+        let mut newer = task(2, "a", "chat", true);
+        newer.due_at = 50;
+        store.ingest(newer.clone()).unwrap();
+        store.ingest(newer).unwrap();
+        let merged = store.get("1").unwrap();
+        assert_eq!(merged.deliveries, vec![1, 2]);
+        assert_eq!(merged.triggers, vec!["message-1", "message-2"]);
+        assert_eq!(merged.message, "message-2");
+        assert_eq!(merged.state, TaskState::Queued);
+        assert_eq!(merged.due_at, 50);
+        assert!(store.get("2").is_err());
+        assert!(store.assigned(2).unwrap());
+        // Another member's message and replies that skip the decision keep their own task.
+        store.ingest(task(4, "b", "chat", true)).unwrap();
+        assert_eq!(store.get("4").unwrap().deliveries, vec![4]);
         store.ingest(task(3, "a", "chat", false)).unwrap();
         let urgent = store.claim("3", "scheduler:one", 100).unwrap().unwrap();
         assert_eq!(urgent.state, TaskState::Responding);

@@ -232,8 +232,9 @@ pub(crate) fn decide(
                 task.state = TaskState::Silent;
                 false
             }
-            ParticipationDecision::Wait { wake, .. } => {
-                task.wait_from_input(wake);
+            ParticipationDecision::Wait { .. } => {
+                // This member's own running reply is the work being waited for.
+                task.wait_from_input(std::slice::from_ref(&parent.principal));
                 false
             }
         };

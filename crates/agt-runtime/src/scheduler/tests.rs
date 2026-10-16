@@ -264,12 +264,52 @@ fn peer_task(home: &Path, user: &ToolService, chat: &str) -> (Scheduler, Schedul
     (scheduler, task)
 }
 
+/// Give `principal` a reply it will run without deciding first, so it counts as working.
+fn keep_busy(scheduler: &Scheduler, like: &ScheduledTask, principal: &str) -> ScheduledTask {
+    let mut busy = like.clone();
+    busy.id = format!("busy-{principal}");
+    busy.principal = principal.into();
+    busy.deliveries = vec![900_000];
+    busy.state = TaskState::Queued;
+    busy.decision_required = false;
+    busy.owner = None;
+    busy.due_at = now_ms() + 3_600_000;
+    scheduler
+        .store
+        .connection
+        .execute(
+            "INSERT INTO tasks VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            rusqlite::params![
+                busy.id,
+                busy.discussion,
+                busy.principal,
+                busy.conversation,
+                busy.state,
+                busy.due_at,
+                busy.quiet,
+                busy.version,
+                busy.owner,
+                serde_json::to_string(&busy).unwrap()
+            ],
+        )
+        .unwrap();
+    busy
+}
+
+struct NoModel;
+impl ModelClient for NoModel {
+    fn complete(&mut self, _: &ResolvedAgent, _: &[Value], _: &[Value]) -> crate::Result<Value> {
+        panic!("a wait that ends with nothing new must not call the model")
+    }
+}
+
 #[test]
-fn model_wait_is_durable_and_cannot_be_replayed_before_due() {
+fn model_wait_blocks_on_a_working_member_until_it_settles() {
     let (home, user, chat) = fixture();
     let (scheduler, task) = peer_task(home.path(), &user, &chat);
+    let mut busy = keep_busy(&scheduler, &task, "a");
     let answer = decision(
-        json!({"action":"wait","reason_code":"observe_discussion","public_reason":"先等待其他成员给出评估。","wake":{"type":"after","seconds":30}}),
+        json!({"action":"wait","reason_code":"observe_discussion","public_reason":"先等待其他成员给出评估。"}),
     );
     execute(
         home.path(),
@@ -280,20 +320,18 @@ fn model_wait_is_durable_and_cannot_be_replayed_before_due() {
     .unwrap();
     let waiting = scheduler.store.get(&task.id).unwrap();
     assert_eq!(waiting.state, TaskState::Waiting);
-    assert!(waiting.due_at > now_ms() + 29_000);
+    assert_eq!(waiting.blocked_on, vec!["a"]);
+    assert!(waiting.due_at > now_ms() + 290_000);
     drop(scheduler);
     let mut restarted = Scheduler::open(home.path(), 3).unwrap();
-    assert_eq!(
-        restarted.store.get(&task.id).unwrap().state,
-        TaskState::Waiting
-    );
     let saved = serde_json::to_value(restarted.store.get(&task.id).unwrap()).unwrap();
+    assert_eq!(saved["state"], "waiting");
     assert_eq!(saved["last_decision"]["action"], "wait");
     assert_eq!(
         saved["last_decision"]["public_reason"],
         "先等待其他成员给出评估。"
     );
-    assert_eq!(saved["last_decision"]["wake"]["seconds"], 30);
+    assert!(saved["last_decision"].get("wake").is_none());
     assert_eq!(saved["last_decision"]["through_seq"], task.through_seq);
     assert!(saved["last_decision"]["decided_at"].as_i64().unwrap() > 0);
     assert!(
@@ -302,6 +340,107 @@ fn model_wait_is_durable_and_cannot_be_replayed_before_due() {
             .claim(&task.id, &restarted.owner, now_ms())
             .unwrap()
             .is_none()
+    );
+    // a settles without saying anything: b wakes, sees nothing new, and stops waiting.
+    busy.state = TaskState::Silent;
+    crate::schedule_store::save_task(&restarted.store.connection, &busy).unwrap();
+    let woken = restarted
+        .store
+        .claim(&task.id, &restarted.owner, now_ms())
+        .unwrap()
+        .expect("settled member wakes the wait");
+    assert_eq!(woken.state, TaskState::Evaluating);
+    execute(home.path(), woken, &mut NoModel, &CancellationToken::new()).unwrap();
+    let ended = restarted.store.get(&task.id).unwrap();
+    assert_eq!(ended.state, TaskState::Silent);
+    assert_eq!(
+        ended.reason.as_deref(),
+        Some("wait ended with no new messages")
+    );
+}
+
+#[test]
+fn wait_is_unavailable_when_nobody_is_working() {
+    struct Offered(Vec<Value>);
+    impl ModelClient for Offered {
+        fn complete(
+            &mut self,
+            _: &ResolvedAgent,
+            _: &[Value],
+            tools: &[Value],
+        ) -> crate::Result<Value> {
+            self.0 = tools.to_vec();
+            Ok(decision(
+                json!({"action":"wait","reason_code":"observe_discussion"}),
+            ))
+        }
+    }
+    let (home, user, chat) = fixture();
+    let (scheduler, task) = peer_task(home.path(), &user, &chat);
+    let mut model = Offered(Vec::new());
+    execute(
+        home.path(),
+        task.clone(),
+        &mut model,
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        model.0[0]["function"]["parameters"]["properties"]["action"]["enum"],
+        json!(["participate", "silent"])
+    );
+    let failed = scheduler.store.get(&task.id).unwrap();
+    assert_eq!(failed.state, TaskState::Failed);
+    assert!(failed.reason.unwrap().contains("wait is unavailable"));
+}
+
+#[test]
+fn a_new_peer_message_joins_the_waiting_decision() {
+    let (home, user, chat) = fixture();
+    let (mut scheduler, task) = peer_task(home.path(), &user, &chat);
+    keep_busy(&scheduler, &task, "a");
+    execute(
+        home.path(),
+        task.clone(),
+        &mut Answer(decision(
+            json!({"action":"wait","reason_code":"observe_discussion"}),
+        )),
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    Messaging::open(
+        home.path(),
+        Actor {
+            principal: PrincipalId::new("a"),
+            role: Role::Participant,
+            automated_depth: Some(1),
+        },
+    )
+    .unwrap()
+    .with_discussion(Some(task.discussion.clone()))
+    .send(MessageInput {
+        input_mode: None,
+        conversation: ConversationId::new(&chat),
+        body: "second idea".into(),
+        request_key: "peer-2".into(),
+        mentions: vec![],
+        reply_to: None,
+    })
+    .unwrap();
+    scheduler.scan().unwrap();
+    let merged = scheduler.store.get(&task.id).unwrap();
+    assert_eq!(merged.state, TaskState::Queued);
+    assert_eq!(merged.triggers.len(), 2);
+    assert!(merged.blocked_on.is_empty());
+    assert_eq!(
+        scheduler
+            .store
+            .tasks()
+            .unwrap()
+            .iter()
+            .filter(|t| t.principal == "b" && !t.is_terminal())
+            .count(),
+        1
     );
 }
 
@@ -878,7 +1017,7 @@ fn participation_retries_and_debits_each_actual_request() {
         task: task.clone(),
         token: CancellationToken::new(),
     };
-    let result = crate::participation::decide(&mut model, &agent, "test").unwrap();
+    let result = crate::participation::decide(&mut model, &agent, "test", true).unwrap();
     assert!(matches!(result, ParticipationDecision::Silent { .. }));
     assert_eq!(flaky.calls, 2);
     assert_eq!(

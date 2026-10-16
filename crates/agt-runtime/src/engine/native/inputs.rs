@@ -29,8 +29,12 @@ impl NativeRun<'_, '_> {
                     crate::CallRecord::new(self.record, None, json!({"input_task":input.task.id}));
                 audit.kind = "participation".into();
                 let mut audit = self.runtime.store.start_call(audit)?;
-                let result =
-                    crate::participation::decide(self.runtime.model, &self.agent, &decision_input);
+                let result = crate::participation::decide(
+                    self.runtime.model,
+                    &self.agent,
+                    &decision_input,
+                    true,
+                );
                 audit.finish(
                     match &result {
                         Ok(_) => crate::CallState::Succeeded,
