@@ -4,6 +4,7 @@ members = [
     "crates/agt-harness",
     "crates/agt-cli",
     "crates/agt-config",
+    "crates/agt-console",
     "crates/agt-core",
     "crates/agt-im",
     "crates/agt-inference",
@@ -30,6 +31,7 @@ version = "0.4.0"
 agt-harness = { path = "crates/agt-harness" }
 agt-agent = { path = "crates/agt-agent" }
 agt-config = { path = "crates/agt-config" }
+agt-console = { path = "crates/agt-console" }
 agt-core = { path = "crates/agt-core" }
 agt-im = { path = "crates/agt-im" }
 agt-inference = { path = "crates/agt-inference" }

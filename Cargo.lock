@@ -32,6 +32,7 @@ version = "0.4.0"
 dependencies = [
  "agt-agent",
  "agt-config",
+ "agt-console",
  "agt-core",
  "agt-harness",
  "agt-im",
@@ -44,10 +45,7 @@ dependencies = [
  "agt-skill",
  "agt-storage",
  "anyhow",
- "axum",
  "clap",
- "form_urlencoded",
- "futures-util",
  "libc",
  "serde",
  "serde_json",
@@ -71,6 +69,24 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "thiserror",
+]
+
+[[package]]
+name = "agt-console"
+version = "0.4.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "clap",
+ "form_urlencoded",
+ "futures-util",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
