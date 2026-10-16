@@ -247,7 +247,10 @@ impl PreparedHarness {
                 .iter()
                 .filter(|v| v["seq"].as_i64().unwrap_or(0) <= through)
                 .collect();
-            if crate::fingerprint(&serde_json::to_vec(&prefix)?) == source {
+            if crate::fingerprint(&serde_json::to_vec(
+                &crate::conversation_context::identity(prefix),
+            )?) == source
+            {
                 thread = saved_thread;
                 after = through;
             }

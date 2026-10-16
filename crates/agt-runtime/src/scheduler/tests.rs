@@ -1490,8 +1490,13 @@ fn external_group_transcript_preserves_senders_order_and_each_body_once() {
         .get_conversation(&ConversationId::new(&chat))
         .unwrap()
         .last_message_seq;
-    let history =
-        crate::conversation_context::visible_history(&im(path).unwrap(), &task, 0).unwrap();
+    let history = crate::conversation_context::visible_history(
+        &im(path).unwrap(),
+        &task,
+        0,
+        &jiff::tz::TimeZone::UTC,
+    )
+    .unwrap();
     task.triggers = history
         .iter()
         .map(|m| m["message_id"].as_str().unwrap().to_owned())

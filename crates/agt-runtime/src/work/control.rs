@@ -2,6 +2,7 @@ use super::*;
 use crate::DiscussionState;
 use agt_im::{ConversationId, ConversationState, ImStore, MessageId, PrincipalId, PrincipalKind};
 use agt_service::{Actor, BindingStore, ResponsePolicy, WorkControl};
+use anyhow::Context;
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
@@ -90,13 +91,8 @@ impl TaskControl {
                     item.priority_reason = Some(reason.into());
                 }
                 "task_defer" => {
-                    let not_before = args
-                        .get("not_before")
-                        .map(|v| {
-                            v.as_i64()
-                                .ok_or_else(|| anyhow::anyhow!("invalid not_before"))
-                        })
-                        .transpose()?;
+                    let not_before = crate::clock::moment(&self.home, args.get("not_before"))
+                        .context("invalid not_before")?;
                     let after = args
                         .get("after_task")
                         .map(|v| {
@@ -105,13 +101,8 @@ impl TaskControl {
                                 .ok_or_else(|| anyhow::anyhow!("invalid after_task"))
                         })
                         .transpose()?;
-                    let deadline = args
-                        .get("deadline")
-                        .map(|v| {
-                            v.as_i64()
-                                .ok_or_else(|| anyhow::anyhow!("invalid deadline"))
-                        })
-                        .transpose()?;
+                    let deadline = crate::clock::moment(&self.home, args.get("deadline"))
+                        .context("invalid deadline")?;
                     let now = crate::schedule_store::now_ms();
                     if not_before.is_some() == after.is_some() {
                         bail!("provide exactly one of not_before or after_task");

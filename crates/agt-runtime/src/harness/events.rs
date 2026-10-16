@@ -110,7 +110,7 @@ impl HarnessRun<'_> {
                     // Advance acknowledged input before releasing the execution fence.
                     execution_lock.fenced(|| {
                         session_db.execute("UPDATE harness_sessions SET through_seq=?2,source_hash=?3 WHERE scope=?1",
-                            params![scope, task.map(|t| t.through_seq).unwrap_or(0), crate::fingerprint(&serde_json::to_vec(&history)?)])?;
+                            params![scope, task.map(|t| t.through_seq).unwrap_or(0), crate::fingerprint(&serde_json::to_vec(&crate::conversation_context::identity(history.iter()))?)])?;
                         Ok(())
                     })?;
                 }

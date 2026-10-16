@@ -400,3 +400,36 @@ fn expired_barrier_notifies_once_without_releasing_queued_work() {
     assert_eq!(item["publication"], "published");
     assert_eq!(item["report"]["state"], "not_ready");
 }
+
+#[test]
+fn defer_accepts_a_local_time_in_the_workspace_zone() {
+    let (home, _scheduler, control, _, a, _) = setup();
+    let mut config = agt_config::RuntimeConfig::load(home.path()).unwrap();
+    config.scheduler.timezone = Some("Asia/Shanghai".into());
+    config.save(home.path()).unwrap();
+    let zone = jiff::tz::TimeZone::get("Asia/Shanghai").unwrap();
+    // Whole minutes, as a model would write them.
+    let at = (now_ms() / 60_000 + 10) * 60_000;
+    let local = jiff::Timestamp::from_millisecond(at)
+        .unwrap()
+        .to_zoned(zone)
+        .strftime("%Y-%m-%dT%H:%M")
+        .to_string();
+    assert!(
+        control
+            .call(
+                "task_defer",
+                json!({"task_id":a,"expected_revision":1,"not_before":"tomorrow","reason":"later"})
+            )
+            .is_err()
+    );
+    control
+        .call(
+            "task_defer",
+            json!({"task_id":a,"expected_revision":1,"not_before":local,"reason":"later"}),
+        )
+        .unwrap();
+    let item = view(&control, &a);
+    assert_eq!(item["deferred"]["not_before"], at);
+    assert_eq!(item["blocked_reason"], "deferred_until");
+}

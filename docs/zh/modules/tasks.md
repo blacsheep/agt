@@ -69,7 +69,7 @@ agt tool call --principal lead task_get --args '{"task_id":"<id>"}'
 | `task_yield` | `not_before`, `reason` | 保存检查点，暂停到指定时间 |
 | `task_input` | `question`, `deadline` | 向请求者提问，等待 `task_reply` 或截止时间 |
 
-时间使用 Unix 毫秒。等待期间 Agent 的执行槽会被释放给其他工作。截止时间到达不会取消被等待的任务，也不会编造结果。
+时间使用本地时间，例如工作空间时区（`scheduler.timezone`）下的 `2026-11-01T09:00`，也可以带偏移，例如 `+08:00`；`task_defer` 同样适用。早期版本要求的 Unix 毫秒仍然可用。等待期间 Agent 的执行槽会被释放给其他工作。截止时间到达不会取消被等待的任务，也不会编造结果。
 
 ### 定时任务
 

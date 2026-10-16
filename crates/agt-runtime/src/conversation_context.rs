@@ -10,6 +10,7 @@ pub(crate) fn visible_history(
     im: &ImStore,
     task: &ScheduledTask,
     cutoff: i64,
+    zone: &jiff::tz::TimeZone,
 ) -> crate::Result<Vec<Value>> {
     let mut result = Vec::new();
     let mut before = None;
@@ -35,7 +36,7 @@ pub(crate) fn visible_history(
             page.messages
                 .into_iter()
                 .filter(|m| m.seq > cutoff && m.seq <= task.through_seq && m.deleted_at.is_none())
-                .map(|m| json!({"seq":m.seq,"message_id":m.id,"sender":m.sender_id,"body":m.body})),
+                .map(|m| json!({"seq":m.seq,"message_id":m.id,"sender":m.sender_id,"body":m.body,"sent_at":crate::clock::local(m.created_at, zone)})),
         );
         before = page.next_cursor;
         if reached || before.is_none() {
@@ -45,8 +46,22 @@ pub(crate) fn visible_history(
     result.sort_by_key(|m| m["seq"].as_i64().unwrap_or(0));
     Ok(result)
 }
+/// History as its fingerprints see it. `sent_at` is left out: it is derived from the
+/// message, and summaries and Codex threads saved before it existed must stay valid.
+pub(crate) fn identity<'a>(history: impl IntoIterator<Item = &'a Value>) -> Vec<Value> {
+    history
+        .into_iter()
+        .map(|m| {
+            let mut m = m.clone();
+            if let Some(m) = m.as_object_mut() {
+                m.remove("sent_at");
+            }
+            m
+        })
+        .collect()
+}
 fn hash(history: &[Value]) -> String {
-    crate::fingerprint(json!(history).to_string().as_bytes())
+    crate::fingerprint(json!(identity(history)).to_string().as_bytes())
 }
 
 pub(crate) fn prepare(
@@ -66,7 +81,10 @@ pub(crate) fn prepare(
                 e,
             ))
         })?;
-    let history = visible_history(im, task, cutoff)?;
+    let zone = crate::clock::zone(&agt_config::RuntimeConfig::load(home).map_err(|e| {
+        RuntimeError::Configuration(crate::Reason::because("workspace configuration", e))
+    })?);
+    let history = visible_history(im, task, cutoff, &zone)?;
     let tail_budget = crate::context::input_budget(agent) / 4;
     let mut start = 0;
     let mut summary = String::new();
@@ -125,7 +143,7 @@ pub(crate) fn prepare(
         };
         crate::scheduler::guarded_store(home, task, |fence| {
             // A delete/leave/reset during inference must not revive stale or invisible data.
-            if visible_history(im, task, cutoff)? != history {
+            if visible_history(im, task, cutoff, &zone)? != history {
                 return Err(RuntimeError::Canceled);
             }
             ContextStore::save(
@@ -137,4 +155,22 @@ pub(crate) fn prepare(
         })?;
     }
     Ok(json!({"summary":summary,"history":&history[split..],"reset_through_seq":cutoff}))
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+
+    #[test]
+    fn sent_at_does_not_change_saved_fingerprints() {
+        let before = vec![json!({"seq":1,"message_id":"m1","sender":"user","body":"hi"})];
+        let after = vec![
+            json!({"seq":1,"message_id":"m1","sender":"user","body":"hi","sent_at":"2026-10-16T09:00:00+08:00"}),
+        ];
+        assert_eq!(hash(&before), hash(&after));
+        assert_eq!(
+            serde_json::to_vec(&identity(after.iter())).unwrap(),
+            serde_json::to_vec(&before).unwrap()
+        );
+    }
 }

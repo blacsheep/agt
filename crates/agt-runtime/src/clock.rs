@@ -2,6 +2,41 @@
 //! explicit offset; storage keeps Unix milliseconds.
 use anyhow::{Context, Result, bail};
 use jiff::{Timestamp, Zoned, civil::DateTime, tz::TimeZone};
+use serde::Deserialize;
+use serde_json::Value;
+use std::path::Path;
+
+/// A time a tool argument names: a local time string, or Unix milliseconds as
+/// earlier versions required.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum Moment {
+    Unix(i64),
+    Local(String),
+}
+
+impl Moment {
+    pub(crate) fn resolve(&self, zone: &TimeZone) -> Result<i64> {
+        match self {
+            Self::Unix(ms) => Ok(*ms),
+            Self::Local(text) => parse(text, zone),
+        }
+    }
+}
+
+/// Read an optional time argument in the workspace time zone.
+pub(crate) fn moment(home: &Path, value: Option<&Value>) -> Result<Option<i64>> {
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => {
+            let moment: Moment = serde_json::from_value(value.clone())
+                .context("time must be a local time such as 2026-11-01T09:00")?;
+            Ok(Some(
+                moment.resolve(&zone(&agt_config::RuntimeConfig::load(home)?))?,
+            ))
+        }
+    }
+}
 
 /// `scheduler.timezone` when set, otherwise the host's zone (UTC if unknown).
 pub(crate) fn zone(config: &agt_config::RuntimeConfig) -> TimeZone {
