@@ -152,7 +152,9 @@ try {
   assert.equal(await evaluate('document.querySelectorAll(".ix-packet").length'),1);
   await click('#ix-layout');
   await evaluate('document.querySelector("#ix-graph").scrollIntoView({block:"center"})');
-  const position = await evaluate(`(() => {const p=document.querySelector('[data-node="p:coder"]').getBoundingClientRect();return {x:p.x+p.width/2,y:p.y+25};})()`);
+  // Aim at the node's face: the running ring around it animates, so the node's
+  // bounding box changes size from one frame to the next.
+  const position = await evaluate(`(() => {const p=document.querySelector('[data-node="p:coder"] .ix-node-face').getBoundingClientRect();return {x:p.x+p.width/2,y:p.y+p.height/2};})()`);
   const initialPosition = await evaluate(`document.querySelector('[data-node="p:coder"]').getAttribute('transform')`);
   await cdp('Input.dispatchMouseEvent',{type:'mousePressed',x:position.x,y:position.y,button:'left',clickCount:1});
   await cdp('Input.dispatchMouseEvent',{type:'mouseMoved',x:position.x+45,y:position.y+20,button:'left',buttons:1});
