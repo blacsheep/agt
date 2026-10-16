@@ -49,7 +49,8 @@ mod assets {
 }
 
 const DEFAULT_PORT: u16 = 4317;
-const DEFAULT_PRINCIPAL: &str = "web-operator";
+/// The operator identity `agt web` and the desktop app use unless told otherwise.
+pub const DEFAULT_PRINCIPAL: &str = "web-operator";
 
 #[derive(Debug, Args)]
 pub struct WebArgs {

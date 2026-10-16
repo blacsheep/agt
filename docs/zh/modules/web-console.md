@@ -5,7 +5,7 @@
 | **是什么** | AGT Studio，agt 的本地浏览器界面 |
 | **启动** | `agt web` |
 | **依赖** | 只需要 `agt`：控制台内置在其中 |
-| **代码** | `web/public/`（原生 HTML/CSS/JavaScript，无需构建）和 `crates/agt-cli/src/web/`（本地服务），都内置在 `agt` 中 |
+| **代码** | `web/public/`（原生 HTML/CSS/JavaScript，无需构建）和 `crates/agt-console/`（服务端），内置在 `agt` 和桌面端中 |
 
 ## 作用
 

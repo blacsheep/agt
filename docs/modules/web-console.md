@@ -5,7 +5,7 @@
 | **What it is** | AGT Studio, the local browser UI for agt |
 | **Start** | `agt web` |
 | **Needs** | Nothing beyond `agt`: the console is built into it |
-| **Code** | `web/public/` (plain HTML/CSS/JavaScript, no build step) and `crates/agt-cli/src/web/` (the local server), both built into `agt` |
+| **Code** | `web/public/` (plain HTML/CSS/JavaScript, no build step) and `crates/agt-console/` (the server), built into `agt` and the desktop app |
 
 ## What it does
 
