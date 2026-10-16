@@ -94,3 +94,20 @@ jobs:
           releaseName: ${{ env.TAG }}
           includeUpdaterJson: ${{ steps.updater.outputs.json }}
           args: ${{ matrix.args }} ${{ steps.updater.outputs.args }}
+
+  # Put a download table for the installers at the top of the release notes,
+  # above the CLI install commands that dist writes.
+  notes:
+    needs: bundle
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ secrets.GH_RELEASES_TOKEN || secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          gh release view "$TAG" --json assets --jq '.assets' > "$RUNNER_TEMP/assets.json"
+          gh release view "$TAG" --json body --jq '.body' > "$RUNNER_TEMP/body.md"
+          python3 .github/scripts/desktop-notes.py "$RUNNER_TEMP/assets.json" "$RUNNER_TEMP/body.md" > "$RUNNER_TEMP/notes.md"
+          gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
