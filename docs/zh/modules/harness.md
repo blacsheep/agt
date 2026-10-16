@@ -58,7 +58,7 @@ agt harness models toolsmith
 
 | 字段 | 必填 | 默认值 | 含义 |
 | --- | --- | --- | --- |
-| `engine` | 是 | | `codex`、`claude-code` 或 `deepseek-harness` |
+| `engine` | 是 | | `codex`、`claude-code`、`deepseek-harness` 或 `acp`（其他 [ACP Agent](../guide/deepseek-harness.md#其他-acp-agent)） |
 | `executable` | 是 | | 已存在的 Codex、Claude Code 或 `dsh` 程序的绝对路径 |
 | `working_directory` | 是 | | 已存在目录的绝对路径 |
 | `sandbox` | 是 | | `read_only` 或 `workspace_write` |
@@ -66,6 +66,8 @@ agt harness models toolsmith
 | `reasoning_effort` | 否 | Codex 的默认值 | 新会话的默认推理档位 |
 | `timeout_seconds` | 否 | `1800` | 单轮时间上限，10 到 86400 |
 | `description` | 否 | | 最多 4096 字节 |
+| `args` | 否 | | 仅 `acp`：启动 Agent 的 ACP 服务所需的参数 |
+| `auth_method` | 否 | | 仅 `acp`：Agent 需要登录时选择的 ACP 认证方式 |
 
 未知字段会被拒绝。
 

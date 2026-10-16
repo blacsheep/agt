@@ -19,11 +19,12 @@ pub(crate) struct Lines {
     pub(crate) deadline: Instant,
     stderr: StderrTail,
     /// Engine name for errors, such as "Codex app-server".
-    name: &'static str,
+    name: String,
 }
 
 impl Lines {
-    pub(crate) fn spawn(mut command: Command, name: &'static str) -> Result<Self> {
+    pub(crate) fn spawn(mut command: Command, name: impl Into<String>) -> Result<Self> {
+        let name = name.into();
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -36,6 +37,7 @@ impl Lines {
         let mut child = command
             .spawn()
             .with_context(|| format!("cannot start {name}"))?;
+        let frames = name.clone();
         let input = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
         let mut stderr = child.stderr.take().unwrap();
@@ -62,12 +64,12 @@ impl Lines {
                 {
                     Ok(0) => break,
                     Ok(_) if line.len() > MAX_FRAME => {
-                        Err(anyhow::anyhow!("{name} protocol frame exceeds 4 MiB"))
+                        Err(anyhow::anyhow!("{frames} protocol frame exceeds 4 MiB"))
                     }
                     // Engines may print blank lines between frames.
                     Ok(_) if line.iter().all(u8::is_ascii_whitespace) => continue,
                     Ok(_) => serde_json::from_slice(&line)
-                        .with_context(|| format!("invalid {name} protocol frame")),
+                        .with_context(|| format!("invalid {frames} protocol frame")),
                     Err(e) => Err(e.into()),
                 };
                 let failed = result.is_err();

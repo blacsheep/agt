@@ -6,8 +6,8 @@ mod codex;
 mod engine;
 pub use approval::{ApprovalHandler, ApprovalRequest, DeliveryProgress};
 pub use engine::{
-    CLAUDE_CODE, CODEX, DEEPSEEK_HARNESS, ENGINES, Engine, capabilities, compact, connect, inspect,
-    models, rename, test,
+    ACP, CLAUDE_CODE, CODEX, DEEPSEEK_HARNESS, ENGINES, Engine, capabilities, compact, connect,
+    inspect, models, rename, test,
 };
 mod diagnostics;
 pub use diagnostics::{Failure, FailureCode, ProcessDiagnostics};

@@ -58,7 +58,7 @@ agt harness models toolsmith
 
 | Field | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `engine` | yes | | `codex`, `claude-code` or `deepseek-harness` |
+| `engine` | yes | | `codex`, `claude-code`, `deepseek-harness` or `acp` (another [ACP agent](../guide/deepseek-harness.md#other-acp-agents)) |
 | `executable` | yes | | Absolute path of an existing Codex, Claude Code or `dsh` binary |
 | `working_directory` | yes | | Absolute path of an existing directory |
 | `sandbox` | yes | | `read_only` or `workspace_write` |
@@ -66,6 +66,8 @@ agt harness models toolsmith
 | `reasoning_effort` | no | Codex's default | Default reasoning level for new sessions |
 | `timeout_seconds` | no | `1800` | Time limit for one turn, 10 to 86400 |
 | `description` | no | | At most 4096 bytes |
+| `args` | no | | `acp` only: arguments that start the agent's ACP server |
+| `auth_method` | no | | `acp` only: the ACP auth method to select when the agent needs sign-in |
 
 Unknown fields are rejected.
 

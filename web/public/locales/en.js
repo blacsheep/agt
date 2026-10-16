@@ -1442,4 +1442,10 @@ AgtI18n.add('en', {
   "留空沿用引擎默认": "Leave empty for the engine default",
   "留空使用引擎默认模型": "Leave empty for the engine's default model",
   "认证沿用服务器运行账号的配置：Codex 请先完成 codex login，Claude Code 请先在服务器上登录 claude，DeepSeek Harness 请先在它的 Models 页保存 DEEPSEEK_API_KEY。引擎按已选文件权限执行，超出权限的请求按工作空间的 Harness 审批模式处理。/new 重置工作上下文，不删除引擎自身的长期记忆或项目文件。": "Authentication uses the server account's own setup: run codex login for Codex, sign in to claude on the server for Claude Code, and save DEEPSEEK_API_KEY on DeepSeek Harness's Models page. The engine runs with the file permission chosen above; requests beyond it follow the workspace harness approval mode. /new resets the working context without deleting the engine's own long-term memory or project files.",
+  "其他 ACP Agent": "Other ACP agent",
+  "其他 ACP Agent 的启动设置": "Launch settings for other ACP agents",
+  "启动参数": "Launch arguments",
+  "每行一个参数，例如 codex-acp 不需要参数。只在执行引擎为“其他 ACP Agent”时使用。": "One argument per line; codex-acp, for example, needs none. Used only when the engine is “Other ACP agent”.",
+  "认证方式（可选）": "Auth method (optional)",
+  "Agent 需要登录时选择的 ACP 认证方式；检查连接会列出可选值。": "ACP auth method to select when the agent needs to sign in; checking the connection lists the choices.",
 });

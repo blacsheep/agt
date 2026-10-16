@@ -35,6 +35,8 @@ fn fixture() -> (tempfile::TempDir, HarnessConfig) {
         reasoning_effort: None,
         sandbox: Sandbox::WorkspaceWrite,
         timeout_seconds: 10,
+        args: Vec::new(),
+        auth_method: None,
     };
     (dir, config)
 }
@@ -321,4 +323,53 @@ fn the_connection_check_runs_no_model() {
     assert_eq!(checked["status"], "connected");
     assert_eq!(checked["agent"]["name"], "deepseek-harness-acp");
     assert!(agt_harness::models(&config).is_err());
+}
+
+#[test]
+fn a_custom_acp_agent_gets_its_arguments_and_auth_method() {
+    let (dir, mut config) = fixture();
+    config.engine = "acp".into();
+    config.args = vec!["--require-auth".into()];
+    let run = |config: &HarnessConfig| {
+        let mut engine = agt_harness::connect(config, &mut |_| Ok(())).unwrap();
+        engine.execute(
+            config,
+            Execution {
+                input: "hello",
+                instructions: "role",
+                thread: None,
+                tools: &[],
+            },
+            &mut |_| Ok(()),
+            &mut |_, _| unreachable!(),
+            None,
+        )
+    };
+    let error = run(&config).unwrap_err().to_string();
+    assert!(
+        error.contains("needs authentication") && error.contains("api-key"),
+        "{error}"
+    );
+    config.auth_method = Some("api-key".into());
+    assert!(run(&config).unwrap().contains("session:acp-session-1"));
+    let args: Vec<String> =
+        serde_json::from_str(&std::fs::read_to_string(dir.path().join("args.json")).unwrap())
+            .unwrap();
+    assert_eq!(args, ["--require-auth"]);
+    assert!(
+        protocol(&dir)
+            .iter()
+            .any(|f| f["method"] == "authenticate" && f["params"]["methodId"] == "api-key")
+    );
+    assert_eq!(
+        agt_harness::test(&config).unwrap()["auth_methods"],
+        json!(["api-key"])
+    );
+    config.auth_method = Some("browser".into());
+    assert!(agt_harness::test(&config).is_err());
+    // Launch settings never apply to other engines: a Codex harness only ever runs `codex app-server`.
+    for engine in ["codex", "claude-code", "deepseek-harness"] {
+        config.engine = engine.into();
+        assert!(config.validate().is_err(), "{engine}");
+    }
 }

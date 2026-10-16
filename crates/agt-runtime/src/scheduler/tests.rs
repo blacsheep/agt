@@ -1305,6 +1305,8 @@ fn external_fixture() -> (tempfile::TempDir, ToolService, String) {
                 reasoning_effort: None,
                 sandbox: agt_harness::Sandbox::ReadOnly,
                 timeout_seconds: 10,
+                args: Vec::new(),
+                auth_method: None,
             },
             true,
         )
@@ -1343,6 +1345,8 @@ fn deepseek_harness_agent_replies_through_acp_and_resumes_its_session() {
                 reasoning_effort: None,
                 sandbox: agt_harness::Sandbox::WorkspaceWrite,
                 timeout_seconds: 10,
+                args: Vec::new(),
+                auth_method: None,
             },
             true,
         )
@@ -1457,6 +1461,8 @@ fn claude_code_agent_replies_and_resumes_its_session() {
                 reasoning_effort: None,
                 sandbox: agt_harness::Sandbox::WorkspaceWrite,
                 timeout_seconds: 10,
+                args: Vec::new(),
+                auth_method: None,
             },
             true,
         )
