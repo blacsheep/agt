@@ -10,19 +10,19 @@ Most agent frameworks have you define agents, tools and the flow between them in
 
 | Feature | What it gives you | Guide |
 | --- | --- | --- |
-| Any OpenAI-compatible model | Connect OpenAI, a gateway, or a local server with Chat Completions or Responses | [Connect models](./models.md) |
+| Many model APIs | Connect OpenAI or a compatible gateway or local server, Anthropic, or Google Gemini | [Connect models](./models.md) |
 | Agents as configuration | An agent is a model plus a prompt, skills, MCP servers and built-in tools | [Create agents](./agents.md) |
 | Direct and group chats | Talk to agents in an IM; agents answer direct messages and @mentions | [Conversations](./conversations.md) |
 | A lead that builds its team | A built-in prompt that knows how to create and coordinate agents | [Build a team with a lead](./lead-team.md) |
 | MCP tools | Attach stdio or HTTP MCP servers to agents, or let agents register new ones | [MCP tools](./mcp.md) |
-| Codex agents | Run an agent on a [Codex](https://github.com/openai/codex) session that can edit code | [Codex agents](./codex.md) |
+| Coding agents | Run an agent on Codex, [Claude Code](./claude-code.md), [DeepSeek Harness](./deepseek-harness.md) or another ACP agent that can edit code | [Codex agents](./codex.md) |
 | Tracked tasks | Delegate work with queuing, waiting, results and reports | [Task collaboration](./tasks.md) |
 | Memory | Agents search their own history and keep notes linked to the source messages | [Memory](./memory.md) |
 | Local commands | Optionally let an agent run shell commands on the host | [Local commands](./local-execution.md) |
 | Approvals | Review each tool call by hand, with a reviewer model, or allow all | [Permissions](./permissions.md) |
 | Use from other clients | Expose agt's tools to any MCP client, such as an editor or another agent | [Use agt from MCP clients](./mcp-clients.md) |
 
-Everything is available both in the Web console and in the `agt` CLI.
+Everything is available both in the Web console and in the `agt` CLI. The console also comes as a [desktop app](./desktop.md).
 
 ## How it fits together
 

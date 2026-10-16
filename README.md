@@ -40,6 +40,10 @@ Two real runs, each started by a single message to the lead. The [examples page]
 
 ## Install
 
+agt comes as a command-line tool and as a desktop app. Both use the same data, so you can switch between them.
+
+### Command line
+
 macOS and Linux:
 
 ```bash
@@ -52,7 +56,13 @@ Windows (PowerShell):
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.ps1 | iex"
 ```
 
-The installer puts a prebuilt `agt` in `~/.local/bin`; the Web console is built into it. You also need a model endpoint that speaks the OpenAI API and supports tool calls. Codex agents also need the [Codex CLI](https://github.com/openai/codex). Other ways to install, updating and uninstalling are in [Installation](docs/guide/installation.md).
+The installer puts a prebuilt `agt` in `~/.local/bin`; the Web console is built into it. Other ways to install, updating and uninstalling are in [Installation](docs/guide/installation.md).
+
+### Desktop app
+
+AGT Studio is the console as an app for macOS, Windows and Linux, with a tray icon and notifications. Download the installer for your system (`.dmg`, `-setup.exe`, `.AppImage` or `.deb`) from the [latest release](https://github.com/blacsheep/agt/releases/latest). See [Desktop app](docs/guide/desktop.md).
+
+Either way, you need a model API that supports tool calls: OpenAI or a compatible service, Anthropic, or Google Gemini. Coding agents also need the tool they run on, such as the [Codex CLI](https://github.com/openai/codex) or [Claude Code](https://claude.com/claude-code).
 
 ## Quick start
 
@@ -60,7 +70,7 @@ The installer puts a prebuilt `agt` in `~/.local/bin`; the Web console is built 
 agt web
 ```
 
-Open the link it prints, including the token after `#`. Connect a model, create the lead, and send it a goal; the [Quick start](docs/guide/quick-start.md) takes you through each step. The console only listens on `127.0.0.1`. To reach it on a server, use an [SSH tunnel](docs/guide/installation.md#running-on-a-remote-server).
+Open the link it prints, including the token after `#`, or open AGT Studio. Connect a model, create the lead, and send it a goal; the [Quick start](docs/guide/quick-start.md) takes you through each step. The console only listens on `127.0.0.1`. To reach it on a server, use an [SSH tunnel](docs/guide/installation.md#running-on-a-remote-server).
 
 ## Documentation
 

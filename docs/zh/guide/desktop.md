@@ -50,6 +50,10 @@ xattr -dr com.apple.quarantine "/Applications/AGT Studio.app"
 
 如果发布时附带了更新签名，应用启动时会自动下载并安装更新，并提示你，下次打开时生效。没有签名的版本需要下载新的安装包来升级。
 
+## 卸载
+
+按系统的常规方式删除应用：macOS 上把它从「应用程序」拖到废纸篓，Windows 上在**已安装的应用**里卸载，Linux 上删除安装包或 AppImage。数据会保留在 `~/.agt`（或 `$AGT_HOME`）中，直到你自己删除。
+
 ## 从源码构建
 
 ```bash

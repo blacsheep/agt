@@ -12,7 +12,7 @@ Resources are the building blocks of agents. Each is a small file in the home:
 
 | Resource | File | What it describes |
 | --- | --- | --- |
-| Provider | `provider.yaml` | An OpenAI-compatible endpoint and its API key |
+| Provider | `provider.yaml` | A model API endpoint and its API key |
 | Model | `model.yaml` | A model on a provider: protocol, temperature, timeout, context window |
 | Prompt | `PROMPT.md` | A role description |
 | Skill | `SKILL.md` | A reusable instruction package added to the system prompt |

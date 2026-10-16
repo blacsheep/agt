@@ -12,7 +12,7 @@
 
 | 资源 | 文件 | 描述的内容 |
 | --- | --- | --- |
-| Provider | `provider.yaml` | 一个 OpenAI 兼容接口及其 API Key |
+| Provider | `provider.yaml` | 一个模型接口及其 API Key |
 | Model | `model.yaml` | Provider 上的一个模型：协议、温度、超时、上下文窗口 |
 | Prompt | `PROMPT.md` | 角色描述 |
 | Skill | `SKILL.md` | 可复用的指令包，会加入系统提示词 |

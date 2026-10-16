@@ -4,7 +4,7 @@ Native agents talk to models through two resources: a **provider** (where to sen
 
 ## Providers
 
-A provider is an OpenAI-compatible endpoint. It works with OpenAI, API gateways, and local servers such as Ollama or vLLM, as long as they implement the OpenAI API.
+A provider is a model API endpoint and its key: OpenAI, Anthropic, Google Gemini, or any gateway or local server (such as Ollama or vLLM) that implements the OpenAI API. Each model chooses the [API format](#models) its provider speaks.
 
 **Web console:** **Resources** (资源库) → **New resource** (新建资源) → Provider. Enter a name, the base URL and the API key.
 

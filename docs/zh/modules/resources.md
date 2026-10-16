@@ -14,7 +14,7 @@
 
 | 类型 | 描述的内容 | 页面 |
 | --- | --- | --- |
-| Provider | 一个 OpenAI 兼容接口及其密钥 | [Provider](./provider.md) |
+| Provider | 一个模型接口及其密钥 | [Provider](./provider.md) |
 | Model | Provider 上的一个模型及调用方式 | [Model](./model.md) |
 | Prompt | 角色描述 | [Prompt](./prompt.md) |
 | Skill | 可复用的指令包 | [Skill](./skill.md) |

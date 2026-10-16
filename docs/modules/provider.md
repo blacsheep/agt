@@ -2,7 +2,7 @@
 
 | Overview | |
 | --- | --- |
-| **What it is** | An OpenAI-compatible endpoint and the API key to reach it |
+| **What it is** | A model API endpoint (OpenAI-compatible, Anthropic or Gemini) and the API key to reach it |
 | **CLI** | `agt provider` |
 | **Agent tools** | `resource_*` with `kind: "provider"`, `provider_models`, `resource_test` |
 | **Web console** | **Resources** → Provider |

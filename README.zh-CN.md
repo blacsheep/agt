@@ -40,6 +40,10 @@ agt 在你自己的机器上运行一组 AI Agent。你只需要和其中一个�
 
 ## 安装
 
+agt 有命令行和桌面应用两种形式，两者使用同一份数据，可以随时切换。
+
+### 命令行
+
 macOS 和 Linux：
 
 ```bash
@@ -52,7 +56,13 @@ Windows（PowerShell）：
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/releases/latest/download/agt-cli-installer.ps1 | iex"
 ```
 
-安装脚本会把预编译的 `agt` 放到 `~/.local/bin`，Web 控制台已经内置在其中。另外需要一个兼容 OpenAI API、支持工具调用的模型接口。使用 Codex Agent 还需要安装 [Codex CLI](https://github.com/openai/codex)。其他安装方式、更新和卸载见 [安装](docs/zh/guide/installation.md)。
+安装脚本会把预编译的 `agt` 放到 `~/.local/bin`，Web 控制台已经内置在其中。其他安装方式、更新和卸载见 [安装](docs/zh/guide/installation.md)。
+
+### 桌面应用
+
+AGT Studio 是控制台的桌面版，支持 macOS、Windows 和 Linux，带托盘图标和系统通知。从[最新发布](https://github.com/blacsheep/agt/releases/latest)下载对应系统的安装包（`.dmg`、`-setup.exe`、`.AppImage` 或 `.deb`）。见[桌面客户端](docs/zh/guide/desktop.md)。
+
+两种方式都需要一个支持工具调用的模型接口：OpenAI 或兼容服务、Anthropic、Google Gemini 都可以。编程类 Agent 还需要它所运行的工具，例如 [Codex CLI](https://github.com/openai/codex) 或 [Claude Code](https://claude.com/claude-code)。
 
 ## 快速开始
 
@@ -60,7 +70,7 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/rele
 agt web
 ```
 
-打开它打印的链接，包括 `#` 后面的令牌。接入模型、创建 lead、给它一个目标，[快速开始](docs/zh/guide/quick-start.md)会带你走完每一步。控制台只监听 `127.0.0.1`；在服务器上使用时，请通过 [SSH 隧道](docs/zh/guide/installation.md#在远程服务器上运行)访问。
+打开它打印的链接（包括 `#` 后面的令牌），或者打开 AGT Studio。接入模型、创建 lead、给它一个目标，[快速开始](docs/zh/guide/quick-start.md)会带你走完每一步。控制台只监听 `127.0.0.1`；在服务器上使用时，请通过 [SSH 隧道](docs/zh/guide/installation.md#在远程服务器上运行)访问。
 
 ## 文档
 

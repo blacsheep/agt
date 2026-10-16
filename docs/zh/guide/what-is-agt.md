@@ -10,19 +10,19 @@ agt 在你自己的机器上运行一组 AI Agent。它背后的想法是：管�
 
 | 功能 | 带来什么 | 指南 |
 | --- | --- | --- |
-| 任意 OpenAI 兼容模型 | 接入 OpenAI、API 网关或本地服务，支持 Chat Completions 和 Responses | [接入模型](./models.md) |
+| 多种模型接口 | 接入 OpenAI 或兼容的网关、本地服务，以及 Anthropic、Google Gemini | [接入模型](./models.md) |
 | Agent 即配置 | Agent 由模型、Prompt、Skill、MCP 服务和内置工具组合而成 | [创建 Agent](./agents.md) |
 | 私聊与群聊 | 在 IM 中和 Agent 对话；Agent 回复私聊和 @提及 | [对话与自动回复](./conversations.md) |
 | 会自己组队的 lead | 内置 Prompt，知道如何创建和协调 Agent | [让 lead 组建团队](./lead-team.md) |
 | MCP 工具 | 给 Agent 挂载 stdio 或 HTTP MCP 服务，或让 Agent 自己注册新服务 | [MCP 工具](./mcp.md) |
-| Codex Agent | 让 Agent 运行在可以改代码的 [Codex](https://github.com/openai/codex) 会话上 | [Codex Agent](./codex.md) |
+| 编程 Agent | 让 Agent 运行在能改代码的 Codex、[Claude Code](./claude-code.md)、[DeepSeek Harness](./deepseek-harness.md) 或其他 ACP Agent 上 | [Codex Agent](./codex.md) |
 | 可追踪任务 | 带排队、等待、结果和汇报的工作委派 | [任务协作](./tasks.md) |
 | 记忆 | Agent 搜索自己的历史，并保存关联原始消息的笔记 | [记忆](./memory.md) |
 | 本机命令 | 可选地允许 Agent 在宿主机上执行 Shell 命令 | [本机命令](./local-execution.md) |
 | 审批 | 人工、审核模型或全部放行，逐个审核工具调用 | [权限审批](./permissions.md) |
 | 外部客户端接入 | 把 agt 的工具开放给任意 MCP 客户端，例如编辑器或其他 Agent | [在 MCP 客户端中使用 agt](./mcp-clients.md) |
 
-以上功能在 Web 控制台和 `agt` CLI 中都能使用。
+以上功能在 Web 控制台和 `agt` CLI 中都能使用。控制台也有[桌面应用](./desktop.md)版本。
 
 ## 各部分如何配合
 
