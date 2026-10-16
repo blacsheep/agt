@@ -34,7 +34,7 @@ const READ_TOOLS: [&str; 9] = [
     "task_attention",
     "timer_list",
 ];
-const WRITE_TOOLS: [&str; 19] = [
+const WRITE_TOOLS: [&str; 20] = [
     "direct_create",
     "group_create",
     "message_send",
@@ -54,6 +54,7 @@ const WRITE_TOOLS: [&str; 19] = [
     "task_retry",
     "task_report",
     "timer_cancel",
+    "timer_create",
 ];
 const KINDS: [&str; 7] = [
     "provider", "model", "prompt", "skill", "mcp", "agent", "harness",

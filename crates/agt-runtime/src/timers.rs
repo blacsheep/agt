@@ -36,6 +36,7 @@ const MIN_INTERVAL_MS: i64 = 10 * 60_000;
 const LATE_MS: i64 = 60_000;
 const RETRY_MS: i64 = 60_000;
 const MAX_ATTEMPTS: u32 = 5;
+const MAX_DISCUSSION_SECONDS: u32 = 7 * 86_400;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -58,6 +59,9 @@ pub struct Timer {
     pub sender: String,
     pub cron: Option<String>,
     pub timezone: String,
+    /// How long the discussion it starts stays authorized; workspace setting when absent.
+    #[serde(default)]
+    pub discussion_seconds: Option<u32>,
     pub next_at: Option<i64>,
     pub state: TimerState,
     pub created_at: i64,
@@ -91,6 +95,7 @@ struct CreateInput {
     at: Option<String>,
     cron: Option<String>,
     timezone: Option<String>,
+    discussion_seconds: Option<u32>,
 }
 
 /// Timer tools for a fixed actor; `task` is the hosted execution, if any.
@@ -178,6 +183,12 @@ fn create(
     if name.as_ref().is_some_and(|n| n.chars().count() > 80) {
         bail!("name must be at most 80 characters");
     }
+    if input
+        .discussion_seconds
+        .is_some_and(|s| !(60..=MAX_DISCUSSION_SECONDS).contains(&s))
+    {
+        bail!("discussion_seconds must be 60..604800 (one week)");
+    }
     if input.mentions.len() > 10 {
         bail!("at most 10 mentions");
     }
@@ -232,6 +243,7 @@ fn create(
         sender,
         cron,
         timezone: crate::clock::zone_name(&zone).to_owned(),
+        discussion_seconds: input.discussion_seconds,
         next_at: Some(next_at),
         state: TimerState::Active,
         created_at: now,
@@ -394,6 +406,11 @@ fn fire(store: &ScheduleStore, im: &ImStore, timer: &mut Timer, now: i64) -> Res
         sent.message.seq,
         now,
     )?;
+    if let Some(seconds) = timer.discussion_seconds
+        && let Some(discussion) = store.human_discussion(sent.message.id.as_str())?
+    {
+        store.set_discussion_expiry(&discussion, now + i64::from(seconds) * 1000)?;
+    }
     timer.fired += 1;
     timer.attempts = 0;
     timer.last_fired_at = Some(now);

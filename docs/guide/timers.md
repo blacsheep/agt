@@ -30,7 +30,7 @@ Say what you want in plain words. The agent calls `timer_create`, and the result
 ## When it fires
 
 - The message appears in your name. When an agent set the timer, it speaks as the workspace owner. The Web console marks it **Timer · set by …**, and the text starts with `[AGT timer <id>]`.
-- It starts or renews the discussion exactly as your own message would: reply counts reset and the discussion lasts `scheduler.discussion_seconds`.
+- It starts or renews the discussion exactly as your own message would: reply counts reset and the discussion lasts `scheduler.discussion_seconds`. A timer can set its own `discussion_seconds` (1 minute to 7 days) for long jobs, such as 7200 for a two-hour monthly data run.
 - Mentioned members must answer. Others follow the usual [conversation rules](./conversations.md).
 - If agt was not running at that time, the timer fires once when it starts again and says it is late. Missed repeats collapse into that one delivery.
 
@@ -52,7 +52,7 @@ Agents also see the time: their input carries `now` in local time with its offse
 
 ## See and cancel timers
 
-In the Web console, type `/timers` in a conversation to see its timers, when each fires next, and who set it, and to cancel one.
+In the Web console, type `/timers` in a conversation to see its timers, when each fires next, and who set it. From there you can also create a timer (once at a time you pick, or with a cron expression) and cancel one.
 
 From the CLI:
 

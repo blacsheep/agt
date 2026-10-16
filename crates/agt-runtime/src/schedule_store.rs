@@ -232,6 +232,16 @@ impl ScheduleStore {
         Ok(())
     }
 
+    /// Give an active discussion a specific lifetime, as a timer that starts it asks.
+    pub(crate) fn set_discussion_expiry(&self, discussion: &str, expires: i64) -> Result<()> {
+        self.connection.execute(
+            "UPDATE discussions SET expires=?2 WHERE id=?1 AND state='active'",
+            params![discussion, expires],
+        )?;
+        agt_storage::wake::notify(&self.home);
+        Ok(())
+    }
+
     pub(crate) fn human_discussion(&self, message: &str) -> Result<Option<String>> {
         Ok(self
             .connection
