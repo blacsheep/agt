@@ -2,6 +2,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
+use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -81,11 +82,15 @@ fn server_at(
             .map(|(status, value)| (status, "application/json", value.to_string()))
             .collect(),
         endpoint,
+        None,
     )
 }
+/// `hold`: an event stream sends its first event, then waits for a signal on
+/// `hold` before the rest, so a test can observe the stream mid-way.
 fn server_wire(
     responses: Vec<(u16, &'static str, String)>,
     endpoint: &'static str,
+    hold: Option<mpsc::Receiver<()>>,
 ) -> (String, JoinHandle<Vec<Value>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
@@ -141,7 +146,10 @@ fn server_wire(
                 let split = body.find("\n\n").unwrap() + 2;
                 stream.write_all(&body.as_bytes()[..split]).unwrap();
                 stream.flush().unwrap();
-                thread::sleep(Duration::from_millis(700));
+                match &hold {
+                    Some(hold) => hold.recv_timeout(Duration::from_secs(30)).unwrap(),
+                    None => thread::sleep(Duration::from_millis(700)),
+                }
                 stream.write_all(&body.as_bytes()[split..]).unwrap();
             } else {
                 stream.write_all(body.as_bytes()).unwrap();
@@ -849,6 +857,7 @@ fn http_stream_preview_is_visible_before_completion_for_both_protocols() {
                 + &event(json!({"choices":[{"delta":{"content":"完成"},"finish_reason":"stop"}]}))
                 + "data: [DONE]\n\n"
         };
+        let (release, release_rx) = mpsc::channel();
         let (url, server) = server_wire(
             vec![(200, "text/event-stream", body)],
             if responses {
@@ -856,6 +865,7 @@ fn http_stream_preview_is_visible_before_completion_for_both_protocols() {
             } else {
                 "chat/completions"
             },
+            Some(release_rx),
         );
         let home = tempfile::tempdir().unwrap();
         setup(home.path(), &url);
@@ -869,12 +879,13 @@ fn http_stream_preview_is_visible_before_completion_for_both_protocols() {
         let job = thread::spawn(move || {
             success(run(&task_home, &["agent", "run", "a", "--input", "hello"]))
         });
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             let runs = success(run(home.path(), &["run", "list"]));
             if runs[0]["progress"]["preview"] == "正在生成" {
                 assert_eq!(runs[0]["state"], "running");
                 assert!(runs[0]["output"].is_null());
+                release.send(()).unwrap();
                 break;
             }
             assert!(
