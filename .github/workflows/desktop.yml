@@ -1,0 +1,83 @@
+# Builds AGT Studio, the desktop app, for each platform and adds its installers
+# to the GitHub release that the CLI release workflow (cargo-dist) publishes.
+#
+# Updates: set the repository variable TAURI_UPDATER_PUBKEY and the secrets
+# TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD (from
+# `cargo tauri signer generate`) to also publish signed update bundles and
+# latest.json. Without them the installers are built without updates.
+#
+# macOS signing and notarization use the optional APPLE_* secrets; without them
+# the app is unsigned and macOS asks for confirmation on first open.
+name: Desktop
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the installers to
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: --target universal-apple-darwin
+          - os: windows-latest
+            args: ""
+          # The oldest supported Ubuntu keeps the AppImage and deb usable on older glibc.
+          - os: ubuntu-22.04
+            args: ""
+    runs-on: ${{ matrix.os }}
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+      - run: rustup show
+      - if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install tauri-cli --version "^2.12" --locked
+      - name: Updater configuration
+        id: updater
+        shell: bash
+        env:
+          PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "$PUBKEY" ] && [ -n "$KEY" ]; then
+            jq -n --arg key "$PUBKEY" '{bundle:{createUpdaterArtifacts:true},plugins:{updater:{pubkey:$key}}}' > "$RUNNER_TEMP/updater.json"
+            echo "args=--config $RUNNER_TEMP/updater.json" >> "$GITHUB_OUTPUT"
+            echo "json=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "json=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASES_TOKEN || secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: crates/agt-desktop
+          tauriScript: cargo tauri
+          tagName: ${{ env.TAG }}
+          releaseName: ${{ env.TAG }}
+          includeUpdaterJson: ${{ steps.updater.outputs.json }}
+          args: ${{ matrix.args }} ${{ steps.updater.outputs.args }}

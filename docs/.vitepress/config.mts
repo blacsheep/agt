@@ -33,6 +33,7 @@ function userDocs(prefix: string, t: Record<string, string>) {
       items: [
         item('what', '/guide/what-is-agt'),
         item('install', '/guide/installation'),
+        item('desktop', '/guide/desktop'),
         item('quick', '/guide/quick-start'),
         item('examples', '/guide/examples'),
         item('concepts', '/guide/concepts'),
@@ -91,6 +92,7 @@ const enDocs = userDocs('', {
   intro: 'Introduction',
   what: 'What is agt?',
   install: 'Installation',
+  desktop: 'Desktop app',
   quick: 'Quick start',
   examples: 'Examples',
   concepts: 'Core concepts',
@@ -137,6 +139,7 @@ const zhDocs = userDocs('/zh', {
   intro: '入门',
   what: 'agt 是什么？',
   install: '安装',
+  desktop: '桌面客户端',
   quick: '快速开始',
   examples: '示例',
   concepts: '核心概念',

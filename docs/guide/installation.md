@@ -56,6 +56,10 @@ cd agt
 cargo build -p agt-cli        # target/debug/agt
 ```
 
+::: tip Prefer a desktop app?
+[AGT Studio](./desktop.md) packages the console as an app for macOS, Windows and Linux, with tray and notifications. It uses the same home as the CLI.
+:::
+
 ## Start the Web console
 
 ```bash
