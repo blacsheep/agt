@@ -20,6 +20,8 @@ The reviewer is an ordinary model resource, separate from the agent being review
 
 A denied call is not executed. The agent is told it was denied and continues. Calls with invalid arguments are rejected before they reach the approval queue.
 
+MCP tools are always reviewed unless you trust their server's read-only hints; see [MCP](../modules/mcp.md#how-tool-calls-are-checked).
+
 ### Always allow a tool for an agent
 
 When you approve a call, you can choose **Always allow this agent to use this tool** (总是允许此 Agent 使用该工具). Later calls of that tool by that agent run without asking, in every mode, and the approval history shows "a saved always-allow rule" as the reason. The rule covers one agent and one tool, with any arguments.

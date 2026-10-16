@@ -28,6 +28,12 @@ impl fmt::Debug for McpDocument {
 }
 
 impl McpDocument {
+    /// The person who configured this server trusts its `readOnlyHint`: tools it marks
+    /// read-only run without native approval. Set with `"trust_read_only_hint": true`.
+    pub fn trusts_read_only_hint(&self) -> bool {
+        self.server.get("trust_read_only_hint") == Some(&Value::Bool(true))
+    }
+
     pub fn stdio(
         name: impl Into<String>,
         command: impl Into<String>,

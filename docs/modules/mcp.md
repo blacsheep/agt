@@ -114,6 +114,7 @@ Environment variables are read when agt connects, from the environment of the We
 
 - Tool arguments are validated against the server's input schema (JSON Schema 2020-12 by default) before anything else. Invalid calls return an error to the model and never reach the server or the approval queue.
 - Schemas may not load external references.
+- Every call goes through [approval](./permissions.md). To let a server's own `readOnlyHint` count, add `"trust_read_only_hint": true` to its entry in `mcpServers` (stdio or HTTP). Tools that server marks read-only then run without approval; its other tools are still reviewed. Only set this for servers you trust, since the hint comes from the server itself.
 - When an agent with `resource_management` changes its own MCP servers, the new tools load after its current batch of tool calls. If loading fails, it keeps the old tools and is told why.
 
 ## Related modules

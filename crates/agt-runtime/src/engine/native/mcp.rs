@@ -10,6 +10,8 @@ pub(super) struct ToolSession {
     pub(super) validators: BTreeMap<String, agt_core::tool_schema::ToolSchema>,
     /// Readable "server / tool" names for the hashed aliases, shown in run activity.
     pub(super) labels: BTreeMap<String, String>,
+    /// Aliases a trusted server marks read-only; they run without native approval.
+    pub(super) read_only: std::collections::BTreeSet<String>,
 }
 
 impl ToolSession {
@@ -25,6 +27,7 @@ impl ToolSession {
             schemas: Vec::new(),
             validators: BTreeMap::new(),
             labels: BTreeMap::new(),
+            read_only: Default::default(),
         };
         for (server_index, document) in agent.mcps.iter().enumerate() {
             check_canceled(cancellation)?;
@@ -56,6 +59,11 @@ impl ToolSession {
                 session
                     .labels
                     .insert(alias.clone(), format!("{} / {}", document.name, tool.name));
+                if document.trusts_read_only_hint()
+                    && tool.annotations.as_ref().and_then(|a| a.read_only_hint) == Some(true)
+                {
+                    session.read_only.insert(alias.clone());
+                }
                 session.targets.insert(alias, (server_index, tool.name));
             }
         }

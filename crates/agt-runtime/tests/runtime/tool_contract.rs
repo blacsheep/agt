@@ -642,3 +642,87 @@ fn mounted_mcp_still_requires_per_call_approval() {
     assert_eq!(item.state, agt_runtime::approval::ApprovalState::Denied);
     assert_eq!(item.delivery, agt_runtime::approval::Delivery::Resolved);
 }
+
+#[test]
+fn a_trusted_server_runs_its_read_only_tools_without_approval() {
+    let home = home();
+    mount_resources(home.path(), "a");
+    let manager = hosted(home.path(), agt_service::ResponsePolicy::Mentioned);
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/contract_mcp.py");
+    let server = |trust: bool| {
+        json!({"mcpServers":{"counter":{"cwd":std::env::temp_dir(),"command":PYTHON,
+            "args":[&fixture,"read-only",home.path().join("calls")],"trust_read_only_hint":trust}}})
+    };
+    manager
+        .call(
+            "resource_write",
+            json!({"kind":"mcp","reference":"counter","create":true,"data":server(true)}),
+        )
+        .unwrap();
+    manager
+        .call(
+            "resource_write",
+            json!({"kind":"agent","reference":"a","create":false,"data":{"mcps":["counter"]}}),
+        )
+        .unwrap();
+    let mut config = agt_config::RuntimeConfig::load(home.path()).unwrap();
+    config.permissions.mode = agt_config::runtime::PermissionMode::Manual;
+    config.permissions.request_timeout_seconds = 1;
+    config.save(home.path()).unwrap();
+    let count = || {
+        Script::new(vec![
+            (
+                "default/a",
+                calls(vec![call(
+                    "count",
+                    &mcp_alias("default/counter", "count"),
+                    json!({"count":1}),
+                )]),
+            ),
+            ("default/a", text("done")),
+        ])
+    };
+    let mut script = count();
+    let run = Runtime::open(home.path(), &mut script, &DefaultMcpClientFactory)
+        .unwrap()
+        .run(request(), &CancellationToken::new())
+        .unwrap();
+    assert_eq!(run.state, RunState::Completed, "{:?}", run.error);
+    let approvals = || {
+        ApprovalStore::open(home.path())
+            .unwrap()
+            .list(None, None)
+            .unwrap()
+    };
+    assert!(approvals().is_empty());
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("calls"))
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
+
+    // Without trust the same hint is ignored: manual mode asks, and nobody answers.
+    manager
+        .call(
+            "resource_write",
+            json!({"kind":"mcp","reference":"counter","create":false,"data":server(false)}),
+        )
+        .unwrap();
+    let mut script = count();
+    let mut req = request();
+    req.request_key = "untrusted".into();
+    Runtime::open(home.path(), &mut script, &DefaultMcpClientFactory)
+        .unwrap()
+        .run(req, &CancellationToken::new())
+        .unwrap();
+    assert_eq!(approvals().len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(home.path().join("calls"))
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
+}

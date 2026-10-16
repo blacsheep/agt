@@ -23,7 +23,10 @@ for line in sys.stdin:
         result = {"protocolVersion": "2025-11-25", "capabilities": {"tools": {}},
                   "serverInfo": {"name": "contract", "version": "1"}}
     elif method == "tools/list":
-        result = {"tools": [{"name": "count", "inputSchema": schema}]}
+        tool = {"name": "count", "inputSchema": schema}
+        if mode == "read-only":
+            tool["annotations"] = {"readOnlyHint": True}
+        result = {"tools": [tool]}
     elif method == "tools/call":
         args = request["params"]["arguments"]
         assert type(args["count"]) is int and 1 <= args["count"] <= 7
