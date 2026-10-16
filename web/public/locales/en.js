@@ -1437,4 +1437,9 @@ AgtI18n.add('en', {
   "留空沿用工作空间设置；耗时长的任务可以调大。": "Leave empty for the workspace setting; raise it for long jobs.",
   "讨论空闲 · 没有成员在处理，有新消息时继续": "Discussion idle · nobody is working; a new message continues it",
   "讨论空闲 · 没有成员在处理，授权到 {0}": "Discussion idle · nobody is working; authorized until {0}",
+  "连接服务器上已安装的 Codex 或 Claude Code。每个 Harness 独立配置项目和默认模型；已有会话保存自己的配置快照。": "Connects to Codex or Claude Code installed on the server. Each harness has its own project and default model; existing sessions keep their own configuration snapshot.",
+  "服务器上的绝对路径，可运行 command -v codex 或 command -v claude 查询。": "Absolute path on the server; run command -v codex or command -v claude to find it.",
+  "留空沿用引擎默认": "Leave empty for the engine default",
+  "留空使用引擎默认模型": "Leave empty for the engine's default model",
+  "认证沿用服务器运行账号的配置：Codex 请先完成 codex login，Claude Code 请先在服务器上登录 claude。引擎按已选文件权限执行，超出权限的请求按工作空间的 Harness 审批模式处理。/new 重置工作上下文，不删除引擎自身的长期记忆或项目文件。": "Authentication uses the server account's own setup: run codex login for Codex, or sign in to claude on the server for Claude Code. The engine runs with the file permission chosen above; requests beyond it follow the workspace harness approval mode. /new resets the working context without deleting the engine's own long-term memory or project files.",
 });

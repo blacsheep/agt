@@ -81,7 +81,7 @@ impl StderrTail {
             .join("\n")
     }
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ProcessDiagnostics {
     pub exit_code: Option<i32>,
     pub signal: Option<i32>,

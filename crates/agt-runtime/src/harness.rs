@@ -1,7 +1,7 @@
 //! Whole-task external execution: deliberately outside ModelClient and model retries.
 use crate::{Result, RunRecord, RunStore, RuntimeError, ScheduledTask};
 use agt_core::CancellationToken;
-use agt_harness::{Codex, Event, Execution};
+use agt_harness::{Event, Execution};
 use rusqlite::params;
 use serde_json::{Value, json};
 use std::{cell::Cell, path::Path};
@@ -65,13 +65,16 @@ pub(crate) fn execute(
     };
     run.check()?;
     crate::progress::stage(record, store, task, "preparing")?;
-    let mut invocation =
-        crate::CallRecord::new(record, None, json!({"engine":"codex","request_attempts":1}));
+    let mut invocation = crate::CallRecord::new(
+        record,
+        None,
+        json!({"engine":run.session.config.engine,"request_attempts":1}),
+    );
     invocation.kind = "harness".into();
     let mut invocation = store.start_call(invocation)?;
     let audit_record = record.clone();
     record.execution = Some(
-        json!({"engine":"codex","harness":prepared.reference,"session_record":prepared.scope,"timeout_seconds":run.session.config.timeout_seconds}),
+        json!({"engine":run.session.config.engine,"harness":prepared.reference,"session_record":prepared.scope,"timeout_seconds":run.session.config.timeout_seconds}),
     );
     let check = || run.check();
     let mut bridge = tools::ToolBridge {
@@ -95,7 +98,7 @@ pub(crate) fn execute(
         wake: approval::Wake::open(home),
     };
     let mut event = |event: Event<'_>| run.event(record, store, event);
-    let mut client = match Codex::connect(&run.session.config, &mut event) {
+    let mut client = match agt_harness::connect(&run.session.config, &mut event) {
         Ok(client) => client,
         Err(e) => {
             record
@@ -114,7 +117,7 @@ pub(crate) fn execute(
             return Err(e);
         }
     };
-    let result = client.execute_with_approvals(
+    let result = client.execute(
         &run.session.config,
         Execution {
             input: &run.input,

@@ -56,7 +56,7 @@ impl HarnessSessions {
         let now = crate::schedule_store::now_ms();
         self.db.execute("UPDATE harness_operations SET state=CASE WHEN state IN ('failed','canceled','interrupted','succeeded') THEN state WHEN submitted=0 THEN 'failed' ELSE 'reconciling' END,owner=NULL,expires=0,reason=CASE WHEN submitted=0 THEN 'Owner exited before submission' ELSE 'Execution owner lease expired; external result must be checked' END WHERE owner IS NOT NULL AND expires<=?1", [now])?;
         // This adapter cannot reattach a live external turn. Keep the original thread intact.
-        self.db.execute("UPDATE harness_operations SET state='needs_review',reason='Connection lost; inspect the original Codex thread and its effects before starting a new context' WHERE state='reconciling' AND owner IS NULL", [])?;
+        self.db.execute("UPDATE harness_operations SET state='needs_review',reason='Connection lost; inspect the original engine session and its effects before starting a new context' WHERE state='reconciling' AND owner IS NULL", [])?;
         if self.db.total_changes() != before {
             agt_storage::wake::notify(&self.home);
         }

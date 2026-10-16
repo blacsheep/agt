@@ -1322,6 +1322,123 @@ fn external_fixture() -> (tempfile::TempDir, ToolService, String) {
 }
 #[cfg(unix)]
 #[test]
+fn claude_code_agent_replies_and_resumes_its_session() {
+    let (home, user, _) = fixture();
+    let path = home.path();
+    let exe = path.join("claude-fixture");
+    write_executable(
+        &exe,
+        include_str!("../../../agt-harness/tests/fixtures/claude.py"),
+    );
+    agt_harness::HarnessStore::new(path)
+        .write_in(
+            &agt_core::CategoryName::default(),
+            "claude",
+            &agt_harness::HarnessConfig {
+                engine: "claude-code".into(),
+                executable: exe,
+                working_directory: path.into(),
+                model: None,
+                description: String::new(),
+                reasoning_effort: None,
+                sandbox: agt_harness::Sandbox::WorkspaceWrite,
+                timeout_seconds: 10,
+            },
+            true,
+        )
+        .unwrap();
+    AgentStore::new(path)
+        .update_in(&agt_core::CategoryName::default(), "a", |a| {
+            a.model = None;
+            a.harness = Some(agt_core::QualifiedRef::in_default(
+                agt_core::HarnessId::new("claude"),
+            ));
+            Ok(())
+        })
+        .unwrap();
+    let chat = user
+        .call("direct_create", json!({"principal":"a"}))
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut scheduler = begin(path, &user, &chat);
+    let replies = |chat: &str| -> Vec<String> {
+        im(path)
+            .unwrap()
+            .list_messages(
+                &ConversationId::new(chat),
+                &PrincipalId::new("user"),
+                agt_im::MessageListOptions {
+                    limit: 50,
+                    before: None,
+                    after: None,
+                },
+            )
+            .unwrap()
+            .messages
+            .into_iter()
+            .filter(|m| m.sender_id.as_str() == "a")
+            .map(|m| m.body)
+            .collect()
+    };
+    for (round, key) in ["first", "follow-up"].into_iter().enumerate() {
+        if round > 0 {
+            let sent = user
+                .call(
+                    "message_send",
+                    json!({"conversation":chat,"body":key,"request_key":key}),
+                )
+                .unwrap();
+            start_discussion(path, &chat, Some(sent["message"]["id"].as_str().unwrap())).unwrap();
+            scheduler.scan().unwrap();
+        }
+        let task = claim(&mut scheduler, "a");
+        execute(
+            path,
+            task.clone(),
+            &mut Answer(json!({})),
+            &CancellationToken::new(),
+        )
+        .unwrap();
+        let done = scheduler.store.get(&task.id).unwrap();
+        assert_eq!(done.state, TaskState::Completed, "{:?}", done.reason);
+        let args: Vec<String> =
+            serde_json::from_str(&std::fs::read_to_string(path.join("args.json")).unwrap())
+                .unwrap();
+        assert_eq!(args.contains(&"--resume".to_owned()), round > 0);
+    }
+    assert_eq!(
+        replies(&chat),
+        ["done  session:session-new", "done  session:session-new"]
+    );
+    let session = crate::HarnessSessions::open(path)
+        .unwrap()
+        .current(path, "a", &chat)
+        .unwrap();
+    assert_eq!(session.session_id.as_deref(), Some("session-new"));
+    assert_eq!(session.config.model.as_deref(), Some("claude-fixture"));
+    let turns: Vec<String> = std::fs::read_to_string(path.join("protocol.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str::<Value>(l).unwrap())
+        .filter(|v| v["type"] == "user")
+        .map(|v| {
+            v["message"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(turns.len(), 2);
+    assert!(
+        turns[1].contains("follow-up") && !turns[1].contains("question"),
+        "{turns:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn external_engine_uses_private_sessions_incremental_history_and_reset() {
     let (home, user, _) = external_fixture();
     let path = home.path();

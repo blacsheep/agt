@@ -152,7 +152,7 @@ impl Resources {
                 .read_in(&category, &name)?
                 .config
         };
-        agt_harness::Codex::test(&config)
+        agt_harness::test(&config)
     }
 
     pub fn provider_models(&self, reference: &str) -> Result<Value> {

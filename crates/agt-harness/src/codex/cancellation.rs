@@ -14,7 +14,7 @@ impl Codex {
         self.transport.next_id += 1;
         if self.transport.send(json!({"id":self.transport.next_id,"method":"turn/interrupt","params":{"threadId":thread,"turnId":turn}})).is_err() { return None; }
         let mut output = None;
-        self.transport.deadline = Instant::now() + Duration::from_secs(2);
+        self.transport.process.deadline = Instant::now() + Duration::from_secs(2);
         while let Ok(value) = self.transport.receive(&mut |_| Ok(())) {
             let p = &value["params"];
             if p["threadId"] == thread
@@ -62,7 +62,7 @@ impl Codex {
         if result.is_err() && !terminal && turn.is_none() {
             // Submission may have reached the engine before cancellation was observed.
             // Read only protocol facts here: never dispatch tools after the stop request.
-            self.transport.deadline = Instant::now() + Duration::from_secs(2);
+            self.transport.process.deadline = Instant::now() + Duration::from_secs(2);
             while let Ok(value) = self.transport.receive(&mut |_| Ok(())) {
                 if value["id"] == start_id && value.get("method").is_none() {
                     if value.get("error").is_some() {

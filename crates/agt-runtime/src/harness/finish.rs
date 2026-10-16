@@ -28,7 +28,7 @@ impl HarnessRun<'_> {
             if let Some(thread) = saved.session_id {
                 let mut metadata_config = harness.clone();
                 metadata_config.timeout_seconds = 10;
-                if Codex::rename(&metadata_config, &thread, &session.title).is_err() {
+                if agt_harness::rename(&metadata_config, &thread, &session.title).is_err() {
                     record.execution.as_mut().unwrap()["title_sync_failed"] = json!(true);
                 }
             }
