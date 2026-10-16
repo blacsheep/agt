@@ -1435,4 +1435,6 @@ AgtI18n.add('en', {
   "需要回复的成员": "Members who must reply",
   "讨论时长（分钟，可选）": "Discussion length (minutes, optional)",
   "留空沿用工作空间设置；耗时长的任务可以调大。": "Leave empty for the workspace setting; raise it for long jobs.",
+  "讨论空闲 · 没有成员在处理，有新消息时继续": "Discussion idle · nobody is working; a new message continues it",
+  "讨论空闲 · 没有成员在处理，授权到 {0}": "Discussion idle · nobody is working; authorized until {0}",
 });

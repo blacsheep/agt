@@ -552,6 +552,11 @@ function participationSummary(tasks) {
   }
   return [...groups].map(([label, count]) => $t('{0} 位{1}', [count, label])).join(' · ');
 }
+// Active but nobody is working: the scheduler simply waits for the next message.
+function idleText(round) {
+  if (round.expires_at >= 9e15) return $t('讨论空闲 · 没有成员在处理，有新消息时继续');
+  return $t('讨论空闲 · 没有成员在处理，授权到 {0}', [new Date(round.expires_at).toLocaleTimeString(AgtI18n.locale, { hour: '2-digit', minute: '2-digit' })]);
+}
 function renderReplyStatus() {
   const id = state.conversation?.id;
   const own = canParticipate();
@@ -563,7 +568,7 @@ function renderReplyStatus() {
   $('#reply-status').classList.toggle('hidden', !id || isObserver() || currentEntry()?.left_message_seq != null || (!current && !tasks.length && state.scheduler.online));
   $('#reply-status').classList.toggle('problem', !state.scheduler.online || tasks.some(t => ['failed', 'blocked', 'limited', 'interrupted', 'outcome_unknown'].includes(t.state)));
   const pending = tasks.filter(t => ['evaluating', 'responding', 'ready_to_reply', 'waiting', 'queued'].includes(t.state));
-  $('#reply-detail').textContent = !state.scheduler.online ? $t('回复服务未连接 · 请重新启动服务；未完成的提醒会保留') : current?.state === 'paused' ? (running ? $t('正在暂停 · 当前回复结束后停止') : $t('已暂停 · 可点击「继续回复」')) : current?.state === 'ended' ? $t('本轮讨论已结束 · 发送新消息可开始新一轮') : current?.state === 'limited' ? (running ? $t('当前执行继续 · 后续任务等待续期') : $t('等待授权或额度续期 · 可点击「继续回复」')) : pending.length ? participationSummary(tasks) : tasks.some(t => ['failed', 'blocked', 'interrupted', 'outcome_unknown'].includes(t.state)) ? $t('部分回复未完成 · 请查看成员状态') : $t('本轮暂时没有新的发言');
+  $('#reply-detail').textContent = !state.scheduler.online ? $t('回复服务未连接 · 请重新启动服务；未完成的提醒会保留') : current?.state === 'paused' ? (running ? $t('正在暂停 · 当前回复结束后停止') : $t('已暂停 · 可点击「继续回复」')) : current?.state === 'ended' ? $t('本轮讨论已结束 · 发送新消息可开始新一轮') : current?.state === 'limited' ? (running ? $t('当前执行继续 · 后续任务等待续期') : $t('等待授权或额度续期 · 可点击「继续回复」')) : pending.length ? participationSummary(tasks) : tasks.some(t => ['failed', 'blocked', 'interrupted', 'outcome_unknown'].includes(t.state)) ? $t('部分回复未完成 · 请查看成员状态') : current?.state === 'active' ? idleText(current) : $t('本轮暂时没有新的发言');
   $('#pause-reply').classList.toggle('hidden', !own || !rounds.some(d => d.state === 'active'));
   $('#pause-reply').disabled = false;
   $('#end-reply').classList.toggle('hidden', isObserver());
