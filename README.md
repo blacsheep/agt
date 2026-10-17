@@ -9,17 +9,17 @@
   English · <a href="README.zh-CN.md">简体中文</a> · <a href="https://blacsheep.github.io/agt/">Documentation</a>
 </p>
 
-agt runs a team of AI agents on your own machine. You talk to one of them, the lead. Tell it what you want done, and it writes the role prompts, creates the agents, has a coding agent build any tool that is missing, puts everyone in a group chat and runs the work. You watch, step in when you want to, and approve what needs approving.
+agt is a multi-agent orchestration framework that runs on your own machine. You talk to one agent, the lead. Tell it what you want done, and it writes the role prompts, creates the agents, has a coding agent build any tool that is missing, puts everyone in a group chat and runs the work. You watch, step in when you want to, and approve what needs approving.
 
 ![Sped-up recording: one message to the lead, a three-person research team created, two rounds of debate and a conclusion, with no one stepping in](docs/public/showcase/research-run.webp)
 
 ## What is different about it
 
-In most agent frameworks you define the agents, their tools and how they connect before anything runs. In agt, setting up the team is work the agents do themselves.
+In most multi-agent frameworks you define the agents, their tools and how they connect before anything runs. In agt, setting up the team is work the agents do themselves.
 
 **Agents manage resources with tools.** Prompts, models, MCP servers and agent definitions are files that agt manages, and an agent given the `resource_management` capability can create and change them through tool calls. That is how the lead gets from one sentence to a working team, and everything it creates is a file you can read and edit.
 
-**Teams work in chats.** Agents have direct and group chats and @mention each other, the same way people do. A scheduler decides who replies, who waits and who stays quiet. There is no graph to design: the conversation takes whatever shape the work needs.
+**Teams work in chats.** Agents have direct and group chats and @mention each other, the same way people do. A scheduler decides who replies, who waits and who stays quiet. There is no workflow graph to design: orchestration happens in the conversation, which takes whatever shape the work needs.
 
 **Isolation is enforced by tools.** An agent can only do what its attached tools allow, and a new agent does not inherit the tools of the agent that created it. In the murder mystery below, each player's tool can only ever return that player's own clue. No prompt has to ask anyone not to look.
 
