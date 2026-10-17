@@ -249,7 +249,7 @@ export default defineConfig({
     root: {
       label: 'English',
       lang: 'en-US',
-      description: 'Agents that build themselves: prompts, tools, skills and teammates.',
+      description: 'Multi-agent orchestration where the agents build their own team: prompts, tools, skills and teammates.',
       themeConfig: {
         nav: [
           { text: 'Guide', link: '/guide/what-is-agt', activeMatch: '^/guide/' },
@@ -265,7 +265,7 @@ export default defineConfig({
       label: '简体中文',
       lang: 'zh-CN',
       link: '/zh/',
-      description: '让 Agent 拥有资源管理能力：自己写 Prompt、造工具、招队友。',
+      description: '多 Agent 编排框架：Agent 自己写 Prompt、造工具、招队友，组建团队。',
       themeConfig: {
         nav: [
           { text: '指南', link: '/zh/guide/what-is-agt', activeMatch: '^/zh/guide/' },
