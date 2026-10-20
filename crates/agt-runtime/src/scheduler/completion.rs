@@ -42,6 +42,17 @@ pub(super) fn settle(
                     .get_message(&MessageId::new(crate::run_inputs::reply_target(
                         store, task, &record.id,
                     )?))?;
+            let members: Vec<String> = messaging
+                .im
+                .list_members(&conversation)?
+                .into_iter()
+                .filter(|m| m.left_message_seq.is_none())
+                .map(|m| m.principal_id.to_string())
+                .collect();
+            let mentions = super::mentions::resolve(output, principal.as_str(), &members)
+                .into_iter()
+                .map(PrincipalId::new)
+                .collect();
             let reply_depth = reply_message.metadata["automated_depth"]
                 .as_u64()
                 .unwrap_or(0)
@@ -64,7 +75,7 @@ pub(super) fn settle(
                         conversation,
                         body: output.into(),
                         request_key: format!("run-result:{}", record.id),
-                        mentions: Vec::new(),
+                        mentions,
                         reply_to: Some(reply_message.id),
                     })
                     .map_err(|e| {

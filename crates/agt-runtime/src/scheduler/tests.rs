@@ -1757,6 +1757,101 @@ fn external_group_transcript_preserves_senders_order_and_each_body_once() {
 }
 
 #[test]
+fn mentioned_policy_answers_only_mentions_and_reply_mentions_wake_members() {
+    let (home, user, chat) = fixture();
+    let path = home.path();
+    BindingStore::open(path)
+        .unwrap()
+        .set_policy(
+            &ConversationId::new(&chat),
+            &PrincipalId::new("b"),
+            ResponsePolicy::Mentioned,
+        )
+        .unwrap();
+    let mut scheduler = begin(path, &user, &chat);
+    let reply =
+        json!({"role":"assistant","content":"Drafted it. @b please review, and ask @all later."});
+    execute(
+        path,
+        claim(&mut scheduler, "a"),
+        &mut Answer(reply),
+        &CancellationToken::new(),
+    )
+    .unwrap();
+    let a = ToolService::open(
+        path,
+        Actor {
+            principal: PrincipalId::new("a"),
+            role: Role::Participant,
+            automated_depth: Some(1),
+        },
+    )
+    .unwrap();
+    a.call(
+        "message_send",
+        json!({"conversation":chat,"body":"an aside nobody was asked about","request_key":"aside"}),
+    )
+    .unwrap();
+    let published = im(path)
+        .unwrap()
+        .list_messages(
+            &ConversationId::new(&chat),
+            &PrincipalId::new("user"),
+            MessageListOptions {
+                limit: 10,
+                before: None,
+                after: None,
+            },
+        )
+        .unwrap()
+        .messages;
+    let draft = published
+        .iter()
+        .find(|m| m.body.starts_with("Drafted"))
+        .unwrap();
+    assert_eq!(draft.metadata["mentions"], json!(["b"]));
+    struct Count(u32, Value);
+    impl ModelClient for Count {
+        fn complete(
+            &mut self,
+            _: &ResolvedAgent,
+            messages: &[Value],
+            _: &[Value],
+        ) -> crate::Result<Value> {
+            self.0 += 1;
+            assert!(
+                messages
+                    .to_vec()
+                    .iter()
+                    .any(|m| m.to_string().contains("please review"))
+            );
+            Ok(self.1.clone())
+        }
+    }
+    let mut model = Count(0, json!({"role":"assistant","content":"Reviewed."}));
+    scheduler.scan().unwrap();
+    let pending = |s: &Scheduler| {
+        s.store
+            .candidates()
+            .unwrap()
+            .iter()
+            .filter(|t| t.principal == "b")
+            .count()
+    };
+    // b's pending work: the question merged with the draft that mentions b, then the aside.
+    while pending(&scheduler) > 0 {
+        execute(
+            path,
+            claim(&mut scheduler, "b"),
+            &mut model,
+            &CancellationToken::new(),
+        )
+        .unwrap();
+    }
+    assert_eq!(model.0, 1, "only the mention reaches the model");
+}
+
+#[test]
 fn native_scheduled_input_keeps_peer_identity_without_duplicate_trigger_body() {
     let (home, user, chat) = fixture();
     let path = home.path();

@@ -33,6 +33,7 @@ mod execution;
 mod guard;
 mod ingress;
 mod lease;
+mod mentions;
 
 use admission::quiet_ready;
 pub use controls::{

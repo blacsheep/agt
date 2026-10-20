@@ -6,7 +6,7 @@ use crate::schedule_store::{now_ms, save_task};
 use crate::{DiscussionState, TaskState};
 use crate::{Result, RuntimeError, ScheduleStore, ScheduledTask};
 use agt_im::{MessageId, PrincipalId, PrincipalKind};
-use agt_service::{Actor, BindingStore, InputMode, MessageInput, Messaging, ResponsePolicy, Role};
+use agt_service::{Actor, BindingStore, InputMode, MessageInput, Messaging, Role};
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use std::path::Path;
@@ -150,11 +150,6 @@ pub(crate) fn take(
             let policy = bindings
                 .policy(&message.conversation_id, &binding)
                 .map_err(unavailable)?;
-            let policy = if peer && policy != ResponsePolicy::Manual {
-                ResponsePolicy::All
-            } else {
-                policy
-            };
             if message.seq <= cutoff
                 || !messaging
                     .may_respond(&message, policy)

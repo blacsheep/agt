@@ -6,7 +6,7 @@ use crate::schedule_state::ClaimDeferral;
 use crate::{DiscussionState, TaskState};
 use crate::{ScheduleStore, ScheduledTask, schedule_store::now_ms};
 use agt_core::CancellationToken;
-use agt_im::{MessageId, MessageListOptions, PrincipalId, PrincipalKind};
+use agt_im::{MessageId, MessageListOptions, PrincipalId};
 use agt_service::{Actor, BindingStore, Messaging, Role};
 use anyhow::{Result, bail};
 use serde_json::{Value, json};
@@ -51,8 +51,7 @@ pub(super) fn prepare(
     let mut batch_bytes = 0;
     for id in &task.triggers {
         let message = messaging.im.get_message(&MessageId::new(id.as_str()))?;
-        let peer = messaging.im.get_principal(&message.sender_id)?.kind != PrincipalKind::User;
-        let effective_policy = backend::response_policy(engine, policy, peer);
+        let effective_policy = backend::response_policy(engine, policy);
         eligible |= messaging.may_respond(&message, effective_policy)?;
         if message.deleted_at.is_none() {
             let item = json!({"seq":message.seq,"message_id":message.id,"sender":message.sender_id,"body":message.body,"sent_at":crate::clock::local(message.created_at, &zone)});
