@@ -46,7 +46,7 @@ agt agent update researcher --add-mcp files
 | `create <name>` | `--file <path>` (required), `--category <c>` | Register a server from a JSON file |
 | `update <name>` | `--file <path>` (required), `--category <c>` | Replace the configuration |
 | `test <ref>` | `--category <c>` | Validate the configuration. Does not start or contact the server. |
-| `probe <ref>` | `--category <c>` | Start or connect exactly as a run would, initialize, list tools and compile their input schemas, then disconnect. Calls no tool. |
+| `probe <ref>` | `--category <c>` | Start or connect exactly as a run would, initialize, list tools and compile their input schemas, then disconnect. Calls no tool. agt asks for MCP protocol 2025-11-25 and accepts servers that answer 2024-11-05 or later. |
 | `list`, `info`, `delete`, `category` | | See [Resources](./resources.md#shared-cli-commands) |
 
 ### File: `mcp.json`

@@ -18,11 +18,12 @@ for raw_line in sys.stdin:
             sys.stderr.write("TOP_SECRET=do-not-leak\n" * 4)
             sys.stderr.flush()
             time.sleep(0.05)
-        version = (
-            "2024-11-05"
-            if mode in ("bad-version", "stderr-secret")
-            else "2025-11-25"
-        )
+        if mode in ("bad-version", "stderr-secret"):
+            version = "1999-01-01"
+        elif mode == "older-version":
+            version = "2025-06-18"
+        else:
+            version = "2025-11-25"
         capabilities = (
             {}
             if mode == "missing-tools"

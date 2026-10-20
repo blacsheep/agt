@@ -116,7 +116,7 @@ pub enum McpError {
 
     #[error(
         "mcp 协议版本不受支持：{name} 返回 {version:?}，仅支持 {supported}；{stderr}",
-        supported = crate::protocol::MCP_PROTOCOL_VERSION
+        supported = crate::protocol::MCP_ACCEPTED_PROTOCOL_VERSIONS.join("、")
     )]
     UnsupportedProtocolVersion {
         name: String,

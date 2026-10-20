@@ -3,6 +3,21 @@ use serde_json::{Map, Value};
 
 pub const MCP_PROTOCOL_VERSION: &str = "2025-11-25";
 
+/// Versions a server may answer with. agt always asks for [`MCP_PROTOCOL_VERSION`];
+/// older servers answer with their own, and the tools agt uses (`tools/list`,
+/// `tools/call`) are compatible across all of them: newer versions only add
+/// optional fields.
+pub const MCP_ACCEPTED_PROTOCOL_VERSIONS: &[&str] = &[
+    MCP_PROTOCOL_VERSION,
+    "2025-06-18",
+    "2025-03-26",
+    "2024-11-05",
+];
+
+pub fn accepts_protocol_version(version: &str) -> bool {
+    MCP_ACCEPTED_PROTOCOL_VERSIONS.contains(&version)
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpInitializeInfo {

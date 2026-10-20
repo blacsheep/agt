@@ -275,7 +275,7 @@ impl StdioConnection {
         )?;
         let initialize: McpInitializeInfo = serde_json::from_value(response)
             .map_err(|source| self.protocol_error(format!("initialize 返回格式无效：{source}")))?;
-        if initialize.protocol_version != MCP_PROTOCOL_VERSION {
+        if !crate::protocol::accepts_protocol_version(&initialize.protocol_version) {
             return Err(McpError::UnsupportedProtocolVersion {
                 name: self.name.clone(),
                 version: initialize.protocol_version,
@@ -961,6 +961,17 @@ for raw_line in sys.stdin:
         let mut client = MinimalStdioMcpClient::start(&document).expect("start");
         assert!(server_cwd.join("server.pid").is_file());
         client.close().expect("close");
+        let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn accepts_an_older_protocol_version_the_server_answers_with() {
+        let workspace = test_home("older-version");
+        fs::create_dir_all(&workspace).expect("workspace");
+        let document = helper_document(&workspace, "older-version");
+        let mut client = MinimalStdioMcpClient::start(&document).expect("start");
+        assert_eq!(client.initialize_info().protocol_version, "2025-06-18");
+        assert!(!client.list_tools().expect("tools").is_empty());
         let _ = fs::remove_dir_all(workspace);
     }
 
