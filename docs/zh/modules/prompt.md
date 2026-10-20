@@ -22,7 +22,7 @@ agt 自带两个 Prompt：
 
 `agt init` 会创建这两个 Prompt，且从不覆盖已存在的 Prompt。
 
-新版 agt 改进了 `default/lead` 时，只要你从没改过这个 Prompt，下次调度器启动（`agt web` 或 `agt schedule run`）时就会自动换成新版。改过的 lead Prompt 不会被动；想用新版，把该版本的 `crates/agt-prompt/src/lead.md` 复制到 `prompts/default/lead/PROMPT.md`。
+新版 agt 改进了 `default/lead` 时，只要你从没改过这个 Prompt，下次调度器启动（`agt web` 或 `agt schedule run`）时就会自动换成新版。改过的 lead Prompt 不会被动；这时它在**资源库**里的详情页会提示已有更新的内置版本，并提供**替换为新版内置提示词**按钮，替换会丢弃你的修改。`resource_read` 也会在 `builtin_update.text` 中返回新版正文。
 
 ## 怎么用
 

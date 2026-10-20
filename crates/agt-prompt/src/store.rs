@@ -30,7 +30,7 @@ const SHIPPED_LEAD: &[&str] = &[
     "21ffb386f316134547464666ef943156f50f511ef3db458b161e7eb6c653ba74",
 ];
 #[cfg(test)]
-const CURRENT_LEAD: &str = "99010e58c304002f603af82f3eab64e027a6ed491beb782bee89c756d3b4b0df";
+const CURRENT_LEAD: &str = "6fe4e6ce0e65d7057b60dc58e3c0f3ddaac403bdf715ff7f3a0c8d02e3cc1d79";
 
 /// SHA-256 of a prompt with LF line endings and no trailing whitespace, as hex.
 /// Windows checkouts and builds carry CRLF; both spellings are the same prompt.
@@ -126,6 +126,24 @@ impl PromptStore {
         }
         self.update_in(&category, LEAD_PROMPT_NAME, LEAD_PROMPT_BODY)?;
         Ok(true)
+    }
+
+    /// The current built-in text of a built-in prompt whose stored copy differs from it.
+    /// Unedited copies from earlier releases are replaced on upgrade; edited copies are
+    /// kept, so this lets a person compare and choose.
+    pub fn builtin_update_in(
+        &self,
+        category: &CategoryName,
+        name: &str,
+    ) -> Result<Option<&'static str>> {
+        if !category.is_default() || name != LEAD_PROMPT_NAME {
+            return Ok(None);
+        }
+        let stored = self.read_in(category, name)?;
+        Ok(
+            (fingerprint(&stored.content) != fingerprint(LEAD_PROMPT_BODY))
+                .then_some(LEAD_PROMPT_BODY),
+        )
     }
 
     pub fn create(&self, name: &str, content: &str) -> Result<StoredPrompt> {
@@ -500,6 +518,26 @@ mod tests {
             0o600
         );
         assert_eq!(store.read("private").unwrap().content, "updated");
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn an_edited_lead_prompt_reports_the_new_built_in_text() {
+        let home = test_home("lead-notice");
+        let store = PromptStore::new(&home);
+        store.ensure_builtin_prompts().unwrap();
+        let default = CategoryName::default();
+        assert_eq!(
+            store.builtin_update_in(&default, LEAD_PROMPT_NAME).unwrap(),
+            None
+        );
+        store.update(LEAD_PROMPT_NAME, "my lead").unwrap();
+        assert_eq!(
+            store.builtin_update_in(&default, LEAD_PROMPT_NAME).unwrap(),
+            Some(LEAD_PROMPT_BODY)
+        );
+        store.create("other", "not built in").unwrap();
+        assert_eq!(store.builtin_update_in(&default, "other").unwrap(), None);
         let _ = fs::remove_dir_all(home);
     }
 
