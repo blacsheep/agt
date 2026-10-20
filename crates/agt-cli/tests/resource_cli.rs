@@ -27,6 +27,29 @@ fn init(path: &std::path::Path) -> std::process::Output {
         .expect("run agt init")
 }
 
+#[cfg(unix)]
+#[test]
+fn closed_stdout_ends_the_command_quietly() {
+    let home = temp_home("pipe");
+    assert!(init(&home).status.success());
+    let mut child = Command::new(env!("CARGO_BIN_EXE_agt"))
+        .args(["--home", home.to_str().expect("utf8"), "prompt", "list"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn agt");
+    // Like `agt prompt list | head -0`: the reader leaves before agt writes.
+    drop(child.stdout.take());
+    let output = child.wait_with_output().expect("wait");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        !stderr.contains("panicked") && !stderr.contains("Broken pipe"),
+        "{stderr}"
+    );
+    let _ = fs::remove_dir_all(home);
+}
+
 #[test]
 fn manages_definitions_and_masks_provider_secret() {
     let home = temp_home("crud");

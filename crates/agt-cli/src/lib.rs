@@ -708,6 +708,7 @@ where
     };
     match run_cli(cli) {
         Ok(()) => ExitCode::SUCCESS,
+        Err(error) if broken_pipe(&error) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("Error: {error:#}");
             ExitCode::from(1)
@@ -1666,21 +1667,39 @@ fn emit<T: Serialize>(value: &T, mode: OutputMode) -> Result<()> {
 }
 
 fn emit_value(value: Value, mode: OutputMode) -> Result<()> {
+    use std::io::Write;
+    // `writeln!` rather than `println!`: a closed pipe becomes an error, not a panic.
+    let mut stdout = std::io::stdout().lock();
     match mode {
         OutputMode::Human | OutputMode::Json => {
-            println!("{}", serde_json::to_string_pretty(&value)?);
+            writeln!(stdout, "{}", serde_json::to_string_pretty(&value)?)?;
         }
         OutputMode::Jsonl => {
             if let Value::Array(items) = value {
                 for item in items {
-                    println!("{}", serde_json::to_string(&item)?);
+                    writeln!(stdout, "{}", serde_json::to_string(&item)?)?;
                 }
             } else {
-                println!("{}", serde_json::to_string(&value)?);
+                writeln!(stdout, "{}", serde_json::to_string(&value)?)?;
             }
         }
     }
     Ok(())
+}
+
+/// The reader of stdout went away, as in `agt run list | head`: not a failure.
+fn broken_pipe(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .map(std::io::Error::kind)
+            .or_else(|| {
+                cause
+                    .downcast_ref::<serde_json::Error>()
+                    .and_then(serde_json::Error::io_error_kind)
+            })
+            == Some(std::io::ErrorKind::BrokenPipe)
+    })
 }
 
 // The dependency-aware delete implementation is kept below the CRUD
