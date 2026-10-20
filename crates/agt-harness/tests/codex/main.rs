@@ -36,9 +36,33 @@ fn fixture() -> (tempfile::TempDir, HarnessConfig) {
         timeout_seconds: 10,
         args: Vec::new(),
         auth_method: None,
+        inherit_mcp_servers: true,
     };
     (dir, config)
 }
+#[test]
+fn without_inherited_mcp_servers_codex_restarts_with_each_one_disabled() {
+    let launches = |inherit: bool| {
+        let (dir, mut config) = fixture();
+        config.inherit_mcp_servers = inherit;
+        drop(Codex::connect(&config, &mut |_| Ok(())).unwrap());
+        let argv = std::fs::read_to_string(dir.path().join("argv.jsonl")).unwrap();
+        argv.lines()
+            .map(|l| serde_json::from_str::<Vec<String>>(l).unwrap())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(launches(true).len(), 1, "the default reads no config");
+    let launches = launches(false);
+    assert_eq!(launches.len(), 2);
+    assert!(!launches[0].contains(&"-c".to_owned()));
+    let overrides = launches[1]
+        .windows(2)
+        .filter(|w| w[0] == "-c")
+        .map(|w| w[1].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(overrides, ["mcp_servers.fetch.enabled=false"]);
+}
+
 #[test]
 fn streams_final_and_bridges_tools_without_model_retries() {
     let (_dir, config) = fixture();

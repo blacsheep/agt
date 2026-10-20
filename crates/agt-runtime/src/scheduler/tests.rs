@@ -1307,6 +1307,7 @@ fn external_fixture() -> (tempfile::TempDir, ToolService, String) {
                 timeout_seconds: 10,
                 args: Vec::new(),
                 auth_method: None,
+                inherit_mcp_servers: true,
             },
             true,
         )
@@ -1347,6 +1348,7 @@ fn deepseek_harness_agent_replies_through_acp_and_resumes_its_session() {
                 timeout_seconds: 10,
                 args: Vec::new(),
                 auth_method: None,
+                inherit_mcp_servers: true,
             },
             true,
         )
@@ -1463,6 +1465,7 @@ fn claude_code_agent_replies_and_resumes_its_session() {
                 timeout_seconds: 10,
                 args: Vec::new(),
                 auth_method: None,
+                inherit_mcp_servers: true,
             },
             true,
         )

@@ -11,6 +11,7 @@ def finish(thread,turn,text):
  note('item/completed',{'threadId':thread,'turnId':turn,'item':{'type':'agentMessage','id':'final','phase':'final_answer','text':text}})
  note('turn/completed',{'threadId':thread,'turn':{'id':turn,'status':'completed'}})
 thread='';turn=''; mode=''
+with (root/'argv.jsonl').open('a') as log:log.write(json.dumps(sys.argv[1:])+'\n')
 for line in sys.stdin:
  v=json.loads(line)
  with (root/'protocol.jsonl').open('a') as log:log.write(json.dumps(v)+'\n')
@@ -18,6 +19,7 @@ for line in sys.stdin:
  if method=='initialize':
   if (root/'startup-fails').exists():sys.exit(0)
   reply(id,{'userAgent':'fixture/1'})
+ elif method=='config/read':reply(id,{'config':{'mcp_servers':{'fetch':{'command':'uvx'},'off':{'command':'x','enabled':False}}},'origins':{}})
  elif method=='account/read':reply(id,{'account':None,'requiresOpenaiAuth':False})
  elif method=='model/list':
   models=[{'id':'fixture-model','model':'fixture-model','displayName':'Fixture model','description':'Local test model','defaultReasoningEffort':'high','supportedReasoningEfforts':[{'reasoningEffort':'high','description':'High'},{'reasoningEffort':'xhigh','description':'Extra high'}],'isDefault':True,'hidden':False}]

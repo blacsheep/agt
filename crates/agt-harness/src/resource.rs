@@ -41,9 +41,19 @@ pub struct HarnessConfig {
     /// `acp` engine only: the ACP auth method to use when the agent needs one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<String>,
+    /// `codex` engine only: false starts Codex without the MCP servers in its own config
+    /// files, so it offers only agt's tools and starts no extra server processes.
+    #[serde(default = "inherit", skip_serializing_if = "is_inherited")]
+    pub inherit_mcp_servers: bool,
 }
 fn default_timeout() -> u64 {
     1800
+}
+fn inherit() -> bool {
+    true
+}
+fn is_inherited(value: &bool) -> bool {
+    *value
 }
 impl HarnessConfig {
     pub fn validate(&self) -> Result<()> {
@@ -65,6 +75,9 @@ impl HarnessConfig {
             }
         } else if !self.args.is_empty() || self.auth_method.is_some() {
             bail!("args and auth_method apply only to the acp engine");
+        }
+        if !self.inherit_mcp_servers && self.engine != crate::CODEX {
+            bail!("inherit_mcp_servers applies only to the codex engine");
         }
         if !self.executable.is_absolute() || !self.executable.is_file() {
             bail!("executable must be an existing absolute file path on the server");

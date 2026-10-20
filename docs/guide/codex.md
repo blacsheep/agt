@@ -55,6 +55,8 @@ In the Web form, set **Engine** (执行方式) to **External harness** (外部 H
 | Messaging, memory and task tools | Response policy `all` (only `mentioned` and `manual`) |
 | Streaming preview, `/stop` and `/new` | |
 
+Codex also starts the MCP servers configured in its own config files, such as `~/.codex/config.toml`. Set `"inherit_mcp_servers": false` in the harness to leave them off, so the agent works with agt's tools only and each session starts no extra server processes.
+
 Codex asks for approval when it needs to go beyond its sandbox. These requests appear in the same approval queue as native tool calls, and are handled by the **Harness** approval mode; see [Permissions](./permissions.md#codex-approvals).
 
 ## Sessions
