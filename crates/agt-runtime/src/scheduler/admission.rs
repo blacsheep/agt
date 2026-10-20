@@ -9,7 +9,7 @@ use agt_core::CancellationToken;
 use agt_im::{MessageId, MessageListOptions, PrincipalId};
 use agt_service::{Actor, BindingStore, Messaging, Role};
 use anyhow::{Result, bail};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::path::Path;
 
 pub(super) struct Admission {
@@ -54,7 +54,7 @@ pub(super) fn prepare(
         let effective_policy = backend::response_policy(engine, policy);
         eligible |= messaging.may_respond(&message, effective_policy)?;
         if message.deleted_at.is_none() {
-            let item = json!({"seq":message.seq,"message_id":message.id,"sender":message.sender_id,"body":message.body,"sent_at":crate::clock::local(message.created_at, &zone)});
+            let item = crate::conversation_context::message_item(&message, &zone);
             batch_bytes += item.to_string().len();
             if batch_bytes > 128 * 1024 {
                 bail!("merged message batch exceeds 128 KiB");

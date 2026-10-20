@@ -6,6 +6,16 @@ use agt_im::{ConversationId, ImStore, MessageListOptions, PrincipalId};
 use serde_json::{Value, json};
 use std::path::Path;
 
+/// One message as models see it. A timer posts as the person who authorized it;
+/// `via_timer` names who set it, so the reminder is not read as that person speaking.
+pub(crate) fn message_item(m: &agt_im::Message, zone: &jiff::tz::TimeZone) -> Value {
+    let mut item = json!({"seq":m.seq,"message_id":m.id,"sender":m.sender_id,"body":m.body,"sent_at":crate::clock::local(m.created_at, zone)});
+    if let Some(creator) = m.metadata["timer"]["creator"].as_str() {
+        item["via_timer"] = json!({ "creator": creator });
+    }
+    item
+}
+
 pub(crate) fn visible_history(
     im: &ImStore,
     task: &ScheduledTask,
@@ -36,7 +46,7 @@ pub(crate) fn visible_history(
             page.messages
                 .into_iter()
                 .filter(|m| m.seq > cutoff && m.seq <= task.through_seq && m.deleted_at.is_none())
-                .map(|m| json!({"seq":m.seq,"message_id":m.id,"sender":m.sender_id,"body":m.body,"sent_at":crate::clock::local(m.created_at, zone)})),
+                .map(|m| message_item(&m, zone)),
         );
         before = page.next_cursor;
         if reached || before.is_none() {

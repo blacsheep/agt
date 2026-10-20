@@ -174,9 +174,7 @@ pub(crate) fn take(
                     .get_message(&MessageId::new(id))
                     .map_err(unavailable)?;
                 if m.deleted_at.is_none() && m.seq > cutoff {
-                    messages.push(
-                        json!({"seq":m.seq,"message_id":m.id,"sender":m.sender_id,"body":m.body,"sent_at":crate::clock::local(m.created_at, &zone)}),
-                    );
+                    messages.push(crate::conversation_context::message_item(&m, &zone));
                 }
             }
             let reply_depth = message.metadata["automated_depth"]
