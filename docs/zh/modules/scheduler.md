@@ -71,6 +71,8 @@ agt schedule end <会话>
 | `scheduler.parallel_work` | `false` | 见[任务](./tasks.md#全部参数) | 调度器重启 |
 | `scheduler.model_steps` | `null` | 见[执行记录](./runs.md#全部参数) | 新的执行 |
 | `scheduler.timezone` | `null` | IANA 时区，例如 `Asia/Shanghai`。用于 Agent 看到的时间和[定时任务](../guide/timers.md)。`null` 使用本机时区。 | 新的执行和新建的定时任务 |
+| `scheduler.goal_idle_seconds` | `120` | 工作空间连续安静多少秒后，让未完成[目标](../guide/tasks.md#目标-让长流程持续推进)的负责人审核一次。`null` 关闭自动审核。 | 下一次调度检查 |
+| `scheduler.goal_stalled_reviews` | `3` | 连续多少次审核后除负责人外仍无人行动，就暂停该目标的审核并等人处理。`null` 不限（总次数上限 50 仍然有效）。 | 下一次调度检查 |
 
 ### 状态值
 

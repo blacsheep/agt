@@ -80,6 +80,11 @@ Timers come with `task_collaboration`. See [Timers](../guide/timers.md) for how 
 | `timer_create` | `text`, one of `after_seconds` / `at` / `cron`, `mentions?`, `name?`, `timezone?`, `discussion_seconds?`, `conversation?` | Post `text` to the conversation later, once or on a cron schedule. Agents can only use their current conversation; people calling from the CLI must name it. Returns the resolved `next_at` in local time. |
 | `timer_list` | `conversation?`, `include_finished?` | Active timers in your conversations; `include_finished` adds fired and canceled ones |
 | `timer_cancel` | `timer_id`, `reason?` | Agents cancel their own timers; people cancel any timer in their conversation |
+| `goal_create` | `text`, `done_when`, `conversation?` | Own an outcome until it is done; open goals are reviewed when the workspace goes quiet. At most 5 open goals per identity |
+| `goal_get` / `goal_list` | `goal_id` / `include_finished?` | The owner, and people in the goal's conversation, see a goal |
+| `goal_complete` | `goal_id`, `evidence` | Mark it done; reviews stop |
+| `goal_wait_human` | `goal_id`, `question` | Pause reviews until a person writes in the goal's conversation |
+| `goal_abandon` | `goal_id`, `reason` | Stop working toward it; reviews stop |
 
 ### `execution_policy`
 

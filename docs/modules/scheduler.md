@@ -71,6 +71,8 @@ Run only one scheduler per home. If the Web console is running, it already runs 
 | `scheduler.parallel_work` | `false` | See [Tasks](./tasks.md#all-parameters) | Scheduler restart |
 | `scheduler.model_steps` | `null` | See [Runs](./runs.md#all-parameters) | New runs |
 | `scheduler.timezone` | `null` | IANA time zone, such as `Asia/Shanghai`, for the times agents see and for [timers](../guide/timers.md). `null` uses the host's zone. | New runs and new timers |
+| `scheduler.goal_idle_seconds` | `120` | Seconds the workspace must stay quiet before the owner of an open [goal](../guide/tasks.md#goals-keep-long-work-moving) reviews it. `null` turns automatic reviews off. | Next scheduler check |
+| `scheduler.goal_stalled_reviews` | `3` | Reviews in a row after which nobody but the owner has acted before the goal's reviews pause for a person. `null` for no limit (a total of 50 still applies). | Next scheduler check |
 
 ### Status values
 

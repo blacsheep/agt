@@ -5,7 +5,7 @@ window.AgtSettings = (() => {
     'permissions.harness_mode':$t('Harness 权限处理模式'),'permissions.mode':$t('Native 权限审核策略'),'permissions.reviewer_model':$t('审核模型'),'permissions.review_timeout_seconds':$t('模型审核时限（秒）'),'permissions.request_timeout_seconds':$t('审批总时限（秒）'),
     'scheduler.concurrency':$t('同时执行任务数'), 'scheduler.parallel_work':$t('允许同身份并行工作'),
     'scheduler.replies_per_agent':$t('每位 Agent 的讨论回复额度'),'scheduler.discussion_seconds':$t('讨论授权有效期（秒）'),
-    'scheduler.model_steps':$t('单次原生运行的模型步数'),'scheduler.timezone':$t('时区'),'memory.enabled':$t('历史记忆检索'),
+    'scheduler.model_steps':$t('单次原生运行的模型步数'),'scheduler.timezone':$t('时区'),'scheduler.goal_idle_seconds':$t('目标审核前的安静时长（秒）'),'scheduler.goal_stalled_reviews':$t('无进展审核次数上限'),'memory.enabled':$t('历史记忆检索'),
     'execution.enabled':$t('允许本机命令'),'execution.timeout_seconds':$t('本机命令时限（秒）'),'execution.output_bytes':$t('命令输出上限（字节）')
   };
   const sections=[['permissions',$t('工具权限审批'),$t('Native Agent 调用工具前的审核策略，以及 Codex 原生审批请求的处理方式。')],['scheduler',$t('调度与容量'),$t('控制同时运行多少工作，以及一轮授权可以持续多久。')],['memory',$t('跨会话记忆'),$t('按固定身份检索可见历史；主题摘要始终保留原消息依据。')],['execution',$t('本机执行'),$t('与 Agent 的 local_execution 能力共同生效。宿主机权限不是项目目录沙箱。')]];

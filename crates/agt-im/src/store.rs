@@ -1090,6 +1090,23 @@ impl ImStore {
         get_message_from_connection(&connection, message_id)
     }
 
+    /// When the workspace last showed activity: the newest message anywhere, leaving out
+    /// goal reviews (messages with `goal_review` metadata) and the replies to them, and,
+    /// if given, messages from `except`.
+    pub fn latest_activity(&self, except: Option<&PrincipalId>) -> Result<Option<i64>> {
+        let connection = self.lock()?;
+        Ok(connection.query_row(
+            "SELECT MAX(m.created_at) FROM messages m
+             WHERE m.deleted_at IS NULL
+               AND json_extract(m.metadata_json, '$.goal_review') IS NULL
+               AND (?1 IS NULL OR m.sender_id != ?1)
+               AND NOT EXISTS (SELECT 1 FROM messages r WHERE r.id = m.reply_to_id
+                               AND json_extract(r.metadata_json, '$.goal_review') IS NOT NULL)",
+            params![except.map(PrincipalId::as_str)],
+            |row| row.get(0),
+        )?)
+    }
+
     fn change_conversation_state(
         &self,
         conversation_id: &ConversationId,

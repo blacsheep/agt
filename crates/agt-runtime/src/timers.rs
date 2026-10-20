@@ -476,7 +476,7 @@ fn view(timer: &Timer, now: i64) -> Result<Value> {
     Ok(value)
 }
 
-fn member(im: &ImStore, conversation: &str, principal: &str) -> Result<()> {
+pub(crate) fn member(im: &ImStore, conversation: &str, principal: &str) -> Result<()> {
     let chat = ConversationId::new(conversation);
     let principal = PrincipalId::new(principal);
     if im.get_conversation(&chat)?.state != ConversationState::Active
@@ -488,7 +488,7 @@ fn member(im: &ImStore, conversation: &str, principal: &str) -> Result<()> {
     Ok(())
 }
 
-fn open_im(home: &Path) -> Result<ImStore> {
+pub(crate) fn open_im(home: &Path) -> Result<ImStore> {
     Ok(ImStore::open(crate::store::database_path(
         home, "im", "im.db",
     )?)?)
