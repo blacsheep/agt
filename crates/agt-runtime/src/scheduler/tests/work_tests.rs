@@ -27,6 +27,7 @@ fn delegate(scheduler: &mut Scheduler, chat: &str) -> String {
     item["id"].as_str().unwrap().into()
 }
 fn claim_work(scheduler: &mut Scheduler, id: &str) -> ScheduledTask {
+    renew_lease(scheduler);
     let id = format!("work:{id}");
     let now = now_ms();
     scheduler

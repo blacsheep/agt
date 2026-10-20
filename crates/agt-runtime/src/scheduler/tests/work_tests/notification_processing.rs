@@ -22,6 +22,7 @@ fn completed_work() -> (tempfile::TempDir, Scheduler, String, ScheduledTask) {
         .into_iter()
         .find(|t| t.work_notification)
         .unwrap();
+    renew_lease(&scheduler);
     let now = now_ms();
     let notice = scheduler
         .store
