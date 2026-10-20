@@ -197,9 +197,13 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
         if item.state == WorkState::Queued {
             item = super::reporting::expired_barrier(home, &ledger.store, item)?;
             if let Some(claimed) = &mut run {
+                if claimed.state == RunState::Running && live {
+                    // Its live job binds the claim itself; recording it here races that bind.
+                    continue;
+                }
                 // Crash between runs.db claim and the work association. Never execute again.
                 item = ledger.record_running(&item.id, item.revision, &claimed.id)?;
-                if claimed.state == RunState::Running && !live {
+                if claimed.state == RunState::Running {
                     // Binding precedes the first model or tool call, so this claim never ran.
                     not_started(&runs, claimed)?;
                 }
