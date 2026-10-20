@@ -125,6 +125,11 @@ impl ToolError {
                 ),
             };
         }
+        if let Some(error) = error.downcast_ref::<agt_mcp::McpError>()
+            && let Some(message) = mcp_failure(error)
+        {
+            return Self::new("mcp_server_error", message);
+        }
         macro_rules! resource_error {
             ($kind:path) => {
                 if let Some(typed) = error.downcast_ref::<$kind>() {
@@ -160,6 +165,43 @@ impl ToolError {
     }
 }
 
+/// Why connecting to or probing an MCP server failed, in fixed text. The server's own
+/// output (stderr, paths, commands) stays in the local diagnostic.
+fn mcp_failure(error: &agt_mcp::McpError) -> Option<&'static str> {
+    use agt_mcp::McpError::*;
+    Some(match error {
+        Startup { .. } => {
+            "The MCP server could not start. Check its command, arguments and working directory."
+        }
+        UnsupportedProtocolVersion { .. } => {
+            "The MCP server answered with a protocol version agt does not support. agt speaks MCP 2025-11-25; the server must accept that version in initialize."
+        }
+        Protocol { .. } => {
+            "The MCP server sent a reply that breaks the MCP protocol. Check its initialize and tools/list responses."
+        }
+        MissingCapability { .. } => {
+            "The MCP server does not declare a capability agt needs, such as tools."
+        }
+        LimitExceeded { .. } => {
+            "The MCP server exceeded an agt limit, such as the number or size of its tools."
+        }
+        Timeout { .. } => {
+            "The MCP server did not answer in time. Check that it starts quickly and writes replies to stdout."
+        }
+        MissingCredential { .. } => {
+            "The MCP server needs a credential from an environment variable that is not set."
+        }
+        AuthenticationRequired { .. } => {
+            "The MCP server rejected the request as unauthenticated. Configure a bearer or header credential."
+        }
+        HttpTransport { .. } => "The MCP server could not be reached over HTTP.",
+        InvalidConfig { .. } | ConflictingTransport { .. } | UnsupportedTransport { .. } => {
+            "The MCP configuration is invalid. Check command, args, env and transport."
+        }
+        _ => return None,
+    })
+}
+
 impl std::fmt::Display for ToolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.code, self.message)?;
@@ -190,5 +232,24 @@ mod tests {
         // An explicit ToolError passes through unchanged and carries no cause.
         let explicit = ToolError::classify(ToolError::new("conflict", "public").into());
         assert!(explicit.diagnostic().is_none());
+    }
+
+    #[test]
+    fn mcp_failures_say_what_went_wrong_without_server_output() {
+        let error = ToolError::classify(
+            agt_mcp::McpError::UnsupportedProtocolVersion {
+                name: "secret-server".into(),
+                version: "2024-11-05".into(),
+                stderr: agt_mcp::McpStderrSummary::default(),
+            }
+            .into(),
+        );
+        assert_eq!(error.code, "mcp_server_error");
+        assert!(error.message.contains(agt_mcp::MCP_PROTOCOL_VERSION));
+        assert!(!error.as_value().to_string().contains("secret-server"));
+        assert!(error.diagnostic().unwrap().contains("2024-11-05"));
+        // Resource errors keep their own codes.
+        let missing = ToolError::classify(agt_mcp::McpError::NotFound { name: "x".into() }.into());
+        assert_eq!(missing.code, "not_found");
     }
 }
