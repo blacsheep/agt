@@ -33,9 +33,7 @@ use crate::client::McpClient;
 use crate::config::{McpDocument, McpHttpServerConfig};
 use crate::error::{McpError, McpStderrSummary, Result};
 use crate::limits::McpLimits;
-use crate::protocol::{
-    MCP_PROTOCOL_VERSION, McpClientEvent, McpInitializeInfo, McpTool, McpToolCallResult,
-};
+use crate::protocol::{McpClientEvent, McpInitializeInfo, McpTool, McpToolCallResult};
 
 const INITIALIZE_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -369,7 +367,7 @@ fn run_worker(
                     return;
                 }
             };
-        if initialize_info.protocol_version != MCP_PROTOCOL_VERSION {
+        if !crate::protocol::accepts_protocol_version(&initialize_info.protocol_version) {
             let _ = init_tx.send(Err(McpError::UnsupportedProtocolVersion {
                 name,
                 version: initialize_info.protocol_version,
@@ -1198,6 +1196,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::protocol::MCP_PROTOCOL_VERSION;
 
     #[derive(Clone, Copy)]
     enum ResponseMode {

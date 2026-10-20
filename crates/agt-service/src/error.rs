@@ -174,7 +174,7 @@ fn mcp_failure(error: &agt_mcp::McpError) -> Option<&'static str> {
             "The MCP server could not start. Check its command, arguments and working directory."
         }
         UnsupportedProtocolVersion { .. } => {
-            "The MCP server answered with a protocol version agt does not support. agt speaks MCP 2025-11-25; the server must accept that version in initialize."
+            "The MCP server answered with a protocol version agt does not support. agt asks for MCP 2025-11-25 and accepts servers that answer 2024-11-05 or later."
         }
         Protocol { .. } => {
             "The MCP server sent a reply that breaks the MCP protocol. Check its initialize and tools/list responses."
@@ -239,7 +239,7 @@ mod tests {
         let error = ToolError::classify(
             agt_mcp::McpError::UnsupportedProtocolVersion {
                 name: "secret-server".into(),
-                version: "2024-11-05".into(),
+                version: "1999-01-01".into(),
                 stderr: agt_mcp::McpStderrSummary::default(),
             }
             .into(),
@@ -247,7 +247,7 @@ mod tests {
         assert_eq!(error.code, "mcp_server_error");
         assert!(error.message.contains(agt_mcp::MCP_PROTOCOL_VERSION));
         assert!(!error.as_value().to_string().contains("secret-server"));
-        assert!(error.diagnostic().unwrap().contains("2024-11-05"));
+        assert!(error.diagnostic().unwrap().contains("1999-01-01"));
         // Resource errors keep their own codes.
         let missing = ToolError::classify(agt_mcp::McpError::NotFound { name: "x".into() }.into());
         assert_eq!(missing.code, "not_found");

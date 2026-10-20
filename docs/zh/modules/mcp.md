@@ -46,7 +46,7 @@ agt agent update researcher --add-mcp files
 | `create <名称>` | `--file <路径>`（必填）、`--category <c>` | 从 JSON 文件注册服务 |
 | `update <名称>` | `--file <路径>`（必填）、`--category <c>` | 替换配置 |
 | `test <引用>` | `--category <c>` | 校验配置。不启动也不连接服务。 |
-| `probe <引用>` | `--category <c>` | 按真实执行的方式启动或连接，完成初始化，列出工具并编译其输入 schema，然后断开。不调用任何工具。 |
+| `probe <引用>` | `--category <c>` | 按真实执行的方式启动或连接，完成初始化，列出工具并编译其输入 schema，然后断开。不调用任何工具。agt 请求 MCP 协议 2025-11-25，服务器回复 2024-11-05 及以后的版本都可接受。 |
 | `list`、`info`、`delete`、`category` | | 见[资源通用操作](./resources.md#通用-cli-命令) |
 
 ### 文件：`mcp.json`
