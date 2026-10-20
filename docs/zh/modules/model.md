@@ -25,6 +25,7 @@ agt 以流式方式接收响应，对临时故障最多重试 10 次，并在对
 agt model create fast --provider openai --model gpt-5-mini --api-format responses --tool-call true
 agt model update fast --reasoning-effort low
 agt model update fast --clear-reasoning-effort
+agt model update fast --model gpt-5-nano          # 改用另一个模型；Agent 仍然引用 fast
 ```
 
 **Agent 工具：**
@@ -63,10 +64,12 @@ agt model update fast --clear-reasoning-effort
 
 ### `agt model update <名称>`
 
-接受 `create` 中除 `--provider` 和 `--model` 以外的所有选项，另外还有：
+接受 `create` 的所有选项，另外还有：
 
 | 选项 | 含义 |
 | --- | --- |
+| `--provider <引用>` | 改用另一个 provider，写成 `名称` 或 `分类/名称`，必须已存在 |
+| `--model <名称>` | 改用该 provider 上的另一个模型名 |
 | `--clear-max-tokens` | 不再发送输出上限 |
 | `--clear-reasoning-effort` | 不再发送推理强度 |
 

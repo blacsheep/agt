@@ -212,6 +212,12 @@ struct ModelUpdateArgs {
     name: String,
     #[arg(long)]
     category: Option<String>,
+    /// Call this provider instead, as `name` or `category/name`
+    #[arg(long)]
+    provider: Option<String>,
+    /// Call this model name on the provider instead
+    #[arg(long)]
+    model: Option<String>,
     /// chat-completions (default), responses, anthropic-messages or gemini
     #[arg(long)]
     api_format: Option<String>,
@@ -1166,7 +1172,7 @@ fn dispatch_model(command: ModelCommand, home: &Path, output: OutputMode, yes: b
         }
         ModelCommand::Update(args) => {
             let (category, name) = parse_named_ref(&args.name, args.category.as_deref())?;
-            let update = model_update_from(
+            let mut update = model_update_from(
                 args.api_format,
                 args.temperature,
                 args.max_tokens,
@@ -1177,6 +1183,8 @@ fn dispatch_model(command: ModelCommand, home: &Path, output: OutputMode, yes: b
                 args.tool_call,
                 args.context_window,
             )?;
+            update.provider = args.provider;
+            update.model = args.model;
             write_resource(
                 home,
                 "model",
@@ -1588,6 +1596,8 @@ fn model_update_from(
         clear_reasoning_effort,
         tool_call,
         context_window,
+        provider: None,
+        model: None,
     })
 }
 

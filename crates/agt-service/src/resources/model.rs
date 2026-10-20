@@ -9,6 +9,13 @@ pub(super) fn write(
 ) -> Result<()> {
     if create {
         let d: ModelCreate = serde_json::from_value(data)?;
+        if d.params.provider.is_some() || d.params.model.is_some() {
+            return Err(crate::ToolError::invalid(
+                Some("params"),
+                "Give provider and model at the top level of data, not inside params.",
+            )
+            .into());
+        }
         let (cat, provider) = crate::named_ref(&d.provider)?;
         let mut config = ModelConfig::new(name, ModelReference::new_in(cat, provider, d.model)?)?;
         config.apply_update(d.params)?;

@@ -270,6 +270,17 @@ impl ModelConfig {
         if let Some(tool_call) = update.tool_call {
             self.capabilities.tool_call = tool_call;
         }
+        if let Some(provider) = update.provider {
+            let (category, name) = provider.split_once('/').unwrap_or(("default", &provider));
+            let category =
+                agt_core::CategoryName::new(category).map_err(|_| ModelError::InvalidConfig {
+                    message: format!("provider 引用无效：{provider}"),
+                })?;
+            self.provider = QualifiedRef::new(category, ProviderId::new(name));
+        }
+        if let Some(model) = update.model {
+            self.model = model;
+        }
 
         self.validate()
     }
@@ -287,6 +298,12 @@ pub struct ModelConfigUpdate {
     pub clear_reasoning_effort: bool,
     pub tool_call: Option<bool>,
     pub context_window: Option<u32>,
+    /// Provider to call instead, as `name` or `category/name`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Model name on the provider to call instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 impl ModelConfigUpdate {
@@ -300,6 +317,8 @@ impl ModelConfigUpdate {
             && !self.clear_reasoning_effort
             && self.tool_call.is_none()
             && self.context_window.is_none()
+            && self.provider.is_none()
+            && self.model.is_none()
     }
 
     pub fn validate(&self) -> Result<()> {
