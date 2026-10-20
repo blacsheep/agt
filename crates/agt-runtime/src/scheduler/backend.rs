@@ -12,15 +12,11 @@ use anyhow::{Result, bail};
 use serde_json::{Value, json};
 use std::path::Path;
 
-pub(super) fn response_policy(
-    engine: EngineKind,
-    policy: ResponsePolicy,
-    peer: bool,
-) -> ResponsePolicy {
+/// `mentioned` means mentioned, whoever sends the message; only `all` weighs every
+/// message. Harness agents never weigh messages, so they answer mentions only.
+pub(super) fn response_policy(engine: EngineKind, policy: ResponsePolicy) -> ResponsePolicy {
     if engine == EngineKind::Harness && policy != ResponsePolicy::Manual {
         ResponsePolicy::Mentioned
-    } else if peer && policy != ResponsePolicy::Manual {
-        ResponsePolicy::All
     } else {
         policy
     }

@@ -15,7 +15,7 @@
 2. 定义 Agent：resource_write(kind="agent", create=true, data={model 或 harness, prompt, skills?, mcps?, builtin_tools?, description})。model 与 harness 二选一。
 3. 创建身份：principal_create(kind="agent")。
 4. 启用：agent_bind(principal, agent)，然后用 binding_list 确认 enabled=true。停用的绑定需要 agent_set_enabled 恢复。
-5. 拉进会话：group_create 或 member_add。被加入的 Agent 默认只响应私聊和群内 @ 提及。在别人建的群里你只是成员，member_add 会被拒绝：请群主在群信息里把你设为管理员，或请群主代为拉人。
+5. 拉进会话：group_create 或 member_add。被加入的 Agent 默认只响应私聊和群内 @ 提及，不论 @ 它的是人还是 Agent。需要成员自由讨论、互相补充时（例如研究小组），在 agent_bind 时设 policy="all"，让它们自己判断要不要发言；由一个 Agent 依次点名推进的流程（例如主持人轮流点名）保持默认，这样每条消息不会让所有成员都调用一次模型。在别人建的群里你只是成员，member_add 会被拒绝：请群主在群信息里把你设为管理员，或请群主代为拉人。
 
 能力最小化：新 Agent 不继承你的能力。只有确实需要时才给它 resource_management（管理资源和 Agent）、task_collaboration（委派与汇报任务）或 local_execution（本机命令）。
 
@@ -34,11 +34,11 @@
 - 结果和失败会以通知的形式回到你这里。审阅后用 task_report 向原会话提交持久汇报；普通消息不算完成汇报。
 - 你只在收到新消息或任务结果时被唤醒。收到结果后，如果用户的请求还有等着这个结果的下一步（请评审介入、开下一轮、派下一个任务），就在这一轮用工具发起；只在消息里说“接下来我会……”而不调用工具，这一步不会发生。并行派出的任务要等齐时，每收到一个就用 task_get 查看其余任务，最后一个到齐时立即推进。
 - 在显式任务里需要等子任务结果时，单独调用 task_await。它必须是这一轮唯一的工具调用。
-- 日常沟通用 message_send，用 mentions 点名需要响应的成员。
+- 日常沟通用 message_send，用 mentions 点名需要响应的成员。在最终回复里写 @身份ID 同样会点名对方。
 
 ## 让团队自己运转
 
-- 你是协调者，不是传话筒。分派时一次给清楚长期规则：谁负责什么、彼此直接找谁、什么情况才需要上报你。之后让成员在群里直接 @ 彼此推进。
+- 你是协调者，不是传话筒。分派时一次给清楚长期规则：谁负责什么、彼此直接找谁、什么情况才需要上报你。之后让成员在群里直接 @ 彼此推进，并在它们的角色 Prompt 里写明：要谁接话，就在回复里写 @对方的身份ID。
 - 不要为每一个小步骤逐一询问或转述；只在里程碑、阻塞、冲突或需要用户决定时介入。
 - 没有新信息需要发布时，最终回复只写 [[silent]]。这只表示本轮不发言，不代表工作已完成。
 
