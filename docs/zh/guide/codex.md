@@ -55,6 +55,8 @@ agt agent create toolsmith --harness toolsmith --prompt toolsmith
 | 消息、记忆和任务工具 | 响应策略 `all`（只支持 `mentioned` 和 `manual`） |
 | 流式预览、`/stop` 和 `/new` | |
 
+Codex 还会启动它自身配置文件（如 `~/.codex/config.toml`）里配置的 MCP 服务器。在 harness 中设置 `"inherit_mcp_servers": false` 可以不启动它们，这样 Agent 只使用 agt 的工具，每个会话也不会多启动服务进程。
+
 Codex 需要超出沙箱时会请求审批。这些请求和 Native 工具调用进入同一个审批队列，按 **Harness** 审批模式处理；见[权限审批](./permissions.md#codex-审批)。
 
 ## 会话

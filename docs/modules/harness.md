@@ -68,6 +68,7 @@ agt harness models toolsmith
 | `description` | no | | At most 4096 bytes |
 | `args` | no | | `acp` only: arguments that start the agent's ACP server |
 | `auth_method` | no | | `acp` only: the ACP auth method to select when the agent needs sign-in |
+| `inherit_mcp_servers` | no | `true` | `codex` only: `false` starts Codex with every MCP server in its own config files (`~/.codex/config.toml` and project config) disabled, so it offers only agt's tools and starts no extra server processes. Servers whose names use characters other than letters, digits, `_` and `-` stay on. |
 
 Unknown fields are rejected.
 

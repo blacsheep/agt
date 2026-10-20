@@ -68,6 +68,7 @@ agt harness models toolsmith
 | `description` | 否 | | 最多 4096 字节 |
 | `args` | 否 | | 仅 `acp`：启动 Agent 的 ACP 服务所需的参数 |
 | `auth_method` | 否 | | 仅 `acp`：Agent 需要登录时选择的 ACP 认证方式 |
+| `inherit_mcp_servers` | 否 | `true` | 仅 `codex`：设为 `false` 时，启动 Codex 会禁用它自身配置文件（`~/.codex/config.toml` 和项目配置）里的所有 MCP 服务器，只提供 agt 的工具，也不再启动额外的服务进程。名字含字母、数字、`_`、`-` 以外字符的服务器无法禁用，会保持开启。 |
 
 未知字段会被拒绝。
 

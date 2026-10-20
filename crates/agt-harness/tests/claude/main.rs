@@ -37,6 +37,7 @@ fn fixture() -> (tempfile::TempDir, HarnessConfig) {
         timeout_seconds: 10,
         args: Vec::new(),
         auth_method: None,
+        inherit_mcp_servers: true,
     };
     (dir, config)
 }
