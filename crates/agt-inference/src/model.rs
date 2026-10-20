@@ -98,9 +98,7 @@ pub fn complete_with_progress(
                     });
                 }
                 progress(ModelEvent::Retrying)?;
-                // Bounded exponential backoff, interruptible between requests.
-                let delay = Duration::from_millis((250u64 << (attempt - 1)).min(4000));
-                let until = std::time::Instant::now() + delay;
+                let until = std::time::Instant::now() + retry_delay(&error, attempt);
                 while let Some(remaining) = until.checked_duration_since(std::time::Instant::now())
                 {
                     check_retry_canceled(model, cancellation)?;
@@ -127,11 +125,26 @@ pub fn context_rejected(value: &Value) -> bool {
         })
 }
 
+/// Bounded exponential backoff from 0.25 s. An HTTP status means the provider or a
+/// gateway is overloaded or down, so it may wait up to 30 s (about a minute and a half
+/// in all); a malformed or empty reply or a dropped connection is retried within 4 s.
+fn retry_delay(error: &RuntimeError, attempt: u32) -> Duration {
+    let cap = if matches!(error, RuntimeError::HttpStatus(_)) {
+        30_000
+    } else {
+        4_000
+    };
+    Duration::from_millis((250u64 << (attempt - 1).min(16)).min(cap))
+}
+
+/// Timeouts, rate limits and server errors may pass; other client errors, such as
+/// a rejected key or an unknown model, fail the same way every time.
 fn retryable(error: &RuntimeError) -> bool {
-    matches!(
-        error,
-        RuntimeError::HttpStatus(_) | RuntimeError::ModelTransient(_)
-    )
+    match error {
+        RuntimeError::HttpStatus(status) => matches!(status, 408 | 425 | 429 | 500..=599),
+        RuntimeError::ModelTransient(_) => true,
+        _ => false,
+    }
 }
 
 /// Routes HTTP requests by the model's API format; retains its historical name.
@@ -273,6 +286,28 @@ pub fn set_total_tokens(mut message: Value, total: u64) -> Value {
         message["_agt_total_tokens"] = json!(total);
     }
     message
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::*;
+    #[test]
+    fn only_transient_failures_retry_with_a_bounded_backoff() {
+        for status in [408, 425, 429, 500, 502, 503, 504] {
+            assert!(retryable(&RuntimeError::HttpStatus(status)), "{status}");
+        }
+        for status in [400, 401, 403, 404, 422] {
+            assert!(!retryable(&RuntimeError::HttpStatus(status)), "{status}");
+        }
+        assert!(retryable(&RuntimeError::ModelTransient("empty".into())));
+        let outage = RuntimeError::HttpStatus(503);
+        assert_eq!(retry_delay(&outage, 1), Duration::from_millis(250));
+        assert_eq!(retry_delay(&outage, 8), Duration::from_secs(30));
+        let total: Duration = (1..10).map(|n| retry_delay(&outage, n)).sum();
+        assert!(total > Duration::from_secs(60) && total < Duration::from_secs(120));
+        let glitch = RuntimeError::ModelTransient("empty".into());
+        assert_eq!(retry_delay(&glitch, 8), Duration::from_secs(4));
+    }
 }
 
 #[cfg(test)]

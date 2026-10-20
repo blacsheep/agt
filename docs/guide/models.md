@@ -59,7 +59,7 @@ Several model resources can point to the same provider model with different sett
 ## How agt calls the model
 
 - **Streaming.** Requests use streaming, so the console can show progress and a preview of the reply while the model is generating. Providers that ignore streaming still work, without the preview.
-- **Retries.** Connection errors, server errors, invalid responses and empty replies are retried, up to 10 attempts with backoff. Errors such as invalid configuration or an explicit refusal are not retried.
+- **Retries.** Connection errors, timeouts, rate limits (HTTP 429), server errors (5xx), invalid responses and empty replies are retried, up to 10 attempts. After an HTTP error the wait doubles from 0.25 seconds up to 30 seconds, about a minute and a half in all, so a short provider or gateway outage does not fail the run; other failures are retried within a few seconds. Other client errors, such as a rejected key (401) or an unknown model (404), and an explicit refusal are not retried.
 - **Context management.** When a conversation approaches 90% of the context window, agt summarizes older history automatically (this calls the model). You can reset an agent's context in a conversation with `/new`; chat history is kept.
 - **Text only.** Image input is not supported yet.
 

@@ -236,13 +236,13 @@ fn cli_runs_real_http_delegation_and_replays_with_server_offline() {
 }
 
 #[test]
-fn http_failure_retries_ten_times_and_persists_redacted_status() {
+fn client_http_error_is_not_retried_and_persists_redacted_status() {
     let (url, server) = server(vec![
         (
             401,
             json!({"error":{"message":"mock-secret reflected upstream"}}),
         );
-        10
+        1
     ]);
     let home = tempfile::tempdir().unwrap();
     setup(home.path(), &url);
@@ -259,10 +259,7 @@ fn http_failure_retries_ten_times_and_persists_redacted_status() {
     assert!(!output.status.success());
     let result: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["state"], "failed");
-    assert_eq!(
-        result["error"],
-        "model request failed after 10 attempts: model HTTP status 401"
-    );
+    assert_eq!(result["error"], "model HTTP status 401");
     let calls = success(run(
         home.path(),
         &["run", "calls", result["id"].as_str().unwrap()],
@@ -270,11 +267,11 @@ fn http_failure_retries_ten_times_and_persists_redacted_status() {
     assert_eq!(calls[0]["state"], "failed");
     assert_eq!(calls[0]["error"]["code"], "model_http_error");
     assert_eq!(calls[0]["error"]["http_status"], 401);
-    assert_eq!(calls[0]["error"]["attempts"], 10);
-    assert_eq!(calls[0]["argument_summary"]["request_attempts"], 10);
+    assert!(calls[0]["error"]["attempts"].is_null());
+    assert_eq!(calls[0]["argument_summary"]["request_attempts"], 1);
     assert!(!calls.to_string().contains("mock-secret"));
     assert!(!String::from_utf8_lossy(&output.stderr).contains("mock-secret"));
-    assert_eq!(server.join().unwrap().len(), 10);
+    assert_eq!(server.join().unwrap().len(), 1);
     let replay = run(home.path(), &args);
     assert!(!replay.status.success());
     assert_eq!(
@@ -461,9 +458,10 @@ fn responses_failures_are_recorded_without_exposing_upstream_content() {
             json!({"status":"completed","output":[{"type":"function_call","call_id":"bad","name":"delegate","arguments":"not json"}]}),
         ),
     ] {
-        let count = if status != 200
-            || !body["error"].is_null()
-            || (body["status"] == "completed" && body["output"] == json!([]))
+        // Transient replies are retried; a client error such as 401 is not.
+        let count = if status == 200
+            && (!body["error"].is_null()
+                || (body["status"] == "completed" && body["output"] == json!([])))
         {
             10
         } else {
