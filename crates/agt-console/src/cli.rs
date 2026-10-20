@@ -25,6 +25,7 @@ pub(crate) trait Backend: Send + Sync {
 const MAX_OUTPUT: u64 = 8 * 1024 * 1024;
 const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 const COMPACT_TIMEOUT: Duration = Duration::from_secs(86_400);
+const SUPERVISE_EVERY: Duration = Duration::from_secs(5);
 
 pub(crate) struct Cli {
     binary: PathBuf,
@@ -130,7 +131,7 @@ impl Cli {
             .command()
             .args(["--output", "json", "schedule", "run", "--watch"])
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(self.scheduler_log())
             .spawn()
             .map_err(|_| scheduler_offline())?;
         for _ in 0..50 {
@@ -152,6 +153,40 @@ impl Cli {
         }
         stop(&mut child).await;
         Err(scheduler_offline())
+    }
+
+    /// The scheduler's warnings and the reason it stopped, appended to
+    /// `runtime/scheduler.log` in the home so an operator can read them later.
+    fn scheduler_log(&self) -> Stdio {
+        let path = self.home.join("runtime").join("scheduler.log");
+        std::fs::create_dir_all(self.home.join("runtime"))
+            .and_then(|_| {
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&path)
+            })
+            .map_or_else(|_| Stdio::null(), Stdio::from)
+    }
+
+    /// Restarts the scheduler whenever the one this console started exits, so
+    /// replies do not silently stop while the console stays open.
+    pub fn supervise_scheduler(self: &Arc<Self>) {
+        let cli = self.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(SUPERVISE_EVERY).await;
+                let exited = cli
+                    .scheduler
+                    .lock()
+                    .expect("scheduler lock")
+                    .as_mut()
+                    .is_some_and(|child| matches!(child.try_wait(), Ok(Some(_))));
+                if exited && cli.start_scheduler().await.is_err() {
+                    eprintln!("{}", scheduler_offline().message);
+                }
+            }
+        });
     }
 
     /// `events watch` for one identity, as JSON lines on the child's stdout.

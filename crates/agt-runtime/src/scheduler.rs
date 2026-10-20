@@ -74,13 +74,25 @@ impl Scheduler {
     pub fn run(&mut self, watch: bool, token: &CancellationToken) -> Result<()> {
         // Subscribe before the first snapshot: commits during tick leave a queued hint.
         let mut listener = agt_storage::wake::Hints::open(&self.home);
+        let mut failures = 0u64;
         loop {
             if token.is_canceled() {
                 for (_, cancel, _) in &self.jobs {
                     cancel.cancel_with_reason("service_shutdown");
                 }
             }
-            self.tick(!token.is_canceled())?;
+            if let Err(error) = self.tick(!token.is_canceled()) {
+                // A watching scheduler keeps going through a failed tick, such as a busy
+                // database, while it still holds the lease; running work lives in its jobs.
+                if !watch || !self.store.heartbeat(&self.owner, now_ms()).unwrap_or(false) {
+                    return Err(error);
+                }
+                failures += 1;
+                eprintln!("scheduler tick failed ({failures} in a row), retrying: {error:#}");
+                std::thread::sleep(Duration::from_secs(failures.min(10)));
+                continue;
+            }
+            failures = 0;
             if (token.is_canceled() || !watch) && self.jobs.is_empty() {
                 break;
             }
