@@ -44,8 +44,13 @@ fn label(im: &ImStore, value: &Value) -> Result<String> {
     let p = im
         .get_principal(&PrincipalId::new(id))
         .map_err(|e| RuntimeError::Im(crate::Reason::because("cannot read message sender", e)))?;
+    let timer = value["via_timer"]["creator"]
+        .as_str()
+        .map(|creator| serde_json::to_string(creator).map(|c| format!(", timer set by {c}")))
+        .transpose()?
+        .unwrap_or_default();
     Ok(format!(
-        "{} [id={}, {:?}]",
+        "{} [id={}, {:?}{timer}]",
         serde_json::to_string(&p.display_name)?,
         serde_json::to_string(id)?,
         p.kind

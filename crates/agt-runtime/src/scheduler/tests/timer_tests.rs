@@ -177,6 +177,19 @@ fn an_agent_timer_speaks_as_the_owner_and_recurs_in_its_zone() {
         .unwrap();
     assert_eq!(message.sender_id.as_str(), "user");
     assert_eq!(message.metadata["timer"]["creator"], "a");
+    // Models see who set the timer, not only the person it speaks for.
+    let zone = jiff::tz::TimeZone::UTC;
+    let item = crate::conversation_context::message_item(&message, &zone);
+    assert_eq!(item["via_timer"], json!({"creator": "a"}));
+    let typed = messages(home.path(), &chat)
+        .into_iter()
+        .find(|m| m.metadata.get("timer").is_none())
+        .unwrap();
+    assert!(
+        crate::conversation_context::message_item(&typed, &zone)
+            .get("via_timer")
+            .is_none()
+    );
     assert!(
         message
             .body

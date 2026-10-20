@@ -1394,6 +1394,7 @@ AgtI18n.add('en', {
   "，失败 {0} 个，请刷新检查后重试。": "; {0} failed. Refresh, check and retry.",
   "；": "; ",
   "定时任务 · 由 {0} 设置": "Timer · set by {0}",
+  "定时器": "Timer",
   "定时任务": "Timers",
   "查看本会话的定时任务和下次触发时间，可以取消。": "See this conversation's timers and when they fire next; cancel them here.",
   "时区": "Time zone",
