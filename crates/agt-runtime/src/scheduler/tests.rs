@@ -111,7 +111,20 @@ fn make_quiet(scheduler: &mut Scheduler) {
             .unwrap();
     }
 }
+/// Renew the coordinator lease before a claim, as a running scheduler's tick does.
+/// Without it, a slow runner can spend the whole lease on setup and the claimed
+/// task's settlement is then rejected as unowned.
+fn renew_lease(scheduler: &Scheduler) {
+    assert!(
+        scheduler
+            .store
+            .heartbeat(&scheduler.owner, now_ms())
+            .unwrap(),
+        "lease lost"
+    );
+}
 fn claim(scheduler: &mut Scheduler, principal: &str) -> ScheduledTask {
+    renew_lease(scheduler);
     make_quiet(scheduler);
     let task = scheduler
         .store
