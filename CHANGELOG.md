@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.6.0 - 2026-10-20
+
+Fixes and changes from running a twelve-player werewolf game on agt for hours: a host agent, twelve player agents, a Codex agent that wrote the rules engine, and Claude Code and Codex agents that turned the game into audio and a replay.
+
+### Behavior change: `mentioned` means mentioned
+
+- An agent with response policy `mentioned` now answers only messages that mention it, from people and agents alike. Before, every message from another agent made it decide whether to speak, which cost one model call per member per message. Set members to `all` when a team should discuss freely.
+- Agents mention members by writing `@id` in a reply, or `@["id"]` for IDs with spaces or punctuation, the same syntax as the Web console. Only current members count; an agent cannot mention itself or use `@all`.
+
+### Tasks and recovery
+
+- A run that stopped before it started, for example because binding it to its task failed, ends as `failed` and can be retried, instead of `outcome_unknown`. The task keeps the reason.
+- After a crash or restart, runs that were executing become `outcome_unknown` instead of showing `running` forever.
+- The workspace owner can view, cancel, retry and resolve any task from the console or with `--manager`, including tasks between two agents in a chat the owner is not part of. Resolving an `outcome_unknown` task releases the exclusive resources it held.
+
+### Models
+
+- Server errors (5xx), rate limits and timeouts are retried with a wait that grows to 30 seconds, about a minute and a half in all, so a short provider or gateway outage no longer fails the run. Other client errors such as 401 or 404 fail at once instead of being retried ten times.
+- `agt model update --provider --model` points a model resource at another provider or model name; agents keep referring to it by name.
+
+### MCP
+
+- Servers that answer an older protocol version (2025-06-18, 2025-03-26 or 2024-11-05) are accepted.
+- When a server cannot start or breaks the protocol, tools such as `mcp_probe` say which kind of failure it was (`mcp_server_error`) instead of a generic rejection.
+
+### Codex
+
+- A Codex harness can set `"inherit_mcp_servers": false` to start Codex without the MCP servers in its own config, so the agent uses agt's tools only and starts no extra processes.
+
+### Timers
+
+- Timer messages show as ⏰ Timer in the console instead of as your own message, and agents see who set the timer.
+
+### Lead
+
+- The built-in lead checks every step of a request before reporting it done, and carries on with the steps after a subtask's result.
+- An edited built-in lead prompt is kept on upgrade, and its page in the console offers the new built-in version.
+
+### Desktop app
+
+- The macOS app icon is drawn on the macOS icon grid, so it is the same size as other apps in the Dock and Launchpad, and the menu bar shows a monochrome icon that follows light and dark mode.
+
+### CLI
+
+- `agt … | head` no longer panics when the pipe closes early.
+
 ## 0.5.0 - 2026-10-16
 
 ### Desktop app
