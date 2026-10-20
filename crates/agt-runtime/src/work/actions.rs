@@ -12,7 +12,9 @@ impl TaskControl {
                 .ok_or_else(|| anyhow::anyhow!("task_id required"))?;
             let mut item = read(&store.connection, id)?;
             let im = open_im(&self.home)?;
-            member(&im, &item.request.report_to, self.actor.principal.as_str())?;
+            if !self.workspace_manager(&im)? {
+                member(&im, &item.request.report_to, self.actor.principal.as_str())?;
+            }
             let human = self.human_manager(&im)?;
             if (!human && self.task.is_none())
                 || (!human

@@ -39,6 +39,14 @@ impl TaskControl {
         Ok(self.actor.role == agt_service::Role::Manager
             && im.get_principal(&self.actor.principal)?.kind == PrincipalKind::User)
     }
+    /// The workspace owner acting as a human Manager oversees all work, including
+    /// tasks exchanged in agent-to-agent conversations it can never join.
+    pub(super) fn workspace_manager(&self, im: &ImStore) -> Result<bool> {
+        Ok(
+            self.human_manager(im)?
+                && im.workspace_owner()?.as_ref() == Some(&self.actor.principal),
+        )
+    }
     fn edit_queue(&self, name: &str, args: Value) -> Result<Value> {
         let operation = |store: &ScheduleStore| -> Result<Value> {
             let id = args["task_id"]
@@ -338,19 +346,21 @@ impl WorkControl for TaskControl {
         let operation = |store: &ScheduleStore| -> Result<Value> {
             let im = open_im(&self.home)?;
             let human = self.human_manager(&im)?;
+            let owner = self.workspace_manager(&im)?;
             let visible = |item: &WorkItem| {
-                (item.request.requester == self.actor.principal.as_str()
-                    || item.request.assignee == self.actor.principal.as_str()
-                    || human)
-                    && im
-                        .get_member(
-                            &ConversationId::new(&item.request.report_to),
-                            &self.actor.principal,
-                        )
-                        .is_ok_and(|m| m.left_message_seq.is_none())
-                    && im
-                        .get_principal(&self.actor.principal)
-                        .is_ok_and(|p| p.deleted_at.is_none())
+                owner
+                    || ((item.request.requester == self.actor.principal.as_str()
+                        || item.request.assignee == self.actor.principal.as_str()
+                        || human)
+                        && im
+                            .get_member(
+                                &ConversationId::new(&item.request.report_to),
+                                &self.actor.principal,
+                            )
+                            .is_ok_and(|m| m.left_message_seq.is_none())
+                        && im
+                            .get_principal(&self.actor.principal)
+                            .is_ok_and(|p| p.deleted_at.is_none()))
             };
             match name {
                 "task_get" => {

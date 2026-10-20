@@ -319,6 +319,9 @@ impl ScheduleStore {
                 "SELECT record FROM tasks WHERE state IN ('evaluating','responding')",
             )?;
             for mut task in records {
+                if let Some(key) = executing_run_key(&tx, &task)? {
+                    crate::RunStore::mark_owner_lost(&tx, &key)?;
+                }
                 task.recover_expired_lease();
                 save_task(&tx, &task)?;
             }
@@ -702,6 +705,23 @@ fn query_tasks(c: &Connection, sql: &str) -> Result<Vec<ScheduledTask>> {
         .map(|r| Ok(serde_json::from_str(&r?)?))
         .collect()
 }
+/// The request key of the Run a claimed task may have started, matching
+/// `scheduler::execute`. A work Run not yet bound to its item never executed;
+/// work reconciliation closes it as not started.
+fn executing_run_key(c: &Connection, task: &ScheduledTask) -> Result<Option<String>> {
+    if task.state != TaskState::Responding {
+        return Ok(None);
+    }
+    match &task.work_id {
+        Some(id) if !task.work_notification => {
+            let item = crate::work::read(c, id)?;
+            Ok(matches!(item.state, crate::work::WorkState::Running { .. })
+                .then(|| crate::work::execution_key(&item)))
+        }
+        _ => Ok(Some(format!("schedule:{}:{}", task.id, task.version))),
+    }
+}
+
 pub(crate) fn save_task(c: &Connection, t: &ScheduledTask) -> Result<()> {
     write_task(c, t)?;
     crate::run_inputs::settle(c, t)?;

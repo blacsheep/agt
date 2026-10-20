@@ -159,6 +159,18 @@ fn finish(ledger: &mut WorkLedger, item: &WorkItem, run: &RunRecord) -> Result<(
     Ok(())
 }
 
+/// Close a Run that was claimed but never bound to its work item.
+fn not_started(runs: &RunStore, run: &mut RunRecord) -> Result<()> {
+    let mut termination = crate::Termination::new(crate::StopCode::ExecutionOwnerLost);
+    termination.confirmation = "not_started".into();
+    termination.side_effects = "not_started".into();
+    run.termination = Some(termination);
+    run.state = RunState::Failed;
+    run.error = Some("execution stopped before the Run started; nothing was executed".into());
+    runs.save(run)?;
+    Ok(())
+}
+
 /// Reconcile database facts only; this function never starts a model or harness.
 pub(crate) fn reconcile(home: &Path) -> Result<()> {
     let mut ledger = WorkLedger::open(home)?;
@@ -171,7 +183,7 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
                 .owns_execution(t, crate::schedule_store::now_ms())
                 .unwrap_or(false)
         });
-        let run = runs.by_request_key(&execution_key(&item))?;
+        let mut run = runs.by_request_key(&execution_key(&item))?;
         if matches!(
             item.state,
             WorkState::WaitingDependency { .. }
@@ -184,9 +196,13 @@ pub(crate) fn reconcile(home: &Path) -> Result<()> {
         }
         if item.state == WorkState::Queued {
             item = super::reporting::expired_barrier(home, &ledger.store, item)?;
-            if let Some(run) = &run {
+            if let Some(claimed) = &mut run {
                 // Crash between runs.db claim and the work association. Never execute again.
-                item = ledger.record_running(&item.id, item.revision, &run.id)?;
+                item = ledger.record_running(&item.id, item.revision, &claimed.id)?;
+                if claimed.state == RunState::Running && !live {
+                    // Binding precedes the first model or tool call, so this claim never ran.
+                    not_started(&runs, claimed)?;
+                }
             } else if check_scope(home, &ledger.store, &item).is_err() {
                 ledger.cancel_queued(&item, "Task authorization changed before execution.")?;
                 if let Some(adapter) = &adapter {

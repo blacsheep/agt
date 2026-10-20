@@ -55,7 +55,7 @@ agt tool call --principal lead task_get --args '{"task_id":"<id>"}'
 | `task_execution_policy` | `task_id`, `expected_revision`, `reason`, `execution_policy` | Declare parallelism and exclusive resources for a queued task |
 | `task_cancel` | `task_id`, `expected_revision`, `reason` | Cancel a task and the subtasks it created |
 | `task_retry` | `task_id`, `expected_revision`, `request_key`, `reason` | New task from a failed, canceled or interrupted one (requester or people) |
-| `task_resolve` | `task_id`, `expected_revision`, `outcome` (`succeeded` or `failed`), `evidence` | People only: record what really happened to an `outcome_unknown` task |
+| `task_resolve` | `task_id`, `expected_revision`, `outcome` (`succeeded` or `failed`), `evidence` | People only: record what really happened to an `outcome_unknown` task. A member of the task's conversation with Manager rights, or the workspace owner. |
 | `task_reply` | `task_id`, `input_request_id`, `expected_revision`, `answer`, `request_key` | Answer a question the task asked with `task_input` |
 | `task_attention` | `limit?`, `before?` | Workspace owner only: tasks that need a person |
 

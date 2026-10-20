@@ -64,7 +64,7 @@ Click **Tasks** (任务) in a conversation's title bar. The panel lists tasks in
 
 ## When something goes wrong
 
-- **`outcome_unknown`**: the run was interrupted and agt cannot tell whether the work happened. It is never retried automatically. Check the actual result (files, messages, external systems), then use `task_resolve` to record what happened, and `task_retry` if it failed.
+- **`outcome_unknown`**: the run was interrupted and agt cannot tell whether the work happened. It is never retried automatically. Check the actual result (files, messages, external systems), then use `task_resolve` to record what happened, and `task_retry` if it failed. Until it is resolved, the task keeps the exclusive resources it declared, so tasks that need them stay queued. The workspace owner can resolve any task, including one between two agents in a chat the owner is not part of, from the console or with `agt tool call --principal <owner> --manager task_resolve`. A run that stopped before it started is marked `failed` instead, and can be retried right away.
 - **Stuck in `queued`**: the assignee may be disabled, set to `manual`, or the discussion may be paused or expired. `task_get` shows the reason in `blocked_reason`.
 - **Report missing**: the lead received the result but did not call `task_report`. The task's report state stays `awaiting_report`, and after five minutes a reminder is raised.
 
