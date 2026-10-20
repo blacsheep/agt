@@ -18,6 +18,19 @@ pub struct ToolError {
     diagnostic: Option<Box<str>>,
 }
 
+/// A refusal whose fixed text was written for the caller, such as a rule the request
+/// broke. It reaches the caller as `operation_rejected` with this message.
+#[derive(Clone, Copy, Debug)]
+pub struct Refusal(pub &'static str);
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl std::error::Error for Refusal {}
+
 impl ToolError {
     pub fn new(code: &'static str, message: &'static str) -> Self {
         Self {
@@ -76,6 +89,9 @@ impl ToolError {
     }
 
     fn public(error: &anyhow::Error) -> Self {
+        if let Some(Refusal(message)) = error.downcast_ref::<Refusal>() {
+            return Self::new("operation_rejected", message);
+        }
         if let Some(agt_mcp::McpError::ToolSchema { tool, source }) =
             error.downcast_ref::<agt_mcp::McpError>()
         {
@@ -251,5 +267,12 @@ mod tests {
         // Resource errors keep their own codes.
         let missing = ToolError::classify(agt_mcp::McpError::NotFound { name: "x".into() }.into());
         assert_eq!(missing.code, "not_found");
+    }
+
+    #[test]
+    fn a_refusal_reaches_the_caller_in_its_own_words() {
+        let error = ToolError::classify(Refusal("timers cannot be set here").into());
+        assert_eq!(error.code, "operation_rejected");
+        assert_eq!(error.message, "timers cannot be set here");
     }
 }

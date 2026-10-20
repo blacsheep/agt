@@ -29,9 +29,10 @@ const SHIPPED_LEAD: &[&str] = &[
     "35f959cd00858c2bc60021e37e5e56a48f8b3de0646c5897a20bea50fd652de0",
     "21ffb386f316134547464666ef943156f50f511ef3db458b161e7eb6c653ba74",
     "6fe4e6ce0e65d7057b60dc58e3c0f3ddaac403bdf715ff7f3a0c8d02e3cc1d79",
+    "38a6dc7c59eb30f82e0e49bc299d3eb18ad3a2886752d0a6ac556297e2b02eca",
 ];
 #[cfg(test)]
-const CURRENT_LEAD: &str = "38a6dc7c59eb30f82e0e49bc299d3eb18ad3a2886752d0a6ac556297e2b02eca";
+const CURRENT_LEAD: &str = "c9543bf50d393a25bc43d29b95eeee16278da9ca2ebecaa4295ae08ecf4fb0e4";
 
 /// SHA-256 of a prompt with LF line endings and no trailing whitespace, as hex.
 /// Windows checkouts and builds carry CRLF; both spellings are the same prompt.

@@ -210,6 +210,32 @@ fn busy_workspaces_and_finished_goals_are_not_reviewed() {
 }
 
 #[test]
+fn a_refused_goal_tool_tells_the_agent_why() {
+    let (home, user, chat) = fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let task = claim(&mut scheduler, "a");
+    let lead = TaskControl::hosted(
+        home.path(),
+        Actor {
+            principal: PrincipalId::new("a"),
+            role: Role::Participant,
+            automated_depth: None,
+        },
+        task,
+    );
+    let error = lead
+        .call(
+            "goal_create",
+            json!({"conversation":"elsewhere","text":"Ship it","done_when":"shipped"}),
+        )
+        .unwrap_err();
+    assert_eq!(
+        error.downcast_ref::<agt_service::Refusal>().map(|r| r.0),
+        Some("agents can only set goals in their current conversation")
+    );
+}
+
+#[test]
 fn only_the_owner_and_people_in_the_conversation_see_a_goal() {
     let (home, _scheduler, _chat, id) = goal_fixture();
     let as_principal = |principal: &str| {

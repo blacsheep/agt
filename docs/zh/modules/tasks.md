@@ -83,7 +83,7 @@ agt tool call --principal lead task_get --args '{"task_id":"<id>"}'
 | `goal_create` | `text`, `done_when`, `conversation?` | 对一个结果负责到底；工作空间安静时会审核未完成的目标。每个身份最多 5 个未完成目标 |
 | `goal_get` / `goal_list` | `goal_id` / `include_finished?` | 负责人和目标所在会话中的人可以查看 |
 | `goal_complete` | `goal_id`, `evidence` | 标记完成；不再审核 |
-| `goal_wait_human` | `goal_id`, `question` | 暂停审核，直到有人在目标所在会话发言 |
+| `goal_wait_human` | `goal_id`, `question` | 暂停审核，直到有人在目标所在会话发言。只用于必须由人回答的问题，等 Agent 时不要用 |
 | `goal_abandon` | `goal_id`, `reason` | 放弃该目标；不再审核 |
 
 ### `execution_policy`

@@ -8,7 +8,7 @@ use crate::timers::{member, open_im};
 use agt_im::{
     ConversationId, ImStore, MessageListOptions, PrincipalId, PrincipalKind, SendMessageRequest,
 };
-use agt_service::Actor;
+use agt_service::{Actor, Refusal};
 use anyhow::{Result, bail};
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -116,10 +116,7 @@ pub(crate) fn call(
     };
     if let Some(task) = task {
         // Hosted changes commit only while this execution still holds its authorization.
-        crate::scheduler::guarded_store(home, task, |s| {
-            operation(s).map_err(|e| crate::RuntimeError::Invalid(e.to_string()))
-        })
-        .map_err(Into::into)
+        crate::scheduler::guarded_tool(home, task, operation)
     } else {
         let store = ScheduleStore::open(home)?;
         let db = store.connection.clone();
@@ -135,10 +132,13 @@ fn human(im: &ImStore, principal: &str) -> Result<bool> {
     Ok(im.get_principal(&PrincipalId::new(principal))?.kind == PrincipalKind::User)
 }
 
-fn text(value: &str, field: &str) -> Result<String> {
+fn text(value: &str) -> Result<String> {
     let value = value.trim();
     if value.is_empty() || value.chars().count() > MAX_TEXT {
-        bail!("{field} must contain 1..{MAX_TEXT} characters");
+        return Err(Refusal(
+            "text, done_when, evidence, question and reason must each contain 1..2000 characters",
+        )
+        .into());
     }
     Ok(value.to_owned())
 }
@@ -154,9 +154,11 @@ fn create(
     let conversation = match (task, input.conversation) {
         (Some(task), None) => task.conversation.clone(),
         (Some(task), Some(c)) if c == task.conversation => c,
-        (Some(_), Some(_)) => bail!("agents can only set goals in their current conversation"),
+        (Some(_), Some(_)) => {
+            return Err(Refusal("agents can only set goals in their current conversation").into());
+        }
         (None, Some(c)) => c,
-        (None, None) => bail!("conversation is required"),
+        (None, None) => return Err(Refusal("conversation is required").into()),
     };
     member(im, &conversation, &owner)?;
     // Reviews speak as a person, like timers: who set it, or the workspace owner.
@@ -165,12 +167,13 @@ fn create(
     } else {
         im.workspace_owner()?
             .map(|p| p.to_string())
-            .ok_or_else(|| anyhow::anyhow!("goals need a workspace owner"))?
+            .ok_or(Refusal("goals need a workspace owner"))?
     };
     if member(im, &conversation, &sender).is_err() || !human(im, &sender)? {
-        bail!(
-            "goal reviews speak as the workspace owner, who must be a member of this conversation"
-        );
+        return Err(Refusal(
+            "A goal review posts as the workspace owner, who is not in this conversation. Set the goal in your conversation with the person who asked for the work.",
+        )
+        .into());
     }
     let open: i64 = store.connection.query_row(
         "SELECT COUNT(*) FROM goals WHERE owner=?1 AND state IN ('active','waiting_human')",
@@ -178,15 +181,17 @@ fn create(
         |r| r.get(0),
     )?;
     if open >= MAX_OPEN {
-        bail!("at most {MAX_OPEN} open goals per identity; complete or abandon one first");
+        return Err(
+            Refusal("at most 5 open goals per identity; complete or abandon one first").into(),
+        );
     }
     let now = now_ms();
     let goal = Goal {
         id: uuid::Uuid::new_v4().to_string(),
         owner,
         conversation,
-        text: text(&input.text, "text")?,
-        done_when: text(&input.done_when, "done_when")?,
+        text: text(&input.text)?,
+        done_when: text(&input.done_when)?,
         state: GoalState::Active,
         sender,
         created_at: now,
@@ -207,13 +212,13 @@ fn create(
 fn visible(store: &ScheduleStore, im: &ImStore, actor: &Actor, args: &Value) -> Result<Goal> {
     let id = args["goal_id"]
         .as_str()
-        .ok_or_else(|| anyhow::anyhow!("goal_id required"))?;
-    let goal = get(store, id)?.ok_or_else(|| anyhow::anyhow!("goal not found"))?;
+        .ok_or(Refusal("goal_id required"))?;
+    let goal = get(store, id)?.ok_or(Refusal("goal not found; use goal_list"))?;
     let principal = actor.principal.as_str();
     let allowed = goal.owner == principal
         || (human(im, principal)? && member(im, &goal.conversation, principal).is_ok());
     if !allowed {
-        bail!("goal not found");
+        return Err(Refusal("goal not found; use goal_list").into());
     }
     Ok(goal)
 }
@@ -243,9 +248,9 @@ fn finish(
 ) -> Result<Value> {
     let mut goal = visible(store, im, actor, args)?;
     if !matches!(goal.state, GoalState::Active | GoalState::WaitingHuman) {
-        bail!("goal is already {}", state_name(goal.state));
+        return Err(Refusal("this goal is already done or abandoned").into());
     }
-    let detail = text(args[field].as_str().unwrap_or(""), field)?;
+    let detail = text(args[field].as_str().unwrap_or(""))?;
     let now = now_ms();
     goal.state = state;
     goal.outcome = Some(detail);

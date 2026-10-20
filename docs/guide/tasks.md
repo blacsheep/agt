@@ -64,7 +64,7 @@ Some requests take many steps and several agents, and work can stall silently: a
 
 - The agent records the goal and how to check it with `goal_create` (`text`, `done_when`). The built-in lead does this for multi-step requests.
 - When nothing has happened in the workspace for `scheduler.goal_idle_seconds` (2 minutes by default) and the goal is still open, agt posts an **[AGT goal review]** in the goal's conversation, in the name of the person who asked, like a timer. It starts a discussion and wakes the owner with the goal, the unfinished tasks, recent failures and the latest message in each of its conversations.
-- The owner then completes the goal (`goal_complete` with evidence), unblocks the work, or calls `goal_wait_human` and asks you.
+- The owner then completes the goal (`goal_complete` with evidence), unblocks the work, or calls `goal_wait_human` and asks you. Waiting for other agents is not a reason to ask you: the owner just ends its turn, and their replies or the next review wake it.
 - Each quiet spell gets one review. If after `scheduler.goal_stalled_reviews` reviews in a row (3 by default) nobody but the owner has acted, reviews pause and the owner says so in the conversation; your next message there resumes them.
 - Nothing is reviewed while something runs or is ready to run, while an approval waits for you, or when a timer or durable wait resumes work within 10 minutes.
 

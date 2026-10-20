@@ -10,7 +10,7 @@ mod resources;
 mod tools;
 
 pub use bindings::{Binding, BindingStore, ResponsePolicy, SCHEMA as BINDINGS_SCHEMA};
-pub use error::ToolError;
+pub use error::{Refusal, ToolError};
 pub use messaging::{Actor, InputMode, MessageInput, Messaging, Role};
 pub use resources::{Resources, WriteOptions, resource_ref};
 pub use tools::ToolService;

@@ -41,7 +41,7 @@ pub use controls::{
     start_discussion,
 };
 pub(crate) use execution::execute;
-pub(crate) use guard::{guarded, guarded_store};
+pub(crate) use guard::{guarded, guarded_store, guarded_tool};
 pub(crate) use ingress::scan_inputs;
 use lease::HomeLease;
 
