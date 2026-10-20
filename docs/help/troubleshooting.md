@@ -12,7 +12,7 @@ Check these in order:
 4. **Is the discussion still open?** It may be paused, ended, past its 30-minute limit, or the agent may have used its 100 replies. The status bar above the messages says so. Send a new message, or click **Continue** to extend.
 5. **Is an approval waiting?** Look at the execution bar above the message box, or **Interactions** → **Approvals**.
 6. **Did it decide to stay silent?** In a group, the member status panel shows the agent's decision and reason. `[[silent]]` means it had nothing to add.
-7. **Is the scheduler running?** If the console shows **回复服务未连接** (Reply service not connected), restart `agt web`. If you run it from a clone, rebuild first so the console and the scheduler come from the same `agt`.
+7. **Is the scheduler running?** The console restarts the scheduler within a few seconds if it stops, and the scheduler writes its warnings and the reason it stopped to `runtime/scheduler.log` in the home. If the console still shows **回复服务未连接** (Reply service not connected), read that log and restart `agt web`. If you run it from a clone, rebuild first so the console and the scheduler come from the same `agt`.
 
 ## The model call fails
 

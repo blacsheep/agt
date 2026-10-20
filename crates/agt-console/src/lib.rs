@@ -168,6 +168,7 @@ async fn prepare(cli: &Arc<Cli>, principal: &str) -> Result<PathBuf> {
     cli.start_scheduler()
         .await
         .map_err(|error| anyhow::anyhow!(error.message))?;
+    cli.supervise_scheduler();
     Ok(home)
 }
 
