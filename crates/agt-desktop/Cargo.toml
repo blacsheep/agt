@@ -21,7 +21,7 @@ agt-console.workspace = true
 anyhow.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 serde_json.workspace = true
-tauri = { version = "2.12", features = ["tray-icon"] }
+tauri = { version = "2.12", features = ["tray-icon", "image-png"] }
 tauri-plugin-notification = "2.7"
 tauri-plugin-updater = { version = "2.14", default-features = false, features = ["rustls-tls", "system-proxy"] }
 tokio = { workspace = true, features = ["sync"] }
