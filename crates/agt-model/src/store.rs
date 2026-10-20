@@ -332,7 +332,11 @@ impl ModelStore {
         update: ModelConfigUpdate,
     ) -> Result<StoredModel> {
         let mut stored = self.read_in(category, name)?;
+        let provider_changed = update.provider.is_some();
         stored.config.apply_update(update)?;
+        if provider_changed {
+            self.ensure_provider_exists(&stored.config)?;
+        }
         self.write_config(&stored.path, &stored.config)?;
         Ok(stored)
     }
@@ -516,6 +520,43 @@ mod tests {
         assert_eq!(deleted, home.join("models/default/fast-model"));
         assert!(!deleted.exists());
 
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn update_switches_model_name_and_provider_only_to_an_existing_provider() {
+        let home = test_home("switch");
+        create_provider(&home);
+        let store = ModelStore::new(&home);
+        store.create(&model_config()).expect("create model");
+        let switch = |provider: Option<&str>, model: Option<&str>| ModelConfigUpdate {
+            provider: provider.map(str::to_owned),
+            model: model.map(str::to_owned),
+            ..Default::default()
+        };
+        let updated = store
+            .update("fast-model", switch(None, Some("deepseek-reasoner")))
+            .expect("switch model name");
+        assert_eq!(updated.config.model, "deepseek-reasoner");
+        assert!(matches!(
+            store.update("fast-model", switch(Some("missing"), None)),
+            Err(ModelError::ProviderUnavailable { .. })
+        ));
+        assert_eq!(
+            store
+                .read("fast-model")
+                .unwrap()
+                .config
+                .provider
+                .name()
+                .as_str(),
+            "my-provider",
+            "a rejected switch leaves the file unchanged"
+        );
+        let updated = store
+            .update("fast-model", switch(Some("default/my-provider"), None))
+            .expect("switch to an existing provider");
+        assert!(updated.config.provider.category().is_default());
         let _ = fs::remove_dir_all(&home);
     }
 

@@ -25,6 +25,7 @@ agt streams responses, retries transient failures up to 10 attempts, and summari
 agt model create fast --provider openai --model gpt-5-mini --api-format responses --tool-call true
 agt model update fast --reasoning-effort low
 agt model update fast --clear-reasoning-effort
+agt model update fast --model gpt-5-nano          # call another model; agents keep the name fast
 ```
 
 **Agent tools:**
@@ -63,10 +64,12 @@ agt model update fast --clear-reasoning-effort
 
 ### `agt model update <name>`
 
-Accepts the same options as `create` except `--provider` and `--model`, plus:
+Accepts the same options as `create`, plus:
 
 | Option | Meaning |
 | --- | --- |
+| `--provider <ref>` | Call another provider, as `name` or `category/name`. It must exist. |
+| `--model <name>` | Call another model name on the provider |
 | `--clear-max-tokens` | Stop sending an output limit |
 | `--clear-reasoning-effort` | Stop sending a reasoning effort |
 
