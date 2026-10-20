@@ -83,7 +83,7 @@ Timers come with `task_collaboration`. See [Timers](../guide/timers.md) for how 
 | `goal_create` | `text`, `done_when`, `conversation?` | Own an outcome until it is done; open goals are reviewed when the workspace goes quiet. At most 5 open goals per identity |
 | `goal_get` / `goal_list` | `goal_id` / `include_finished?` | The owner, and people in the goal's conversation, see a goal |
 | `goal_complete` | `goal_id`, `evidence` | Mark it done; reviews stop |
-| `goal_wait_human` | `goal_id`, `question` | Pause reviews until a person writes in the goal's conversation |
+| `goal_wait_human` | `goal_id`, `question` | Pause reviews until a person writes in the goal's conversation. Only for questions a person must answer, not for waiting on agents |
 | `goal_abandon` | `goal_id`, `reason` | Stop working toward it; reviews stop |
 
 ### `execution_policy`

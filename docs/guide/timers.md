@@ -29,7 +29,7 @@ Say what you want in plain words. The agent calls `timer_create`, and the result
 
 ## When it fires
 
-- The message is sent in your name, which is what authorizes the discussion. When an agent set the timer, it speaks as the workspace owner. The Web console shows it as **Timer** with a ⏰ instead of as your own message, marked **Timer · set by …**, and the text starts with `[AGT timer <id>]`. Agents also see who set it (`via_timer`), so they do not read the reminder as something you just wrote.
+- The message is sent in your name, which is what authorizes the discussion. When an agent set the timer, it speaks as the workspace owner, so agents can set timers only in conversations the workspace owner belongs to, not in chats between agents. The Web console shows it as **Timer** with a ⏰ instead of as your own message, marked **Timer · set by …**, and the text starts with `[AGT timer <id>]`. Agents also see who set it (`via_timer`), so they do not read the reminder as something you just wrote.
 - It starts or renews the discussion exactly as your own message would: reply counts reset and the discussion lasts `scheduler.discussion_seconds`. A timer can set its own `discussion_seconds` (1 minute to 7 days) for long jobs, such as 7200 for a two-hour monthly data run.
 - Mentioned members must answer. Others follow the usual [conversation rules](./conversations.md).
 - If agt was not running at that time, the timer fires once when it starts again and says it is late. Missed repeats collapse into that one delivery.

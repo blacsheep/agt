@@ -6,7 +6,7 @@ use crate::schedule_store::now_ms;
 use agt_im::{
     ConversationId, ConversationState, ImStore, PrincipalId, PrincipalKind, SendMessageRequest,
 };
-use agt_service::Actor;
+use agt_service::{Actor, Refusal};
 use anyhow::{Result, bail};
 use croner::Cron;
 use croner::parser::{CronParser, Seconds};
@@ -123,10 +123,7 @@ pub(crate) fn call(
     };
     if let Some(task) = task {
         // Hosted changes commit only while this execution still holds its authorization.
-        crate::scheduler::guarded_store(home, task, |s| {
-            operation(s).map_err(|e| crate::RuntimeError::Invalid(e.to_string()))
-        })
-        .map_err(Into::into)
+        crate::scheduler::guarded_tool(home, task, operation)
     } else {
         let store = ScheduleStore::open(home)?;
         let db = store.connection.clone();
@@ -147,11 +144,14 @@ fn create(
 ) -> Result<Value> {
     let conversation = match (task, input.conversation) {
         (Some(task), Some(c)) if c != task.conversation => {
-            bail!("Agents can set timers only in the conversation they are working in")
+            return Err(Refusal(
+                "Agents can set timers only in the conversation they are working in",
+            )
+            .into());
         }
         (Some(task), _) => task.conversation.clone(),
         (None, Some(c)) => c,
-        (None, None) => bail!("conversation is required"),
+        (None, None) => return Err(Refusal("conversation is required").into()),
     };
     let creator = actor.principal.to_string();
     member(im, &conversation, &creator)?;
@@ -165,37 +165,40 @@ fn create(
     } else {
         im.workspace_owner()?
             .map(|p| p.to_string())
-            .ok_or_else(|| anyhow::anyhow!("timers need a workspace owner"))?
+            .ok_or(Refusal("timers need a workspace owner"))?
     };
     if member(im, &conversation, &sender).is_err()
         || im.get_principal(&PrincipalId::new(&sender))?.kind != PrincipalKind::User
     {
-        bail!("timers speak as the workspace owner, who must be a member of this conversation");
+        return Err(Refusal(
+            "A timer posts as the workspace owner, who is not in this conversation, so timers cannot be set here. To wait for other agents, end your turn: their replies, or a goal review once the workspace goes quiet, wake you.",
+        )
+        .into());
     }
     let text = input.text.trim().to_owned();
     if text.is_empty() || text.chars().count() > 4000 {
-        bail!("text must contain 1..4000 characters");
+        return Err(Refusal("text must contain 1..4000 characters").into());
     }
     let name = input
         .name
         .map(|n| n.trim().to_owned())
         .filter(|n| !n.is_empty());
     if name.as_ref().is_some_and(|n| n.chars().count() > 80) {
-        bail!("name must be at most 80 characters");
+        return Err(Refusal("name must be at most 80 characters").into());
     }
     if input
         .discussion_seconds
         .is_some_and(|s| !(60..=MAX_DISCUSSION_SECONDS).contains(&s))
     {
-        bail!("discussion_seconds must be 60..604800 (one week)");
+        return Err(Refusal("discussion_seconds must be 60..604800 (one week)").into());
     }
     if input.mentions.len() > 10 {
-        bail!("at most 10 mentions");
+        return Err(Refusal("at most 10 mentions").into());
     }
     let mut mentions = Vec::new();
     for principal in input.mentions {
         member(im, &conversation, &principal)
-            .map_err(|_| anyhow::anyhow!("mention {principal} is not a member"))?;
+            .map_err(|_| Refusal("every mention must be a member of this conversation"))?;
         if !mentions.contains(&principal) {
             mentions.push(principal);
         }
@@ -217,12 +220,11 @@ fn create(
                 Some(pattern.trim().to_owned()),
             )
         }
-        _ => bail!("choose exactly one of after_seconds, at or cron"),
+        _ => return Err(Refusal("choose exactly one of after_seconds, at or cron").into()),
     };
     if cron.is_none() && !(now + MIN_AHEAD_MS..=now + MAX_AHEAD_MS).contains(&next_at) {
-        bail!(
-            "a one-off timer must fire between 10 seconds and 366 days from now ({})",
-            crate::clock::local(now, &zone)
+        return Err(
+            Refusal("a one-off timer must fire between 10 seconds and 366 days from now").into(),
         );
     }
     let active: i64 = store.connection.query_row(
@@ -231,7 +233,9 @@ fn create(
         |r| r.get(0),
     )?;
     if active >= MAX_ACTIVE {
-        bail!("this conversation already has {MAX_ACTIVE} active timers; cancel one first");
+        return Err(
+            Refusal("this conversation already has 20 active timers; cancel one first").into(),
+        );
     }
     let timer = Timer {
         id: uuid::Uuid::new_v4().to_string(),
@@ -291,13 +295,13 @@ fn list(store: &ScheduleStore, im: &ImStore, actor: &Actor, args: &Value) -> Res
 fn cancel(store: &ScheduleStore, im: &ImStore, actor: &Actor, args: &Value) -> Result<Value> {
     let id = args["timer_id"]
         .as_str()
-        .ok_or_else(|| anyhow::anyhow!("timer_id required"))?;
-    let mut timer = get(store, id)?.ok_or_else(|| anyhow::anyhow!("timer not found"))?;
+        .ok_or(Refusal("timer_id required"))?;
+    let mut timer = get(store, id)?.ok_or(Refusal("timer not found; use timer_list"))?;
     member(im, &timer.conversation, actor.principal.as_str())
-        .map_err(|_| anyhow::anyhow!("timer not found"))?;
+        .map_err(|_| Refusal("timer not found; use timer_list"))?;
     let human = im.get_principal(&actor.principal)?.kind == PrincipalKind::User;
     if !human && timer.creator != actor.principal.as_str() {
-        bail!("Agents can cancel only timers they set");
+        return Err(Refusal("Agents can cancel only timers they set").into());
     }
     if timer.state == TimerState::Active {
         let reason = args["reason"].as_str().unwrap_or("").trim();
@@ -432,7 +436,12 @@ fn parse_cron(pattern: &str) -> Result<Cron> {
         .seconds(Seconds::Disallowed)
         .build()
         .parse(pattern.trim())
-        .map_err(|e| anyhow::anyhow!("invalid cron pattern: {e}"))
+        .map_err(|_| {
+            Refusal(
+                "invalid cron pattern; use five fields: minute hour day-of-month month day-of-week",
+            )
+            .into()
+        })
 }
 
 fn next_after(cron: &Cron, after: i64, zone: &jiff::tz::TimeZone) -> Result<i64> {
@@ -445,14 +454,14 @@ fn next_after(cron: &Cron, after: i64, zone: &jiff::tz::TimeZone) -> Result<i64>
 fn check_interval(cron: &Cron, now: i64, zone: &jiff::tz::TimeZone) -> Result<()> {
     let mut previous = next_after(cron, now, zone)?;
     if previous - now > MAX_AHEAD_MS {
-        bail!("cron pattern must fire within the next 366 days");
+        return Err(Refusal("cron pattern must fire within the next 366 days").into());
     }
     for _ in 0..48 {
         let Ok(next) = next_after(cron, previous, zone) else {
             break;
         };
         if next - previous < MIN_INTERVAL_MS {
-            bail!("recurring timers must fire at least 10 minutes apart");
+            return Err(Refusal("recurring timers must fire at least 10 minutes apart").into());
         }
         previous = next;
     }

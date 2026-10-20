@@ -19,6 +19,23 @@ pub(crate) fn guarded<T>(
     guarded_store(home, task, |_| operation())
 }
 
+/// `guarded_store` for a hosted tool. A `Refusal` keeps its type, so its text reaches
+/// the agent; any other failure is reported as an invalid request.
+pub(crate) fn guarded_tool<T>(
+    home: &Path,
+    task: &ScheduledTask,
+    operation: impl FnOnce(&ScheduleStore) -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    let mut refusal = None;
+    guarded_store(home, task, |s| {
+        operation(s).map_err(|e| {
+            refusal = e.downcast_ref::<agt_service::Refusal>().copied();
+            RuntimeError::Invalid(e.to_string())
+        })
+    })
+    .map_err(|e| refusal.map_or_else(|| e.into(), Into::into))
+}
+
 pub(crate) fn guarded_store<T>(
     home: &Path,
     task: &ScheduledTask,
