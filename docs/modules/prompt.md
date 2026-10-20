@@ -22,7 +22,7 @@ agt ships two prompts:
 
 `agt init` creates both, and never overwrites a prompt that already exists.
 
-When a new version of agt improves `default/lead`, your home gets it the next time the scheduler starts (`agt web` or `agt schedule run`), as long as you never edited that prompt. An edited lead prompt is left alone; to take the new version, copy `crates/agt-prompt/src/lead.md` from the release over `prompts/default/lead/PROMPT.md`.
+When a new version of agt improves `default/lead`, your home gets it the next time the scheduler starts (`agt web` or `agt schedule run`), as long as you never edited that prompt. An edited lead prompt is left alone. Its page under **Resources** (资源库) then says a newer built-in version exists and offers **Replace with the new built-in prompt** (替换为新版内置提示词), which discards your edits; `resource_read` returns the new text as `builtin_update.text`.
 
 ## How to use it
 

@@ -1084,7 +1084,18 @@ async function showResourceDetail(kind, reference) {
     const hasPreview = promptCharacters.length > previewLimit;
     const promptContent = kind === 'prompt' ? `<section class="prompt-reader" aria-label="${$t('Prompt 正文')}"><div class="prompt-reader-head"><h3>${$t('提示词正文')}</h3><span id="prompt-reader-mode" class="prompt-reader-mode">${hasPreview ? $t('预览') : $t('全文')}</span></div><pre id="prompt-content" class="resource-content">${esc(hasPreview ? promptCharacters.slice(0, previewLimit).join('') : value.content)}</pre><div class="prompt-reader-footer"><span id="prompt-character-count" role="status">${hasPreview ? $t('已展示 2,000 / 共 {0} 字符', [promptCharacters.length.toLocaleString(AgtI18n.locale)]) : $t('共 {0} 字符', [promptCharacters.length.toLocaleString(AgtI18n.locale)])}</span>${hasPreview ? `<button id="toggle-prompt" class="secondary" type="button" aria-expanded="false" aria-controls="prompt-content">${$t('展开全文')} <span aria-hidden="true">↓</span></button>` : ''}</div></section>` : '';
     const content = kind === 'prompt' ? promptContent : typeof value.content === 'string' ? `<h3>${$t('完整正文')}</h3><pre class="resource-content">${esc(value.content)}</pre>` : kind === 'mcp' ? `<h3>${$t('配置（敏感字段已隐藏）')}</h3><pre class="resource-content">${esc(JSON.stringify(r.config, null, 2))}</pre>` : '';
-    $('#modal-body').innerHTML = `${details}${content}${r.path ? `<details class="resource-location"><summary>${$t('文件位置')}</summary><p>${esc(r.path)}</p></details>` : ''}`;
+    // A built-in prompt someone edited is kept on upgrade; offer the new built-in text.
+    const update = kind === 'prompt' && value.builtin_update ? `<section class="form-note builtin-update" role="status"><p>${$t('这是内置提示词的修改版，agt 已有更新的内置版本。替换会丢弃这里的修改。')}</p><button id="use-builtin-prompt" class="secondary" type="button">${$t('替换为新版内置提示词')}</button></section>` : '';
+    $('#modal-body').innerHTML = `${update}${details}${content}${r.path ? `<details class="resource-location"><summary>${$t('文件位置')}</summary><p>${esc(r.path)}</p></details>` : ''}`;
+    if (update) $('#use-builtin-prompt').onclick = async () => {
+      if (!confirm($t('用新版内置提示词替换 {0}？当前的修改会被覆盖。', [reference]))) return;
+      try {
+        await tool('resource_write', { kind: 'prompt', reference, create: false, expected_revision: value.revision, data: { text: value.builtin_update.text } });
+        $('#modal').close();
+        await bootstrap();
+        notify($t('已替换为新版内置提示词。'));
+      } catch (error) { notify(error.message, true); }
+    };
     if (hasPreview) $('#toggle-prompt').onclick = () => {
       const button = $('#toggle-prompt');
       const expanded = button.getAttribute('aria-expanded') !== 'true';

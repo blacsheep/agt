@@ -94,9 +94,16 @@ impl Resources {
             "model" => serde_json::to_value(ModelSummary::from(
                 &ModelStore::new(h).read_in(&category, &name)?,
             ))?,
-            "prompt" => serde_json::to_value(PromptContentResult::try_from(
-                &PromptStore::new(h).read_in(&category, &name)?,
-            )?)?,
+            "prompt" => {
+                let store = PromptStore::new(h);
+                let mut value = serde_json::to_value(PromptContentResult::try_from(
+                    &store.read_in(&category, &name)?,
+                )?)?;
+                if let Some(text) = store.builtin_update_in(&category, &name)? {
+                    value["builtin_update"] = json!({ "text": text });
+                }
+                value
+            }
             "skill" => serde_json::to_value(
                 SkillStore::new(h).read_document_summary_in(&category, &name.parse()?)?,
             )?,
