@@ -55,7 +55,7 @@ agt tool call --principal lead task_get --args '{"task_id":"<id>"}'
 | `task_execution_policy` | `task_id`, `expected_revision`, `reason`, `execution_policy` | 为排队中的任务声明并行和互斥资源 |
 | `task_cancel` | `task_id`, `expected_revision`, `reason` | 取消任务及它创建的子任务 |
 | `task_retry` | `task_id`, `expected_revision`, `request_key`, `reason` | 基于失败、取消或中断的任务创建新任务（请求者或人） |
-| `task_resolve` | `task_id`, `expected_revision`, `outcome`（`succeeded` 或 `failed`）, `evidence` | 仅限人：记录 `outcome_unknown` 任务的实际结果 |
+| `task_resolve` | `task_id`, `expected_revision`, `outcome`（`succeeded` 或 `failed`）, `evidence` | 仅限人：记录 `outcome_unknown` 任务的实际结果。需为任务所在会话中有管理权限的成员，或工作空间所有者。 |
 | `task_reply` | `task_id`, `input_request_id`, `expected_revision`, `answer`, `request_key` | 答复任务通过 `task_input` 提出的问题 |
 | `task_attention` | `limit?`, `before?` | 仅限工作空间负责人：需要人处理的任务 |
 

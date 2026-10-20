@@ -17,6 +17,13 @@ fn im(home: &Path) -> Result<ImStore> {
     )?)?)
 }
 
+/// Task reason for a failed execution: the error's public message only, without its
+/// cause chain, which may hold paths or provider details.
+fn failure_reason(error: &anyhow::Error) -> String {
+    let message: String = error.to_string().chars().take(300).collect();
+    format!("Agent execution failed: {message}")
+}
+
 mod admission;
 mod backend;
 mod completion;
@@ -295,16 +302,14 @@ impl Scheduler {
                 let id = task.id.clone();
                 let handle = thread::spawn(move || {
                     let mut model = ChatCompletions;
-                    if execute(&home, task.clone(), &mut model, &child_token).is_err()
+                    if let Err(error) = execute(&home, task.clone(), &mut model, &child_token)
                         && let Ok(mut store) = ScheduleStore::open(&home)
                         && let Ok(mut current) = store.get(&task.id)
                         && current.version == task.version
                         && matches!(current.state, TaskState::Evaluating | TaskState::Responding)
                     {
                         current.state = TaskState::Failed;
-                        current.reason = Some(
-                            "Agent execution failed; inspect model, binding or run details".into(),
-                        );
+                        current.reason = Some(failure_reason(&error));
                         let _ = store.update(&current, now_ms());
                     }
                     agt_storage::wake::notify(&home);

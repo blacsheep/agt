@@ -53,10 +53,21 @@ impl<'a> Runtime<'a> {
     ) -> Result<RunRecord> {
         let request = request.normalize()?;
         let (mut record, claimed) = self.store.claim(&request, None)?;
-        if let Some(task) = &self.scheduled_task {
-            crate::work::bind_run(&self.home, task, &record).map_err(|e| {
-                RuntimeError::Configuration(crate::Reason::because("cannot bind work Run", e))
-            })?;
+        if let Some(task) = &self.scheduled_task
+            && let Err(cause) = crate::work::bind_run(&self.home, task, &record)
+        {
+            let error =
+                RuntimeError::Configuration(crate::Reason::because("cannot bind work Run", cause));
+            if claimed {
+                // Binding precedes every model and tool call: record the failure
+                // instead of leaving a claim that never ran in the running state.
+                crate::progress::finish(&mut record);
+                record.state = crate::termination::finish(&mut record, &error);
+                record.error = Some(error.to_string());
+                record.diagnostic = error.diagnostic();
+                self.store.save(&record)?;
+            }
+            return Err(error);
         }
         if !claimed {
             return Ok(record);

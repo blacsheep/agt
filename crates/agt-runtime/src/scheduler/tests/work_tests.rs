@@ -224,28 +224,120 @@ fn publication_ack_failure_replays_message_without_reexecuting() {
 }
 
 #[test]
-fn lost_run_claim_is_unknown_and_never_requeued() {
+fn unbound_run_claim_fails_as_not_started_and_is_never_requeued() {
     let (home, user, chat) = fixture();
     let mut scheduler = begin(home.path(), &user, &chat);
     let id = delegate(&mut scheduler, &chat);
     let mut task = claim_work(&mut scheduler, &id);
-    let mut request = RunRequest::new("b", "side effects may have started");
+    let mut request = RunRequest::new("b", "never reached the engine");
     request.request_key = crate::work::run_key(&id);
     let mut runs = crate::RunStore::open(home.path()).unwrap();
-    runs.claim(&request, None).unwrap(); // Crash before the work association.
+    let (run, _) = runs.claim(&request, None).unwrap(); // Crash before the work association.
     task.state = TaskState::Interrupted;
     scheduler.store.update(&task, now_ms()).unwrap();
     crate::work::reconcile(home.path()).unwrap();
-    assert!(matches!(
-        WorkLedger::open(home.path())
-            .unwrap()
-            .get(&id)
-            .unwrap()
-            .state,
-        WorkState::OutcomeUnknown { .. }
-    ));
+    let item = WorkLedger::open(home.path()).unwrap().get(&id).unwrap();
+    assert!(
+        matches!(item.state, WorkState::Failed { .. }),
+        "{:?}",
+        item.state
+    );
+    let termination = item.termination.unwrap();
+    assert_eq!(termination.code, crate::StopCode::ExecutionOwnerLost);
+    assert_eq!(termination.side_effects, "not_started");
+    let run = runs.get(&run.id).unwrap();
+    assert_eq!(run.state, RunState::Failed);
     assert!(!crate::work::runnable(home.path(), &scheduler.store, &task).unwrap());
     assert_eq!(results(home.path(), &chat).len(), 1);
+}
+
+#[test]
+fn lost_scheduler_marks_bound_run_unknown_and_the_owner_can_resolve_agent_work() {
+    let (home, user, chat) = fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let direct = im(home.path())
+        .unwrap()
+        .create_direct(&PrincipalId::new("a"), &PrincipalId::new("b"))
+        .unwrap();
+    let id = delegate(&mut scheduler, direct.id.as_str());
+    let task = claim_work(&mut scheduler, &id);
+    let mut request = RunRequest::new("b", "executing when the scheduler died");
+    request.request_key = crate::work::run_key(&id);
+    let mut runs = crate::RunStore::open(home.path()).unwrap();
+    let (run, _) = runs.claim(&request, None).unwrap();
+    crate::work::bind_run(home.path(), &task, &run).unwrap();
+    // A new scheduler takes over after the old lease expired.
+    assert!(
+        scheduler
+            .store
+            .acquire(
+                "scheduler:next",
+                now_ms() + 2 * crate::schedule_store::LEASE_MS
+            )
+            .unwrap()
+    );
+    let run = runs.get(&run.id).unwrap();
+    assert_eq!(run.state, RunState::OutcomeUnknown);
+    assert_eq!(
+        run.termination.unwrap().code,
+        crate::StopCode::SchedulerLeaseLost
+    );
+    crate::work::reconcile(home.path()).unwrap();
+    let operator = |role| {
+        TaskControl::local(
+            home.path(),
+            Actor {
+                principal: PrincipalId::new("user"),
+                role,
+                automated_depth: None,
+            },
+        )
+    };
+    // Without Manager rights the owner is just a non-member.
+    assert!(
+        operator(Role::Participant)
+            .call("task_get", json!({"task_id":id}))
+            .is_err()
+    );
+    let owner = operator(Role::Manager);
+    let item = owner.call("task_get", json!({"task_id":id})).unwrap();
+    assert_eq!(item["state"], "outcome_unknown");
+    let resolved = owner
+        .call(
+            "task_resolve",
+            json!({"task_id":id,"expected_revision":item["revision"],"outcome":"failed","evidence":"nothing changed on disk"}),
+        )
+        .unwrap();
+    assert_eq!(resolved["resolution"]["outcome"], "failed");
+}
+
+#[test]
+fn failed_work_binding_closes_the_claimed_run() {
+    let (home, user, chat) = fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let id = delegate(&mut scheduler, &chat);
+    let task = claim_work(&mut scheduler, &id);
+    let mut request = RunRequest::new("b", "wrong key cannot bind");
+    request.request_key = format!("work:{id}:attempt:9");
+    let mut model = Answer(json!({"role":"assistant","content":"unreachable"}));
+    let mut runtime =
+        crate::Runtime::open(home.path(), &mut model, &agt_mcp::DefaultMcpClientFactory).unwrap();
+    runtime.scheduled_task = Some(task);
+    let error = runtime
+        .run(request.clone(), &CancellationToken::new())
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("cannot bind work Run"),
+        "{error}"
+    );
+    drop(runtime);
+    let run = crate::RunStore::open(home.path())
+        .unwrap()
+        .by_request_key(&request.request_key)
+        .unwrap()
+        .unwrap();
+    assert_eq!(run.state, RunState::Failed);
+    assert_eq!(run.model_steps, 0);
 }
 
 #[test]

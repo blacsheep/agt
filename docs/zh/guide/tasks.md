@@ -64,7 +64,7 @@ Agent 还可以调整优先级、延后、取消和重试排队中的任务，�
 
 ## 出现问题时
 
-- **`outcome_unknown`**：执行被中断，agt 无法确定工作是否已发生。它永远不会自动重试。请检查实际结果（文件、消息、外部系统），然后用 `task_resolve` 记录实际情况；如果失败了，再用 `task_retry` 重试。
+- **`outcome_unknown`**：执行被中断，agt 无法确定工作是否已发生。它永远不会自动重试。请检查实际结果（文件、消息、外部系统），然后用 `task_resolve` 记录实际情况；如果失败了，再用 `task_retry` 重试。在核对之前，任务会一直占用它声明的独占资源，需要这些资源的任务会保持排队。工作空间所有者可以核对任何任务，包括两个 Agent 在所有者不在的会话里的任务：在控制台中操作，或使用 `agt tool call --principal <所有者> --manager task_resolve`。还没开始就停止的执行会直接标记为 `failed`，可以立即重试。
 - **一直处于 `queued`**：执行者可能被停用、设为 `manual`，或讨论已暂停或过期。`task_get` 的 `blocked_reason` 会显示原因。
 - **缺少汇报**：lead 收到了结果，但没有调用 `task_report`。任务的汇报状态停留在 `awaiting_report`，五分钟后会产生提醒。
 

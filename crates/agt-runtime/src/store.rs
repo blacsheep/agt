@@ -254,6 +254,36 @@ impl RunStore {
         )?;
         Ok(serde_json::from_str(&value)?)
     }
+    /// Close a Run whose scheduler stopped while it executed. Its effects are unknown, so
+    /// it becomes `outcome_unknown` instead of staying `running` forever.
+    pub(crate) fn mark_owner_lost(
+        connection: &rusqlite::Connection,
+        request_key: &str,
+    ) -> Result<()> {
+        let value: Option<String> = connection
+            .query_row(
+                "SELECT record_json FROM runs WHERE request_key=?1",
+                [format!("root:{request_key}")],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let Some(value) = value else {
+            return Ok(());
+        };
+        let mut record: RunRecord = serde_json::from_str(&value)?;
+        if record.state != RunState::Running {
+            return Ok(());
+        }
+        record.state = RunState::OutcomeUnknown;
+        record.termination = Some(crate::Termination::new(crate::StopCode::SchedulerLeaseLost));
+        record.error = Some("the scheduler stopped while this Run was executing".into());
+        connection.execute(
+            "UPDATE runs SET record_json = ?2 WHERE id = ?1",
+            params![record.id, serde_json::to_string(&record)?],
+        )?;
+        Ok(())
+    }
+
     pub(crate) fn save(&self, record: &RunRecord) -> Result<()> {
         let mut record = record.clone();
         self.merge_tool_progress(&mut record)?;
