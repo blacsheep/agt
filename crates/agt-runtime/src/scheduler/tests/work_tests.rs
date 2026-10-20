@@ -342,6 +342,30 @@ fn failed_work_binding_closes_the_claimed_run() {
 }
 
 #[test]
+fn reconcile_leaves_a_live_claim_for_its_job_to_bind() {
+    let (home, user, chat) = fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let id = delegate(&mut scheduler, &chat);
+    let task = claim_work(&mut scheduler, &id);
+    // The job has claimed its Run but not yet bound it when the scheduler reconciles.
+    let mut request = RunRequest::new("b", "bind after reconcile");
+    request.request_key = crate::work::run_key(&id);
+    let (run, _) = crate::RunStore::open(home.path())
+        .unwrap()
+        .claim(&request.normalize().unwrap(), None)
+        .unwrap();
+    crate::work::reconcile(home.path()).unwrap();
+    let item = crate::work::read(&scheduler.store.connection, &id).unwrap();
+    assert_eq!(item.state, crate::work::WorkState::Queued);
+    crate::work::bind_run(home.path(), &task, &run).unwrap();
+    let item = crate::work::read(&scheduler.store.connection, &id).unwrap();
+    assert_eq!(
+        item.state,
+        crate::work::WorkState::Running { run_id: run.id }
+    );
+}
+
+#[test]
 fn manual_disabled_and_reset_do_not_start_pending_work() {
     let (home, user, chat) = fixture();
     let mut scheduler = begin(home.path(), &user, &chat);
