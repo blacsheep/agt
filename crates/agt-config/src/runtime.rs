@@ -22,6 +22,12 @@ pub struct SchedulerConfig {
     pub model_steps: Option<u32>,
     /// IANA zone for model-facing times and timers; `None` uses the host's zone.
     pub timezone: Option<String>,
+    /// How long the workspace must be quiet before owners review their open goals;
+    /// `None` turns automatic reviews off.
+    pub goal_idle_seconds: Option<u32>,
+    /// Reviews in a row without anyone else acting before a goal waits for a person;
+    /// `None` keeps reviewing (up to a fixed maximum).
+    pub goal_stalled_reviews: Option<u32>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -85,6 +91,8 @@ impl Default for SchedulerConfig {
             discussion_seconds: Some(1800),
             model_steps: None,
             timezone: None,
+            goal_idle_seconds: Some(120),
+            goal_stalled_reviews: Some(3),
         }
     }
 }
@@ -126,6 +134,8 @@ impl RuntimeConfig {
             || self.scheduler.replies_per_agent == Some(0)
             || self.scheduler.discussion_seconds == Some(0)
             || self.scheduler.model_steps == Some(0)
+            || self.scheduler.goal_idle_seconds == Some(0)
+            || self.scheduler.goal_stalled_reviews == Some(0)
             || self.execution.timeout_seconds == Some(0)
         {
             bail!("limits must be positive; use null for unlimited");
@@ -224,6 +234,8 @@ impl RuntimeConfig {
             {"key":"scheduler.replies_per_agent","default":100,"description":"每个身份在同一讨论中允许进入回复执行的次数，不是工具调用次数。null 不限。","effective":"调度器重启；已用次数保留"},
             {"key":"scheduler.discussion_seconds","default":1800,"description":"一次讨论授权的有效秒数，子任务共享授权。到期只阻止新执行（包括子任务、挂起恢复及通知处理），已经运行的任务可完成并投递结果；长流程可设 null。","effective":"新授权或显式续期；不追改已有到期时间"},
             {"key":"scheduler.timezone","default":null,"description":"模型看到的时间和定时任务使用的 IANA 时区，例如 Asia/Shanghai。null 使用本机时区。","effective":"新执行和新建的定时任务；已有定时任务保留创建时的时区"},
+            {"key":"scheduler.goal_idle_seconds","default":120,"description":"工作空间连续安静多少秒后，让未完成目标的负责人审核一次：完成、疏通卡住的工作，或说明在等人。null 关闭自动审核。","effective":"下一次调度检查"},
+            {"key":"scheduler.goal_stalled_reviews","default":3,"description":"连续多少次审核后除负责人外仍无人行动，就暂停该目标的自动审核并等人处理。null 不限（仍有总次数上限）。","effective":"下一次调度检查"},
             {"key":"scheduler.model_steps","default":null,"description":"原生执行器每个 Run 的模型步数上限；不限制 Codex 内部步骤。null 不限。","effective":"新 Run"},
             {"key":"memory.enabled","default":true,"description":"允许按当前身份搜索可见历史和保存带来源的私有主题摘要；不自动共享他人私聊。","effective":"关闭：下次调用即拒绝；开启：新 Run 才提供记忆工具"},
             {"key":"execution.enabled","default":false,"description":"允许挂载 local_execution 的原生 Agent 执行宿主机命令。工作目录不是沙箱，命令拥有服务账号的操作权限。","effective":"关闭：下一条命令即拒绝；开启：新 Run 才提供命令工具"},

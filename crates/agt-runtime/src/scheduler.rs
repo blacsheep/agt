@@ -155,6 +155,8 @@ impl Scheduler {
         self.poll_jobs()?;
         crate::work::reconcile(&self.home)?;
         crate::timers::fire_due(&self.home, &self.store)?;
+        // A broken goal record must not stop scheduling; reviews are best effort.
+        let _ = crate::goals::review_due(&self.home, &self.store);
         self.scan()?;
         let im = im(&self.home)?;
         self.store.expire(now_ms())?;

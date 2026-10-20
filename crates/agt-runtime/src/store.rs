@@ -50,6 +50,7 @@ const RUNTIME_SCHEMAS: &[&agt_storage::sqlite::Schema] = &[
     &SCHEMA,
     &crate::schedule_store::SCHEMA,
     &crate::timers::SCHEMA,
+    &crate::goals::SCHEMA,
     &crate::work::SCHEMA,
     &crate::context_store::SCHEMA,
     &crate::harness_sessions::SCHEMA,

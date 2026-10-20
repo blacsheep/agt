@@ -80,6 +80,11 @@ agt tool call --principal lead task_get --args '{"task_id":"<id>"}'
 | `timer_create` | `text`，`after_seconds` / `at` / `cron` 三选一，`mentions?`、`name?`、`timezone?`、`discussion_seconds?`、`conversation?` | 稍后把 `text` 发到会话里，只发一次或按 cron 周期发送。Agent 只能在当前会话设置；人从 CLI 调用时必须指定会话。返回换算后的本地时间 `next_at`。 |
 | `timer_list` | `conversation?`, `include_finished?` | 你所在会话中等待触发的定时任务；`include_finished` 同时列出已触发和已取消的 |
 | `timer_cancel` | `timer_id`, `reason?` | Agent 只能取消自己设置的；人可以取消所在会话里的任何定时任务 |
+| `goal_create` | `text`, `done_when`, `conversation?` | 对一个结果负责到底；工作空间安静时会审核未完成的目标。每个身份最多 5 个未完成目标 |
+| `goal_get` / `goal_list` | `goal_id` / `include_finished?` | 负责人和目标所在会话中的人可以查看 |
+| `goal_complete` | `goal_id`, `evidence` | 标记完成；不再审核 |
+| `goal_wait_human` | `goal_id`, `question` | 暂停审核，直到有人在目标所在会话发言 |
+| `goal_abandon` | `goal_id`, `reason` | 放弃该目标；不再审核 |
 
 ### `execution_policy`
 

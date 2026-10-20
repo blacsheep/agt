@@ -58,6 +58,18 @@ By default an agent works on one thing at a time. To let an agent run several in
 
 Tasks whose `exclusive_resources` overlap never run at the same time, even across agents. These keys are agreements between agents, not file locks; agents must use the same key for the same thing.
 
+## Goals: keep long work moving
+
+Some requests take many steps and several agents, and work can stall silently: an agent finishes its part but nobody is woken to take the next step. A **goal** lets an agent own the outcome until it is done.
+
+- The agent records the goal and how to check it with `goal_create` (`text`, `done_when`). The built-in lead does this for multi-step requests.
+- When nothing has happened in the workspace for `scheduler.goal_idle_seconds` (2 minutes by default) and the goal is still open, agt posts an **[AGT goal review]** in the goal's conversation, in the name of the person who asked, like a timer. It starts a discussion and wakes the owner with the goal, the unfinished tasks, recent failures and the latest message in each of its conversations.
+- The owner then completes the goal (`goal_complete` with evidence), unblocks the work, or calls `goal_wait_human` and asks you.
+- Each quiet spell gets one review. If after `scheduler.goal_stalled_reviews` reviews in a row (3 by default) nobody but the owner has acted, reviews pause and the owner says so in the conversation; your next message there resumes them.
+- Nothing is reviewed while something runs or is ready to run, while an approval waits for you, or when a timer or durable wait resumes work within 10 minutes.
+
+The console shows reviews as **🎯 Goal review**.
+
 ## In the Web console
 
 Click **Tasks** (任务) in a conversation's title bar. The panel lists tasks in this conversation, with filters for active, needs attention and finished, and a search box. Open a task to see its state, result, delivery and report, and to answer, cancel, retry or resolve it. **Interactions** (交互观察) shows delegations between agents as a graph.

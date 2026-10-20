@@ -725,15 +725,16 @@ function renderMessages() {
   $('#messages').innerHTML = timeline.map(entry => {
     if(entry.reset) return `<div class="context-divider" role="separator" aria-label="${$t('上下文已重置')}"><span><strong>${$t('新上下文')}</strong><time>${esc(new Date(entry.reset.created_at).toLocaleString(AgtI18n.locale))}</time><small>${$t('从这里重新开始 · 聊天记录保留')}</small></span></div>`;
     const m=entry.message;
-    // A timer posts as the person who authorized it, but nobody typed it: show it as the timer.
+    // Timers and goal reviews post as the person who authorized them, but nobody typed them.
     const timer = !!m.metadata?.timer;
-    const own = m.sender_id === state.boot.principal && !timer;
+    const review = !!m.metadata?.goal_review;
+    const own = m.sender_id === state.boot.principal && !timer && !review;
     const day = new Date(m.created_at).toDateString();
     const divider = day !== lastDay ? `<div class="day-divider" role="separator"><span>${esc(dayLabel(m.created_at))}</span></div>` : '';
     lastDay = day;
     const previous = timeline[timeline.indexOf(entry) - 1]?.message;
-    const grouped = previous && previous.sender_id === m.sender_id && !!previous.metadata?.timer === timer && m.created_at - previous.created_at < 5 * 60 * 1000;
-    return divider + `<article class="message ${own ? 'own' : ''} ${grouped && !divider ? 'grouped' : ''}" data-tone="${toneOf(m.sender_id)}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${timer ? '⏰' : esc(own ? $t('你') : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(timer ? $t('定时器') : nameOf(m.sender_id))}</span><time title="${esc(new Date(m.created_at).toLocaleString(AgtI18n.locale))}">${esc(new Date(m.created_at).toLocaleTimeString(AgtI18n.locale, { hour: '2-digit', minute: '2-digit' }))}</time>${m.metadata?.timer ? `<span class="tag">${$t('定时任务 · 由 {0} 设置', [esc(nameOf(m.metadata.timer.creator))])}</span>` : ''}</div>${m.deleted_at ? `<div class="bubble deleted">${$t('此消息已删除')}</div>` : `<div class="bubble md">${AgtMarkdown.render(m.metadata?.timer ? m.body.replace(/^\[AGT timer [^\]\n]*\]\n/, '') : m.body)}</div>`}<div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? $t('查看投递 ↗') : $t('回复情况')}</button></div><div class="run-threads" data-thread-anchor="${esc(m.id)}"></div></div></article>`;
+    const grouped = previous && previous.sender_id === m.sender_id && !!previous.metadata?.timer === timer && !!previous.metadata?.goal_review === review && m.created_at - previous.created_at < 5 * 60 * 1000;
+    return divider + `<article class="message ${own ? 'own' : ''} ${grouped && !divider ? 'grouped' : ''}" data-tone="${toneOf(m.sender_id)}"><div class="avatar ${own ? 'user' : ''}" data-tone="${toneOf(m.sender_id)}" aria-hidden="true">${timer ? '⏰' : review ? '🎯' : esc(own ? $t('你') : initialOf(nameOf(m.sender_id)))}</div><div class="message-content"><div class="message-meta"><span>${esc(timer ? $t('定时器') : review ? $t('目标审核') : nameOf(m.sender_id))}</span><time title="${esc(new Date(m.created_at).toLocaleString(AgtI18n.locale))}">${esc(new Date(m.created_at).toLocaleTimeString(AgtI18n.locale, { hour: '2-digit', minute: '2-digit' }))}</time>${m.metadata?.timer ? `<span class="tag">${$t('定时任务 · 由 {0} 设置', [esc(nameOf(m.metadata.timer.creator))])}</span>` : ''}</div>${m.deleted_at ? `<div class="bubble deleted">${$t('此消息已删除')}</div>` : `<div class="bubble md">${AgtMarkdown.render(m.metadata?.timer ? m.body.replace(/^\[AGT timer [^\]\n]*\]\n/, '') : m.body)}</div>`}<div class="message-tools"><span>${(m.metadata?.mentions || []).map(p => `@${esc(nameOf(p))}`).join(' ')}</span><button data-status="${esc(m.id)}">${debugMode ? $t('查看投递 ↗') : $t('回复情况')}</button></div><div class="run-threads" data-thread-anchor="${esc(m.id)}"></div></div></article>`;
   }).join('') || empty($t('会话已就绪'), $t('发送第一条消息，邀请 Agent 回应。'));
   $$('[data-status]').forEach(button => button.onclick = () => showStatus(button.dataset.status));
   AgtRunThreads.render();

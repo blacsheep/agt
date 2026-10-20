@@ -340,6 +340,9 @@ impl WorkControl for TaskControl {
         if name.starts_with("timer_") {
             return crate::timers::call(&self.home, &self.actor, self.task.as_ref(), name, args);
         }
+        if name.starts_with("goal_") {
+            return crate::goals::call(&self.home, &self.actor, self.task.as_ref(), name, args);
+        }
         if name == "task_request" {
             return self.request(args);
         }

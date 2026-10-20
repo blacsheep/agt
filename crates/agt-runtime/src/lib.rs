@@ -18,6 +18,7 @@ pub use harness_sessions::{
 };
 mod local_execution;
 pub use local_execution::LocalExecution;
+mod goals;
 mod participation;
 mod progress;
 mod schedule_state;
