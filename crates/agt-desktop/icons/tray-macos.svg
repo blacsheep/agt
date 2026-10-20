@@ -1,0 +1,8 @@
+<!-- Source of tray-macos.png, the macOS menu bar icon: the favicon.svg glyph alone, in
+     black on transparent, used as a template image so macOS tints it for light and
+     dark menu bars. Render with `rsvg-convert -w 64 -h 64 tray-macos.svg -o tray-macos.png`. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 6 48 48" width="64" height="64">
+  <circle cx="27.5" cy="36" r="10.5" fill="none" stroke="#000" stroke-width="7"/>
+  <path d="M38 25.5V46.5" fill="none" stroke="#000" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="49" cy="15" r="6" fill="#000"/>
+</svg>

@@ -180,6 +180,17 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
                 show(tray.app_handle());
             }
         });
+    // The macOS menu bar takes a monochrome template image that the system tints for
+    // light and dark bars; the full-color app icon looks oversized there.
+    #[cfg(target_os = "macos")]
+    {
+        tray = tray
+            .icon(tauri::image::Image::from_bytes(include_bytes!(
+                "../icons/tray-macos.png"
+            ))?)
+            .icon_as_template(true);
+    }
+    #[cfg(not(target_os = "macos"))]
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }

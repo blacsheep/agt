@@ -1,0 +1,25 @@
+<!-- Source of icon.icns. A macOS app icon keeps its body to 824×824 of a 1024 canvas,
+     with a matching corner radius and a soft shadow in the margin, so the Dock and
+     Launchpad show it at the same size as other apps. The artwork is favicon.svg, drawn
+     in its 64-unit space, so blur and offsets are in those units. Rebuild icon.icns
+     with `python3 crates/agt-desktop/icons/build_icns.py` after changing it. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b5ff0"/>
+      <stop offset="1" stop-color="#8a4fe0"/>
+    </linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="135%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="0.93"/>
+      <feOffset dy="0.78" result="blur"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.3"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g transform="translate(100 100) scale(12.875)" filter="url(#shadow)">
+    <rect width="64" height="64" rx="14.37" fill="url(#g)"/>
+    <circle cx="27.5" cy="36" r="10.5" fill="none" stroke="#fff" stroke-width="7"/>
+    <path d="M38 25.5V46.5" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="49" cy="15" r="6" fill="#5eead4"/>
+  </g>
+</svg>
