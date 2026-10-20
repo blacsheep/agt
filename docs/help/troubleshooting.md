@@ -37,7 +37,7 @@ Check these in order:
 
 ## A run or task shows an unknown outcome
 
-`interrupted` runs and `outcome_unknown` tasks were cut off while a tool or model call was in progress, for example by a restart. agt never repeats them automatically, because the tool may already have had an effect. Check what actually happened, then send a new message, or resolve and retry the task (see [Task collaboration](../guide/tasks.md#when-something-goes-wrong)).
+`interrupted` runs and `outcome_unknown` tasks were cut off while a tool or model call was in progress, for example by a restart. agt never repeats them automatically, because the tool may already have had an effect. A run cut off before it used any tool changed nothing, so agt does not ask you about it: a reply is simply asked for again, and a task fails with `not_started` so its requester can retry it. Check what actually happened, then send a new message, or resolve and retry the task (see [Task collaboration](../guide/tasks.md#when-something-goes-wrong)).
 
 ## The console says "此工作空间的负责人是 …" (The workspace owner is …)
 

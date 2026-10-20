@@ -267,6 +267,9 @@ fn lost_scheduler_marks_bound_run_unknown_and_the_owner_can_resolve_agent_work()
     let mut runs = crate::RunStore::open(home.path()).unwrap();
     let (run, _) = runs.claim(&request, None).unwrap();
     crate::work::bind_run(home.path(), &task, &run).unwrap();
+    // It had started a tool, so whatever it changed is unknown.
+    runs.start_call(crate::CallRecord::new(&run, Some("write_file"), json!({})))
+        .unwrap();
     // A new scheduler takes over after the old lease expired.
     assert!(
         scheduler
@@ -362,6 +365,39 @@ fn reconcile_leaves_a_live_claim_for_its_job_to_bind() {
     assert_eq!(
         item.state,
         crate::work::WorkState::Running { run_id: run.id }
+    );
+}
+
+#[test]
+fn work_that_used_no_tool_fails_cleanly_when_the_scheduler_stops() {
+    let (home, user, chat) = fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let id = delegate(&mut scheduler, &chat);
+    let task = claim_work(&mut scheduler, &id);
+    let mut request = RunRequest::new("b", "thinking when the scheduler died");
+    request.request_key = crate::work::run_key(&id);
+    let mut runs = crate::RunStore::open(home.path()).unwrap();
+    let (run, _) = runs.claim(&request, None).unwrap();
+    crate::work::bind_run(home.path(), &task, &run).unwrap();
+    assert!(
+        scheduler
+            .store
+            .acquire(
+                "scheduler:next",
+                now_ms() + 2 * crate::schedule_store::LEASE_MS
+            )
+            .unwrap()
+    );
+    // No tool ran, so nothing outside the Run changed: no person has to resolve it.
+    let run = runs.get(&run.id).unwrap();
+    assert_eq!(run.state, RunState::Failed);
+    assert_eq!(run.termination.unwrap().side_effects, "not_started");
+    crate::work::reconcile(home.path()).unwrap();
+    let item = WorkLedger::open(home.path()).unwrap().get(&id).unwrap();
+    assert!(
+        matches!(item.state, WorkState::Failed { .. }),
+        "{:?}",
+        item.state
     );
 }
 

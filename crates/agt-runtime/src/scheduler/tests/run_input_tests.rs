@@ -189,6 +189,8 @@ fn takeover_interrupts_accepted_input_but_preserves_unconsumed_follow_up() {
     let task = claim(&mut scheduler, "a");
     let steering = send(home.path(), &user, &chat, "steer", None);
     let follow_up = send(home.path(), &user, &chat, "later", Some("follow_up"));
+    // The Run took the input and had started a tool when the scheduler stopped.
+    executing_reply(home.path(), &task, true);
     let input = crate::run_inputs::take(home.path(), &task, "run-test", InputMode::Steering)
         .unwrap()
         .unwrap();

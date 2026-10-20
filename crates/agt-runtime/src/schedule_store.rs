@@ -319,10 +319,13 @@ impl ScheduleStore {
                 "SELECT record FROM tasks WHERE state IN ('evaluating','responding')",
             )?;
             for mut task in records {
-                if let Some(key) = executing_run_key(&tx, &task)? {
-                    crate::RunStore::mark_owner_lost(&tx, &key)?;
-                }
-                task.recover_expired_lease();
+                // Only a reply that was executing can have changed anything.
+                let changed = match executing_run_key(&tx, &task)? {
+                    Some(key) => crate::RunStore::mark_owner_lost(&tx, &key)?,
+                    None => false,
+                };
+                // A reply that changed nothing runs again; work reports its failed Run.
+                task.recover_expired_lease(!changed && task.work_id.is_none());
                 save_task(&tx, &task)?;
             }
         }

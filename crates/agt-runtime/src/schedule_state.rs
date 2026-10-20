@@ -87,8 +87,9 @@ impl ScheduledTask {
         self.version += 1;
     }
 
-    pub(crate) fn recover_expired_lease(&mut self) {
-        self.state = if self.state == TaskState::Evaluating {
+    /// `retry`: the interrupted reply changed nothing, so it may run again.
+    pub(crate) fn recover_expired_lease(&mut self, retry: bool) {
+        self.state = if self.state == TaskState::Evaluating || retry {
             TaskState::Queued
         } else {
             TaskState::Interrupted
