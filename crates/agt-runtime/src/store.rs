@@ -255,12 +255,14 @@ impl RunStore {
         )?;
         Ok(serde_json::from_str(&value)?)
     }
-    /// Close a Run whose scheduler stopped while it executed. Its effects are unknown, so
-    /// it becomes `outcome_unknown` instead of staying `running` forever.
+    /// Close a Run whose scheduler stopped while it executed, instead of leaving it
+    /// `running` forever. A Run that never started a tool call or submitted harness work
+    /// changed nothing outside itself, so it fails and the work can simply run again;
+    /// otherwise its effects are unknown. Returns whether it may have changed anything.
     pub(crate) fn mark_owner_lost(
         connection: &rusqlite::Connection,
         request_key: &str,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let value: Option<String> = connection
             .query_row(
                 "SELECT record_json FROM runs WHERE request_key=?1",
@@ -268,21 +270,44 @@ impl RunStore {
                 |r| r.get(0),
             )
             .optional()?;
+        // Without its record nothing proves the Run changed nothing.
         let Some(value) = value else {
-            return Ok(());
+            return Ok(true);
         };
         let mut record: RunRecord = serde_json::from_str(&value)?;
         if record.state != RunState::Running {
-            return Ok(());
+            return Ok(record.state == RunState::OutcomeUnknown);
         }
-        record.state = RunState::OutcomeUnknown;
-        record.termination = Some(crate::Termination::new(crate::StopCode::SchedulerLeaseLost));
-        record.error = Some("the scheduler stopped while this Run was executing".into());
+        let tools: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM run_calls WHERE run_id=?1 AND json_extract(record_json,'$.kind')='tool'",
+            [&record.id],
+            |r| r.get(0),
+        )?;
+        let submitted = record
+            .execution
+            .as_ref()
+            .is_some_and(|execution| execution["submitted"] == true);
+        let mut termination = crate::Termination::new(crate::StopCode::SchedulerLeaseLost);
+        let changed = tools > 0 || submitted;
+        if changed {
+            record.state = RunState::OutcomeUnknown;
+            record.error = Some("the scheduler stopped while this Run was executing".into());
+        } else {
+            termination.confirmation = "runtime_stopped".into();
+            termination.side_effects = "not_started".into();
+            termination.confirmed_at = Some(crate::schedule_store::now_ms());
+            record.state = RunState::Failed;
+            record.error = Some(
+                "the scheduler stopped before this Run used any tool; nothing outside it changed"
+                    .into(),
+            );
+        }
+        record.termination = Some(termination);
         connection.execute(
             "UPDATE runs SET record_json = ?2 WHERE id = ?1",
             params![record.id, serde_json::to_string(&record)?],
         )?;
-        Ok(())
+        Ok(changed)
     }
 
     pub(crate) fn save(&self, record: &RunRecord) -> Result<()> {

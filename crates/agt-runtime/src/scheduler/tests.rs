@@ -145,6 +145,23 @@ fn claim(scheduler: &mut Scheduler, principal: &str) -> ScheduledTask {
             )
         })
 }
+/// The Run a claimed reply was executing when its scheduler stopped; `tool` says
+/// whether it had already started a tool call.
+fn executing_reply(home: &std::path::Path, task: &ScheduledTask, tool: bool) -> crate::RunRecord {
+    let mut request = RunRequest::new(&task.principal, "replying when the scheduler stopped");
+    request.request_key = format!("schedule:{}:{}", task.id, task.version);
+    let mut runs = crate::RunStore::open(home).unwrap();
+    let (run, _) = runs.claim(&request, None).unwrap();
+    if tool {
+        runs.start_call(crate::CallRecord::new(
+            &run,
+            Some("message_send"),
+            json!({}),
+        ))
+        .unwrap();
+    }
+    run
+}
 struct Answer(Value);
 impl ModelClient for Answer {
     fn complete(&mut self, _: &ResolvedAgent, _: &[Value], _: &[Value]) -> crate::Result<Value> {
@@ -153,6 +170,32 @@ impl ModelClient for Answer {
 }
 fn decision(value: Value) -> Value {
     json!({"role":"assistant","tool_calls":[{"id":"decision","type":"function","function":{"name":"participation_decision","arguments":value.to_string()}}]})
+}
+
+#[test]
+fn a_reply_that_used_no_tool_runs_again_after_its_scheduler_stops() {
+    let (home, user, chat) = fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let task = claim(&mut scheduler, "a");
+    assert_eq!(task.state, TaskState::Responding);
+    let run = executing_reply(home.path(), &task, false);
+    assert!(
+        scheduler
+            .store
+            .acquire(
+                "replacement",
+                now_ms() + crate::schedule_store::LEASE_MS + 1
+            )
+            .unwrap()
+    );
+    // Nothing outside the Run changed, so the member is asked again.
+    let task = scheduler.store.get(&task.id).unwrap();
+    assert_eq!(task.state, TaskState::Queued);
+    let run = crate::RunStore::open(home.path())
+        .unwrap()
+        .get(&run.id)
+        .unwrap();
+    assert_eq!(run.state, RunState::Failed);
 }
 
 #[test]
