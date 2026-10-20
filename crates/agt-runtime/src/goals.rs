@@ -32,6 +32,10 @@ pub(crate) const SCHEMA: agt_storage::sqlite::Schema = agt_storage::sqlite::Sche
 const MAX_OPEN: i64 = 5;
 /// Reviews of one goal in all, whatever their outcome.
 const MAX_REVIEWS: u32 = 50;
+/// A goal waiting for a person is reviewed again after this long, doubling each time
+/// nobody answers, up to `MAX_RECHECK_MS`.
+const RECHECK_MS: i64 = 30 * 60_000;
+const MAX_RECHECK_MS: i64 = 8 * 60 * 60_000;
 /// Timers or durable waits due this soon mean work resumes by itself.
 const RESUMES_SOON_MS: i64 = 10 * 60_000;
 const MAX_TEXT: usize = 2000;
@@ -68,6 +72,9 @@ pub struct Goal {
     /// Evidence when done, the question when waiting, or the reason when abandoned.
     pub outcome: Option<String>,
     pub waiting_since: Option<i64>,
+    /// Reviews in a row that found the goal still waiting for a person.
+    #[serde(default)]
+    pub waiting_rechecks: u32,
 }
 
 #[derive(Deserialize)]
@@ -203,6 +210,7 @@ fn create(
         last_review_message: None,
         outcome: None,
         waiting_since: None,
+        waiting_rechecks: 0,
     };
     save(store, &goal)?;
     Ok(view(&goal))
@@ -258,6 +266,14 @@ fn finish(
     goal.waiting_since = (state == GoalState::WaitingHuman).then_some(now);
     if state == GoalState::WaitingHuman {
         goal.stalled_reviews = 0;
+        // The question must reach the person, whatever the owner's own reply says.
+        let body = format!(
+            "[AGT goal waiting {}]\nGoal: {}\nWaiting for a person: {}",
+            goal.id,
+            goal.text,
+            goal.outcome.as_deref().unwrap_or_default()
+        );
+        notify_person(im, &goal, body, &format!("waiting:{now}"))?;
     }
     save(store, &goal)?;
     Ok(view(&goal))
@@ -369,6 +385,7 @@ pub(crate) fn review_due(home: &Path, store: &ScheduleStore) -> Result<()> {
             goal.state = GoalState::Active;
             goal.waiting_since = None;
             goal.stalled_reviews = 0;
+            goal.waiting_rechecks = 0;
             goal.updated_at = now;
             save(store, &goal)?;
         }
@@ -412,6 +429,35 @@ pub(crate) fn review_due(home: &Path, store: &ScheduleStore) -> Result<()> {
             now,
             now - quiet_since,
             progress,
+            None,
+        )?;
+    }
+    // A goal waiting for a person is looked at again after a while: the question may
+    // have gone unseen, or what blocked it may have cleared without anyone answering.
+    for mut goal in open_goals(store)?
+        .into_iter()
+        .filter(|g| g.state == GoalState::WaitingHuman)
+    {
+        let since = goal.waiting_since.unwrap_or(goal.updated_at);
+        let after = (RECHECK_MS << goal.waiting_rechecks.min(4)).min(MAX_RECHECK_MS);
+        if goal.reviews >= MAX_REVIEWS || now - since < after {
+            continue;
+        }
+        let waited = (now - since, goal.outcome.clone().unwrap_or_default());
+        goal.state = GoalState::Active;
+        goal.waiting_since = None;
+        goal.stalled_reviews = 0;
+        goal.waiting_rechecks += 1;
+        let progress = im.latest_activity(Some(&PrincipalId::new(&goal.owner)))?;
+        review(
+            home,
+            store,
+            &im,
+            &mut goal,
+            now,
+            now - quiet_since,
+            progress,
+            Some(waited),
         )?;
     }
     Ok(())
@@ -439,6 +485,8 @@ fn person_spoke_since(im: &ImStore, goal: &Goal) -> Result<bool> {
     Ok(false)
 }
 
+/// `waited`: how long the goal had waited for a person, and for what.
+#[allow(clippy::too_many_arguments)]
 fn review(
     home: &Path,
     store: &ScheduleStore,
@@ -447,6 +495,7 @@ fn review(
     now: i64,
     quiet_ms: i64,
     progress: Option<i64>,
+    waited: Option<(i64, String)>,
 ) -> Result<()> {
     if member(im, &goal.conversation, &goal.sender).is_err()
         || member(im, &goal.conversation, &goal.owner).is_err()
@@ -460,7 +509,7 @@ fn review(
     let sent = im.send_message(SendMessageRequest {
         conversation_id: ConversationId::new(&goal.conversation),
         sender_id: PrincipalId::new(&goal.sender),
-        body: review_body(home, im, goal, quiet_ms, number)?,
+        body: review_body(home, im, goal, quiet_ms, number, waited)?,
         client_message_id: Some(format!("goal:{}:review:{number}", goal.id)),
         reply_to_id: None,
         metadata: json!({
@@ -489,21 +538,30 @@ fn pause(store: &ScheduleStore, im: &ImStore, goal: &mut Goal, now: i64) -> Resu
         "[AGT goal paused {}]\nGoal: {}\nAutomatic reviews stopped after {} reviews, the last {} of them without anyone else acting. A person needs to look at it; any message here from a person resumes the reviews.",
         goal.id, goal.text, goal.reviews, goal.stalled_reviews
     );
-    // The owner posts the notice without running; reviews pause until a person speaks.
-    im.send_message(SendMessageRequest {
-        conversation_id: ConversationId::new(&goal.conversation),
-        sender_id: PrincipalId::new(&goal.owner),
-        body,
-        client_message_id: Some(format!("goal:{}:paused:{}", goal.id, goal.reviews)),
-        reply_to_id: None,
-        metadata: json!({"goal_review": {"goal_id": goal.id, "paused": true}}),
-        idempotency_key: None,
-    })?;
+    notify_person(im, goal, body, &format!("paused:{}", goal.reviews))?;
     goal.state = GoalState::WaitingHuman;
     goal.waiting_since = Some(now);
     goal.outcome = Some("automatic reviews paused: no progress".into());
     goal.updated_at = now;
     save(store, goal)
+}
+
+/// The owner tells the goal's person, by mention, that the goal needs them. Posting it
+/// does not run anyone: reviews pause until a person speaks or a recheck is due.
+fn notify_person(im: &ImStore, goal: &Goal, body: String, key: &str) -> Result<()> {
+    im.send_message(SendMessageRequest {
+        conversation_id: ConversationId::new(&goal.conversation),
+        sender_id: PrincipalId::new(&goal.owner),
+        body,
+        client_message_id: Some(format!("goal:{}:{key}", goal.id)),
+        reply_to_id: None,
+        metadata: json!({
+            "mentions": [goal.sender],
+            "goal_review": {"goal_id": goal.id, "paused": true},
+        }),
+        idempotency_key: None,
+    })?;
+    Ok(())
 }
 
 fn review_body(
@@ -512,6 +570,7 @@ fn review_body(
     goal: &Goal,
     quiet_ms: i64,
     number: u32,
+    waited: Option<(i64, String)>,
 ) -> Result<String> {
     let mut body = format!(
         "[AGT goal review {}]\nGoal: {}\nDone when: {}\n\nNothing has happened in this workspace for {} minutes and this goal is still open (review {number}). Decide now, with tools rather than words: if the goal is met, call goal_complete with the evidence. If work is stuck, unblock it: mention or message whoever should act next, retry or reassign tasks, or fix what blocks them. If it can only continue after a person answers, call goal_wait_human and ask them.",
@@ -520,6 +579,12 @@ fn review_body(
         goal.done_when,
         quiet_ms.max(60_000) / 60_000
     );
+    if let Some((waited_ms, reason)) = waited {
+        body.push_str(&format!(
+            "\n\nThis goal has waited {} minutes for a person and nobody has answered: {reason}\nCheck whether that is still true. If what blocked it has cleared, or you can clear it yourself, continue the work. If only a person can unblock it, call goal_wait_human again with a clear question.",
+            waited_ms / 60_000
+        ));
+    }
     let owner = goal.owner.as_str();
     let work = crate::work::WorkLedger::open(home)?.pending_execution()?;
     let mine = work

@@ -176,6 +176,43 @@ fn reviews_where_only_the_owner_acts_pause_the_goal_until_a_person_speaks() {
 }
 
 #[test]
+fn a_goal_waiting_for_a_person_asks_them_and_is_looked_at_again_later() {
+    let (home, scheduler, chat, id) = goal_fixture();
+    let person = TaskControl::local(
+        home.path(),
+        Actor {
+            principal: PrincipalId::new("user"),
+            role: Role::Manager,
+            automated_depth: None,
+        },
+    );
+    person
+        .call(
+            "goal_wait_human",
+            json!({"goal_id":id,"question":"Which logo should the report use?"}),
+        )
+        .unwrap();
+    // The question reaches the person even if the owner's reply leaves it out.
+    let notice = all_messages(home.path(), &chat).pop().unwrap();
+    assert!(notice.body.starts_with(&format!("[AGT goal waiting {id}]")));
+    assert!(notice.body.contains("Which logo"));
+    assert_eq!(notice.metadata["mentions"], json!(["user"]));
+    // A quiet spell alone leaves it waiting...
+    rewind(&scheduler, 200_000);
+    crate::goals::review_due(home.path(), &scheduler.store).unwrap();
+    assert_eq!(goal(&scheduler, &id)["state"], "waiting_human");
+    // ...but after half an hour without an answer the owner looks at it again.
+    rewind(&scheduler, 30 * 60_000);
+    crate::goals::review_due(home.path(), &scheduler.store).unwrap();
+    let state = goal(&scheduler, &id);
+    assert_eq!(state["state"], "active", "{state}");
+    assert_eq!(state["waiting_rechecks"], 1);
+    let review = reviews(home.path(), &chat).pop().unwrap();
+    assert!(review.body.starts_with(&format!("[AGT goal review {id}]")));
+    assert!(review.body.contains("waited"));
+}
+
+#[test]
 fn busy_workspaces_and_finished_goals_are_not_reviewed() {
     let (home, mut scheduler, chat, id) = goal_fixture();
     // A task ready to run means work will continue by itself.
