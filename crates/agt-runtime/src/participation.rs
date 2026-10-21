@@ -71,7 +71,7 @@ pub(crate) fn decide(
     wait: bool,
 ) -> Result<ParticipationDecision> {
     let waiting = if wait {
-        "You may wait while the members listed in presence finish their current step: you are woken when one of them finishes or a new message arrives, and the wait ends silently if nothing new was said. Waiting does not occupy a reply slot."
+        "You may wait while the members listed in presence finish their current step: you are woken when one of them finishes or a new message arrives, and then decide again. Waiting does not occupy a reply slot."
     } else {
         "No other member is working right now, so waiting is unavailable: decide now."
     };

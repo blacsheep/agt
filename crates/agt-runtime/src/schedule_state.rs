@@ -174,11 +174,6 @@ impl ScheduledTask {
         self.deadline = self.due_at;
     }
 
-    pub(crate) fn end_quiet_wait(&mut self) {
-        self.state = TaskState::Silent;
-        self.reason = Some("wait ended with no new messages".into());
-    }
-
     pub(crate) fn wait_from_input(&mut self, members: &[String]) {
         self.wait_on(members);
         self.owner = None;
