@@ -352,10 +352,19 @@ fn keep_busy(scheduler: &Scheduler, like: &ScheduledTask, principal: &str) -> Sc
     busy
 }
 
-struct NoModel;
-impl ModelClient for NoModel {
-    fn complete(&mut self, _: &ResolvedAgent, _: &[Value], _: &[Value]) -> crate::Result<Value> {
-        panic!("a wait that ends with nothing new must not call the model")
+/// Answers with `participate` and records the decision actions it was offered.
+struct Redecide(Vec<Value>);
+impl ModelClient for Redecide {
+    fn complete(
+        &mut self,
+        _: &ResolvedAgent,
+        _: &[Value],
+        tools: &[Value],
+    ) -> crate::Result<Value> {
+        self.0 = tools.to_vec();
+        Ok(decision(
+            json!({"action":"participate","reason_code":"relevant_expertise"}),
+        ))
     }
 }
 
@@ -397,7 +406,9 @@ fn model_wait_blocks_on_a_working_member_until_it_settles() {
             .unwrap()
             .is_none()
     );
-    // a settles without saying anything: b wakes, sees nothing new, and stops waiting.
+    // a settles without saying anything: b wakes and decides again, now without the
+    // option to wait, since nobody is working. A host waiting for the last speaker to
+    // finish must not be silenced when that speaker's turn simply ends.
     busy.state = TaskState::Silent;
     crate::schedule_store::save_task(&restarted.store.connection, &busy).unwrap();
     let woken = restarted
@@ -406,13 +417,15 @@ fn model_wait_blocks_on_a_working_member_until_it_settles() {
         .unwrap()
         .expect("settled member wakes the wait");
     assert_eq!(woken.state, TaskState::Evaluating);
-    execute(home.path(), woken, &mut NoModel, &CancellationToken::new()).unwrap();
-    let ended = restarted.store.get(&task.id).unwrap();
-    assert_eq!(ended.state, TaskState::Silent);
-    assert_eq!(
-        ended.reason.as_deref(),
-        Some("wait ended with no new messages")
-    );
+    let mut model = Redecide(Vec::new());
+    execute(home.path(), woken, &mut model, &CancellationToken::new()).unwrap();
+    let offered = &model.0[0]["function"]["parameters"]["properties"]["action"]["enum"];
+    assert_eq!(offered, &json!(["participate", "silent"]));
+    let decided = restarted.store.get(&task.id).unwrap();
+    assert!(matches!(
+        decided.last_decision.unwrap().decision,
+        crate::participation::ParticipationDecision::Participate { .. }
+    ));
 }
 
 #[test]

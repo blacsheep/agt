@@ -1,7 +1,6 @@
 //! Check a claimed task before context preparation or model execution.
 use super::backend;
 use crate::engine::EngineKind;
-use crate::participation::ParticipationDecision;
 use crate::schedule_state::ClaimDeferral;
 use crate::{DiscussionState, TaskState};
 use crate::{ScheduleStore, ScheduledTask, schedule_store::now_ms};
@@ -82,18 +81,9 @@ pub(super) fn prepare(
         store.update(task, now_ms())?;
         return Ok(None);
     }
+    // A wait that ends with nothing new is decided again: the members it waited for
+    // have settled, so the message may now be this member's to act on.
     let conversation = messaging.im.get_conversation(&trigger.conversation_id)?;
-    if task.state == TaskState::Evaluating
-        && task.last_decision.as_ref().is_some_and(|d| {
-            matches!(d.decision, ParticipationDecision::Wait { .. })
-                && d.through_seq >= conversation.last_message_seq
-        })
-    {
-        // Whoever it waited for settled without saying anything new: nothing to decide.
-        task.end_quiet_wait();
-        store.update(task, now_ms())?;
-        return Ok(None);
-    }
     if task.state == TaskState::Responding
         && task.decision_required
         && task.through_seq != conversation.last_message_seq
