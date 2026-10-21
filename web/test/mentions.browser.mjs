@@ -32,7 +32,7 @@ try {
   await wait('document.querySelector("#connection")?.textContent === "本地已连接"');
 
   await evaluate('renderMessages()');
-  assert.match(await evaluate('document.querySelector("#messages .welcome h2").textContent'), /好，/);
+  assert.match(await evaluate('document.querySelector("#messages .welcome h2").textContent'), /(好|夜深了)，/);
   assert.equal(await evaluate('!!document.querySelector("#messages [data-empty-new-chat]")'), true);
   await evaluate(`
     state.polling = true;
