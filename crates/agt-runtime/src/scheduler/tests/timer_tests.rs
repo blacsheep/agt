@@ -300,7 +300,7 @@ fn invalid_timers_are_refused_and_timers_end_with_their_conversation() {
         ),
         (
             json!({"conversation":chat,"text":"x","after_seconds":60,"mentions":["ghost"]}),
-            "",
+            "ghost",
         ),
         (
             json!({"conversation":chat,"text":"x","cron":"61 * * * *"}),
@@ -391,4 +391,31 @@ fn a_timer_can_give_its_discussion_a_longer_life() {
     let expires = store.discussion(&discussion).unwrap().unwrap().expires_at;
     let left = expires - now_ms();
     assert!((7_100_000..=7_200_000).contains(&left), "{left}");
+}
+
+#[test]
+fn an_agent_mentioning_a_non_member_in_a_timer_is_told_who_it_can_mention() {
+    let (home, user, chat) = fixture();
+    let mut scheduler = begin(home.path(), &user, &chat);
+    let task = claim(&mut scheduler, "a");
+    let agent = TaskControl::hosted(
+        home.path(),
+        Actor {
+            principal: PrincipalId::new("a"),
+            role: Role::Participant,
+            automated_depth: None,
+        },
+        task,
+    );
+    let error = agent
+        .call(
+            "timer_create",
+            json!({"conversation":chat,"text":"check in","after_seconds":600,"mentions":["a","p03"]}),
+        )
+        .unwrap_err();
+    let mentions = error
+        .downcast_ref::<agt_service::UnknownMentions>()
+        .expect("the error keeps its type through the hosted fence");
+    assert_eq!(mentions.unknown, ["p03"]);
+    assert!(mentions.members.iter().any(|(id, _)| id == "a"));
 }

@@ -1109,3 +1109,33 @@ fn message_input_mode_is_validated_persisted_and_part_of_idempotency() {
 }
 
 mod assembly;
+
+#[test]
+fn a_wrong_mention_names_itself_and_the_members_to_choose_from() {
+    let home = home();
+    let owner = service(home.path(), "owner", true);
+    let group = owner
+        .call("group_create", json!({"title":"group","members":["a","b"]}))
+        .unwrap();
+    owner
+        .call(
+            "member_remove",
+            json!({"conversation":group["id"],"principal":"b"}),
+        )
+        .unwrap();
+    // A seat-style name, a non-member and a member who left: none can be mentioned.
+    let error = service(home.path(), "a", false)
+        .call(
+            "message_send",
+            json!({"conversation":group["id"],"body":"your turn","request_key":"k","mentions":["p03","outsider","b","owner"]}),
+        )
+        .unwrap_err();
+    assert_eq!(error.code, "invalid_arguments");
+    assert_eq!(error.field.as_deref(), Some("mentions"));
+    let details = error.as_value()["error"]["details"].clone();
+    assert_eq!(details["unknown"], json!(["b", "outsider", "p03"]));
+    assert_eq!(
+        details["members"],
+        json!([{"id":"a","name":"a"},{"id":"owner","name":"owner"}])
+    );
+}
