@@ -48,7 +48,12 @@ Your system may ask once whether AGT Studio may show notifications.
 
 ## Updates
 
-When a release is published with update signatures, the app downloads and installs the update at startup and tells you; it takes effect the next time you open it. Releases without signatures are installed by downloading the new installer.
+AGT Studio looks for a new version when it starts and every six hours, and downloads nothing until you confirm. When there is one:
+
+- **New version** appears at the bottom of the navigation, and the tray menu gets **Update to …**. You are notified once for each version.
+- Either opens a dialog with the version, a link to what's new, and how many agents are working. Choose **Update and restart** to download it, with progress shown, install it and restart the app; agents that were replying are cut short. **Later** keeps the button.
+
+Choose **Check for updates** in the tray menu to check now; the app tells you if you already have the latest version. Releases without update signatures are installed by downloading the new installer.
 
 ## Uninstall
 

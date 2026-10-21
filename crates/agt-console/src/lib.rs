@@ -10,6 +10,7 @@ mod commands;
 mod error;
 mod http;
 mod js;
+pub mod update;
 
 use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};

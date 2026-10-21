@@ -25,6 +25,7 @@ mod events;
 mod framework;
 mod runtime;
 mod signals;
+mod upgrade;
 
 #[derive(Debug, Parser)]
 #[command(name = "agt", version, about = "CLI-first agent resource manager")]
@@ -104,6 +105,8 @@ enum Command {
     Im(ImCommand),
     /// start the Web console
     Web(agt_console::WebArgs),
+    /// upgrade agt to the latest release, or check whether there is one
+    Upgrade(upgrade::UpgradeArgs),
 }
 
 #[derive(Debug, Args)]
@@ -723,7 +726,17 @@ where
 }
 
 fn run_cli(cli: Cli) -> Result<()> {
+    let notice = UpdateNotice::start(&cli);
+    let result = run_command(cli);
+    notice.finish();
+    result
+}
+
+fn run_command(cli: Cli) -> Result<()> {
     let output = cli.output;
+    if let Command::Upgrade(args) = cli.command {
+        return upgrade::run(args, output, cli.yes);
+    }
     if let Command::Init(args) = &cli.command {
         if let Some(global_home) = &cli.home
             && global_home != &args.path
@@ -750,6 +763,47 @@ fn run_cli(cli: Cli) -> Result<()> {
         None => ensure_default_home_ready()?,
     };
     dispatch(cli.command, &home, output, cli.yes)
+}
+
+/// The one-line notice of a newer release, for a person at a terminal: never
+/// in JSON output, for long-running or protocol commands, or with
+/// `AGT_NO_UPDATE_CHECK` or `CI` set. A day-old check runs alongside the
+/// command, which waits for it at most a second when it is done.
+struct UpdateNotice(Option<std::sync::mpsc::Receiver<()>>);
+
+impl UpdateNotice {
+    fn start(cli: &Cli) -> Self {
+        let wanted = cli.output == OutputMode::Human
+            && io::stderr().is_terminal()
+            && !agt_console::update::disabled()
+            && std::env::var_os("CI").is_none()
+            && !matches!(
+                cli.command,
+                Command::Serve(_) | Command::Web(_) | Command::Events(_) | Command::Upgrade(_)
+            );
+        if !wanted {
+            return Self(None);
+        }
+        let (done, checked) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            if let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                runtime.block_on(agt_console::update::newer_release());
+            }
+            let _ = done.send(());
+        });
+        Self(Some(checked))
+    }
+
+    fn finish(self) {
+        let Some(checked) = self.0 else { return };
+        let _ = checked.recv_timeout(std::time::Duration::from_secs(1));
+        if let Some(notice) = agt_console::update::take_notice() {
+            eprintln!("\n{notice}");
+        }
+    }
 }
 
 /// The default home (`$AGT_HOME` or `~/.agt`), created with its built-in prompts
@@ -792,7 +846,7 @@ fn dispatch(command: Command, home: &Path, output: OutputMode, yes: bool) -> Res
         Command::Run(command) => runtime::inspect(command, home, output),
         Command::Im(command) => dispatch_im(command, home, output),
         Command::Web(args) => agt_console::run(args, home),
-        Command::Init(_) => unreachable!(),
+        Command::Init(_) | Command::Upgrade(_) => unreachable!(),
     }
 }
 

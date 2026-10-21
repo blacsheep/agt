@@ -104,7 +104,8 @@ async function bridge(run) {
 }
 
 // Starts the console as `principal`. Returns its base URL, token and close().
-export async function startConsole({ run, principal = 'operator', token = randomBytes(32).toString('hex') }) {
+// It does not look for new releases unless `env` points it at a test server.
+export async function startConsole({ run, principal = 'operator', token = randomBytes(32).toString('hex'), env = {} }) {
   let home = run?.real?.home, scratch, relay;
   const args = ['web', '--principal', principal, '--port', '0', '--token', token, '--no-setup'];
   if (!run?.real) {
@@ -114,7 +115,7 @@ export async function startConsole({ run, principal = 'operator', token = random
   }
   const child = spawn(agtBinary, ['--home', home, ...args], {
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, LANG: 'C', LC_ALL: 'C', ...(relay ? { AGT_TEST_BRIDGE: relay.url } : {}) },
+    env: { ...process.env, LANG: 'C', LC_ALL: 'C', AGT_NO_UPDATE_CHECK: '1', ...(relay ? { AGT_TEST_BRIDGE: relay.url } : {}), ...env },
   });
   const exited = new Promise(done => child.once('exit', done));
   const url = await new Promise((ok, fail) => {

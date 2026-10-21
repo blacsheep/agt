@@ -12,8 +12,11 @@ version.workspace = true
 anyhow.workspace = true
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 clap.workspace = true
+dirs = "7"
 form_urlencoded = "1"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+reqwest.workspace = true
+semver = "1"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

@@ -6,14 +6,16 @@ use std::collections::HashMap;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tauri::Emitter;
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
 use tauri::ipc::Channel;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, WindowEvent};
+use tauri::{AppHandle, Manager, WindowEvent, Wry};
 use tauri_plugin_notification::NotificationExt;
-use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
 use tokio::sync::OnceCell;
 use tokio::task::JoinHandle;
 
@@ -22,6 +24,9 @@ pub(crate) struct Shared {
     console: OnceCell<Arc<Console>>,
     streams: Mutex<HashMap<u64, JoinHandle<()>>>,
     next: AtomicU64,
+    /// A newer version found by the last check, installed only when the person
+    /// confirms.
+    update: Mutex<Option<Update>>,
 }
 
 impl Shared {
@@ -117,12 +122,18 @@ pub(crate) fn run() -> ExitCode {
             console: OnceCell::new(),
             streams: Mutex::new(HashMap::new()),
             next: AtomicU64::new(1),
+            update: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![agt_request, agt_cancel])
+        .invoke_handler(tauri::generate_handler![
+            agt_request,
+            agt_cancel,
+            update_status,
+            update_install
+        ])
         .setup(|app| {
             tray(app.handle())?;
             tauri::async_runtime::spawn(crate::notify::watch(app.handle().clone()));
-            tauri::async_runtime::spawn(update(app.handle().clone()));
+            tauri::async_runtime::spawn(watch_updates(app.handle().clone()));
             Ok(())
         })
         // Closing the window keeps the app, and so the scheduler, in the tray.
@@ -152,21 +163,20 @@ pub(crate) fn run() -> ExitCode {
 }
 
 fn tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(
-        app,
-        "show",
-        crate::say("打开 AGT Studio", "Open AGT Studio"),
-        true,
-        None::<&str>,
-    )?;
-    let exit = MenuItem::with_id(app, "quit", crate::say("退出", "Quit"), true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &exit])?;
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("AGT Studio")
-        .menu(&menu)
+        .menu(&tray_menu(app, None)?)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => show(app),
+            "check" => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move { check(&app, true).await });
+            }
+            "update" => {
+                show(app);
+                let _ = app.emit("agt-update-open", ());
+            }
             "quit" => quit(app),
             _ => {}
         })
@@ -198,6 +208,27 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// The tray menu; with a newer version found, an item that opens its dialog.
+fn tray_menu(app: &AppHandle, available: Option<&str>) -> tauri::Result<Menu<Wry>> {
+    let item = |id: &str, text: String| MenuItem::with_id(app, id, text, true, None::<&str>);
+    let open = item("show", crate::say("打开 AGT Studio", "Open AGT Studio"))?;
+    let check = item("check", crate::say("检查更新", "Check for updates"))?;
+    let exit = item("quit", crate::say("退出", "Quit"))?;
+    match available {
+        Some(version) => {
+            let update = item(
+                "update",
+                crate::say(
+                    &format!("更新到 {version}…"),
+                    &format!("Update to {version}…"),
+                ),
+            )?;
+            Menu::with_items(app, &[&open, &update, &check, &exit])
+        }
+        None => Menu::with_items(app, &[&open, &check, &exit]),
+    }
+}
+
 pub(crate) fn show(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -214,34 +245,165 @@ fn quit(app: &AppHandle) {
     app.exit(0);
 }
 
-/// Install an update when the build was configured with an updater key.
-async fn update(app: AppHandle) {
-    let configured = app
-        .config()
+/// Builds made without an updater key, such as local ones, never check.
+fn updates_configured(app: &AppHandle) -> bool {
+    app.config()
         .plugins
         .0
         .get("updater")
         .and_then(|u| u["pubkey"].as_str())
-        .is_some_and(|key| !key.trim().is_empty());
-    if !configured {
+        .is_some_and(|key| !key.trim().is_empty())
+}
+
+/// Look for a newer version at startup and every six hours. Nothing is
+/// downloaded until the person confirms in the window.
+async fn watch_updates(app: AppHandle) {
+    if !updates_configured(&app) {
         return;
     }
-    let Ok(updater) = app.updater() else {
-        return;
-    };
-    let Ok(Some(update)) = updater.check().await else {
-        return;
-    };
-    let version = update.version.clone();
-    if update.download_and_install(|_, _| {}, || {}).await.is_ok() {
+    loop {
+        check(&app, false).await;
+        tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
+    }
+}
+
+/// Check once. A newer version shows in the tray menu and the window, with one
+/// notification per version; a check from the menu always says how it went.
+async fn check(app: &AppHandle, asked: bool) {
+    let notify = |zh: &str, en: &str| {
         let _ = app
             .notification()
             .builder()
             .title("AGT Studio")
-            .body(crate::say(
-                &format!("已更新到 {version}，重新打开后生效。"),
-                &format!("Updated to {version}; it takes effect the next time you open the app."),
-            ))
+            .body(crate::say(zh, en))
             .show();
+    };
+    if !updates_configured(app) {
+        if asked {
+            notify(
+                "这个版本不能自动更新，请到发布页下载新版本。",
+                "This build cannot update itself; download new versions from the releases page.",
+            );
+        }
+        return;
     }
+    let found = match app.updater() {
+        Ok(updater) => updater.check().await.map_err(|e| e.to_string()),
+        Err(error) => Err(error.to_string()),
+    };
+    let state = app.state::<Shared>();
+    match found {
+        Ok(Some(update)) => {
+            let version = update.version.clone();
+            let known = state
+                .update
+                .lock()
+                .expect("update lock")
+                .replace(update)
+                .map(|u| u.version);
+            if let Some(tray) = app.tray_by_id("main") {
+                let _ = tray.set_menu(tray_menu(app, Some(&version)).ok());
+            }
+            let _ = app.emit("agt-update", ());
+            if asked || known.as_deref() != Some(version.as_str()) {
+                notify(
+                    &format!("AGT Studio {version} 已发布。在窗口或托盘菜单里选择更新。"),
+                    &format!(
+                        "AGT Studio {version} is available. Choose Update in the window or the tray menu."
+                    ),
+                );
+            }
+        }
+        Ok(None) => {
+            *state.update.lock().expect("update lock") = None;
+            if let Some(tray) = app.tray_by_id("main") {
+                let _ = tray.set_menu(tray_menu(app, None).ok());
+            }
+            if asked {
+                let current = app.package_info().version.to_string();
+                notify(
+                    &format!("已是最新版本 {current}。"),
+                    &format!("{current} is the latest version."),
+                );
+            }
+        }
+        Err(error) => {
+            if asked {
+                notify(
+                    &format!("检查更新失败：{error}"),
+                    &format!("Could not check for updates: {error}"),
+                );
+            }
+        }
+    }
+}
+
+/// The new-version button: the version found by the last check, if any.
+#[tauri::command]
+fn update_status(app: AppHandle, state: tauri::State<'_, Shared>) -> Value {
+    let current = app.package_info().version.to_string();
+    if !updates_configured(&app) {
+        return json!({ "current": current, "enabled": false, "desktop": true });
+    }
+    let latest = state
+        .update
+        .lock()
+        .expect("update lock")
+        .as_ref()
+        .map(|u| u.version.clone());
+    json!({
+        "current": current,
+        "enabled": true,
+        "desktop": true,
+        "update_available": latest.is_some(),
+        "url": latest.as_ref().map(|v| format!("https://github.com/blacsheep/agt/releases/tag/v{v}")),
+        "latest": latest,
+    })
+}
+
+/// Download the version the person confirmed, reporting progress on
+/// `channel` as `{downloaded, total}`, then stop the scheduler, install and
+/// restart.
+#[tauri::command]
+async fn update_install(
+    app: AppHandle,
+    state: tauri::State<'_, Shared>,
+    channel: Channel<Value>,
+) -> Result<(), String> {
+    let update = state
+        .update
+        .lock()
+        .expect("update lock")
+        .clone()
+        .ok_or_else(|| {
+            crate::say(
+                "没有可安装的新版本。",
+                "There is no new version to install.",
+            )
+        })?;
+    let mut downloaded = 0usize;
+    let bytes = update
+        .download(
+            |chunk, total| {
+                downloaded += chunk;
+                let _ = channel.send(json!({ "downloaded": downloaded, "total": total }));
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| crate::say(&format!("下载失败：{e}"), &format!("Download failed: {e}")))?;
+    let console = state.console.get().cloned();
+    // On Windows the installer takes over and closes the app, so the scheduler
+    // stops first; elsewhere the files are replaced and the app restarts.
+    #[cfg(windows)]
+    if let Some(console) = &console {
+        console.close().await;
+    }
+    update
+        .install(bytes)
+        .map_err(|e| crate::say(&format!("安装失败：{e}"), &format!("Install failed: {e}")))?;
+    if let Some(console) = console {
+        console.close().await;
+    }
+    app.restart();
 }
