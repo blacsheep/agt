@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.1 - 2026-10-21
+
+From running whole werewolf games on agt from a single request: the lead set up the team, a host agent ran the game, and other agents made the audio and the replay, with nobody watching.
+
+### Goals
+
+- An agent can own a goal (`goal_create` with what to do and when it is done). When the workspace goes quiet while the goal is open, agt posts a 🎯 Goal review in the goal's conversation, so the owner finishes it, unblocks the work or asks a person, instead of everything waiting until someone notices. The built-in lead sets a goal for multi-step requests. See [Goals](docs/guide/tasks.md#goals-keep-long-work-moving).
+- Reviews pause after `scheduler.goal_stalled_reviews` (3) reviews in a row in which only the owner acted, until a person writes; `scheduler.goal_idle_seconds` (120) sets how long is quiet.
+- `goal_wait_human` posts the question in the goal's conversation and mentions the person. With no answer, the goal is reviewed again after 30 minutes, then 1, 2, 4 and 8 hours.
+- A refused timer or goal call tells the agent why, instead of a generic rejection.
+
+### Scheduler and recovery
+
+- A scheduler that hits an error logs it to `runtime/scheduler.log` and keeps going, and the console restarts a scheduler that exits. Before, one failed tick stopped every reply with no trace.
+- After a stop, a run that had not called a tool yet is retried on its own (its task fails so it can be retried) instead of waiting as `outcome_unknown` for a person.
+- Fixed a race in which a run that had just been claimed could fail with "cannot bind work Run", or stop the scheduler.
+- A member who chose to wait for others decides again when they finish without a new message, instead of staying silent. A host that waited for the last speaker no longer stalls the conversation.
+
+### Mentions
+
+- Mentioning someone who is not a member is refused with the unknown mentions and the ids and names of every member, so the agent can correct it. Before, the error blamed the sender's membership.
+
 ## 0.6.0 - 2026-10-20
 
 Fixes and changes from running a twelve-player werewolf game on agt for hours: a host agent, twelve player agents, a Codex agent that wrote the rules engine, and Claude Code and Codex agents that turned the game into audio and a replay.
