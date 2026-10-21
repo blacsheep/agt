@@ -197,12 +197,12 @@ fn create(
     }
     let mut mentions = Vec::new();
     for principal in input.mentions {
-        member(im, &conversation, &principal)
-            .map_err(|_| Refusal("every mention must be a member of this conversation"))?;
         if !mentions.contains(&principal) {
             mentions.push(principal);
         }
     }
+    let ids: Vec<PrincipalId> = mentions.iter().map(PrincipalId::new).collect();
+    agt_service::check_mentions(im, &ConversationId::new(conversation.as_str()), &ids)?;
     let config = agt_config::RuntimeConfig::load(&store.home)?;
     let zone = match &input.timezone {
         Some(name) => crate::clock::named_zone(name)?,

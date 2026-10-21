@@ -11,9 +11,12 @@ pub struct ToolError {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub argument_path: Option<String>,
+    pub argument_path: Option<Box<str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub schema_path: Option<String>,
+    pub schema_path: Option<Box<str>>,
+    /// Structured facts the caller needs to correct the call, such as valid choices.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Box<Value>>,
     #[serde(skip)]
     diagnostic: Option<Box<str>>,
 }
@@ -31,6 +34,28 @@ impl std::fmt::Display for Refusal {
 
 impl std::error::Error for Refusal {}
 
+/// Mentions that are not active members of the conversation, listed with the members
+/// that are, so the caller can mention the right identities.
+#[derive(Clone, Debug)]
+pub struct UnknownMentions {
+    pub unknown: Vec<String>,
+    /// (id, display name) of each active member.
+    pub members: Vec<(String, String)>,
+}
+
+impl std::fmt::Display for UnknownMentions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "not conversation members: {}", self.unknown.join(", "))
+    }
+}
+
+impl std::error::Error for UnknownMentions {}
+
+/// Whether an error was written for the caller and must reach it unchanged.
+pub fn meant_for_caller(error: &anyhow::Error) -> bool {
+    error.is::<Refusal>() || error.is::<UnknownMentions>()
+}
+
 impl ToolError {
     pub fn new(code: &'static str, message: &'static str) -> Self {
         Self {
@@ -39,6 +64,7 @@ impl ToolError {
             field: None,
             argument_path: None,
             schema_path: None,
+            details: None,
             diagnostic: None,
         }
     }
@@ -50,6 +76,7 @@ impl ToolError {
             field: field.map(str::to_owned),
             argument_path: None,
             schema_path: None,
+            details: None,
             diagnostic: None,
         }
     }
@@ -64,8 +91,9 @@ impl ToolError {
                 .nth(1)
                 .filter(|s| !s.is_empty())
                 .map(str::to_owned),
-            argument_path: (!error.field.is_empty()).then_some(error.field),
-            schema_path: (!error.schema_path.is_empty()).then_some(error.schema_path),
+            argument_path: (!error.field.is_empty()).then(|| error.field.into()),
+            schema_path: (!error.schema_path.is_empty()).then(|| error.schema_path.into()),
+            details: None,
             diagnostic: None,
         }
     }
@@ -91,6 +119,17 @@ impl ToolError {
     fn public(error: &anyhow::Error) -> Self {
         if let Some(Refusal(message)) = error.downcast_ref::<Refusal>() {
             return Self::new("operation_rejected", message);
+        }
+        if let Some(mentions) = error.downcast_ref::<UnknownMentions>() {
+            let mut refused = Self::invalid(
+                Some("mentions"),
+                "Mentions must be member ids of this conversation. details.unknown lists the ones that are not; details.members lists every member's id and display name. Mention by id, not by display name or seat number.",
+            );
+            refused.details = Some(Box::new(json!({
+                "unknown": mentions.unknown,
+                "members": mentions.members.iter().map(|(id, name)| json!({"id": id, "name": name})).collect::<Vec<_>>(),
+            })));
+            return refused;
         }
         if let Some(agt_mcp::McpError::ToolSchema { tool, source }) =
             error.downcast_ref::<agt_mcp::McpError>()

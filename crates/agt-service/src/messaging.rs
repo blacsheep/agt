@@ -52,6 +52,42 @@ pub struct MessageInput {
     pub input_mode: Option<InputMode>,
 }
 
+/// Refuse mentions that are not active members, naming them and the members there are.
+pub fn check_mentions(
+    im: &ImStore,
+    conversation: &ConversationId,
+    mentions: &[PrincipalId],
+) -> Result<()> {
+    if mentions.is_empty() {
+        return Ok(());
+    }
+    let mut active = Vec::new();
+    for member in im.list_members(conversation)? {
+        if member.left_message_seq.is_some() {
+            continue;
+        }
+        // A deleted identity keeps its membership rows but can no longer be mentioned.
+        if let Ok(principal) = im.get_principal(&member.principal_id)
+            && principal.deleted_at.is_none()
+        {
+            active.push((principal.id.to_string(), principal.display_name));
+        }
+    }
+    let unknown: Vec<String> = mentions
+        .iter()
+        .filter(|m| !active.iter().any(|(id, _)| id == m.as_str()))
+        .map(|m| m.to_string())
+        .collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    Err(crate::UnknownMentions {
+        unknown,
+        members: active,
+    }
+    .into())
+}
+
 pub struct Messaging {
     pub im: ImStore,
     pub actor: Actor,
@@ -127,20 +163,7 @@ impl Messaging {
         }
         input.mentions.sort();
         input.mentions.dedup();
-        for principal in &input.mentions {
-            if self
-                .im
-                .get_member(&input.conversation, principal)?
-                .left_message_seq
-                .is_some()
-            {
-                return Err(crate::ToolError::invalid(
-                    Some("mentions"),
-                    "Mentioned identities must be active conversation members.",
-                )
-                .into());
-            }
-        }
+        check_mentions(&self.im, &input.conversation, &input.mentions)?;
         let mut metadata = json!({"mentions":input.mentions,"automated_depth":self.actor.automated_depth.unwrap_or(0)});
         if let Some(mode) = input.input_mode {
             metadata["input_mode"] = json!(mode);
