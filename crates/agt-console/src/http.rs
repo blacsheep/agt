@@ -22,6 +22,7 @@ use super::cli::{Cli, Ops, is_member, stop, strings};
 use super::commands;
 use super::error::ApiError;
 use super::js;
+use super::update;
 
 const READ_TOOLS: [&str; 9] = [
     "conversation_list",
@@ -116,6 +117,22 @@ fn json_response(status: u16, value: &Value) -> Response {
         .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
         .body(Body::from(value.to_string()))
         .expect("valid response")
+}
+
+/// The new-version button. The console runs from the CLI binary, so the page
+/// tells the person to run `agt upgrade`; AGT Studio asks its own updater.
+async fn update_status() -> Value {
+    if update::disabled() {
+        return json!({ "current": update::CURRENT, "enabled": false });
+    }
+    let release = update::newer_release().await;
+    json!({
+        "current": update::CURRENT,
+        "enabled": true,
+        "update_available": release.is_some(),
+        "latest": release.as_ref().map(|r| r.version.clone()),
+        "url": release.map(|r| r.url),
+    })
 }
 
 fn ok(value: Value) -> Result<Response, ApiError> {
@@ -257,6 +274,7 @@ async fn route(app: &Arc<App>, request: Request) -> Result<Response, ApiError> {
     let ops = app.ops();
     match (method, path.as_str()) {
         (Method::GET, "/api/events") => events(app, &query).await,
+        (Method::GET, "/api/update") => ok(update_status().await),
         (Method::GET, "/api/config") => {
             let config = app.run(strings(&["config", "show"])).await?;
             let schema = app.run(strings(&["config", "describe"])).await?;

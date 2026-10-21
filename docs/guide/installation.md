@@ -111,7 +111,23 @@ The home is chosen in this order: `--home` > `AGT_HOME` > `~/.agt`. `--home` app
 
 ## Updating
 
-Run the installer again; it replaces `agt` with the latest release. Then restart `agt web` and open the new link. Your data in the home directory is kept.
+agt tells you when a new release is out, and changes nothing until you ask:
+
+- At most once a day, a command you run in a terminal ends with a line such as `agt 0.6.2 is available (you have 0.6.1); run agt upgrade to update`. The check runs alongside the command and is cached for a day. It is skipped for JSON output, for scripts and agents whose output is not a terminal, and in CI.
+- The Web console shows **New version** at the bottom of the navigation, with the command to run.
+
+To upgrade:
+
+```bash
+agt upgrade --check   # only report whether a newer release exists
+agt upgrade           # show both versions and ask before replacing agt
+```
+
+`agt upgrade` runs the new release's installer into the directory the installer used before, so it downloads and checks the binary the same way. Add `--yes` to skip the question. Restart `agt web` afterwards to use the new version. Your data in the home directory is kept.
+
+An `agt` installed with Cargo or built from a clone has no installer receipt; `agt upgrade` leaves it alone and tells you to upgrade it the way you installed it. Running the installer again also works for any installation.
+
+To turn off the notice and the console's button, set `AGT_NO_UPDATE_CHECK=1`.
 
 ## Uninstalling
 

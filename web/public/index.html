@@ -28,6 +28,7 @@
     <script src="/settings.js" defer></script>
     <script src="/interaction-graph.js" defer></script>
     <script src="/interactions.js" defer></script>
+    <script src="/update.js" defer></script>
   </head>
   <body class="workspace-page no-conversation">
     <aside class="rail" id="workspace-nav">
@@ -46,6 +47,7 @@
         <button data-i18n-attr="aria-label title" class="nav" data-page="resources" aria-label="资源库" title="资源库"><span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span data-i18n class="nav-label">资源库</span></button>
         <button data-i18n-attr="aria-label title" class="nav" data-page="settings" aria-label="运行设置" title="运行设置"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></span><span data-i18n class="nav-label">运行设置</span></button>
       </nav>
+      <button id="update-button" class="nav update-nav hidden" type="button"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span><span id="update-label" class="nav-label"></span></button>
       <div class="rail-bottom">
         <div data-i18n class="avatar user">你</div>
         <div>

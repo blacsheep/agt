@@ -34,15 +34,17 @@ agt-skill.workspace = true
 agt-storage.workspace = true
 anyhow.workspace = true
 clap.workspace = true
+dirs = "7"
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "process", "net", "signal", "io-util"] }
 uuid.workspace = true
 
 [dev-dependencies]
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
-tempfile.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

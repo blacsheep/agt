@@ -2667,6 +2667,28 @@ button:disabled, .chat-actions button:disabled {
 .nav .count {
   margin-left: auto;
 }
+/* The new-version button sits above the operator, at the bottom of the rail. */
+.update-nav {
+  margin-top: auto;
+  margin-bottom: 8px;
+  background: var(--accent-light);
+  color: var(--accent);
+  font-weight: 600;
+}
+.update-nav:hover {
+  background: var(--accent-light);
+  color: var(--accent-text);
+}
+.update-nav:not(.hidden) + .rail-bottom {
+  margin-top: 0;
+}
+.update-command {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--hover);
+  font-size: 13px;
+}
 .rail-bottom {
   display: flex;
   align-items: center;
