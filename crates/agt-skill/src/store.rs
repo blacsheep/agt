@@ -956,7 +956,10 @@ fn extract_zip(source: &Path, target: &Path) -> Result<()> {
         let Some(enclosed_name) = entry.enclosed_name() else {
             return Err(SkillError::InvalidArchive {
                 path: source.to_path_buf(),
-                message: format!("包含不安全路径：{}", entry.name()),
+                message: format!(
+                    "包含不安全路径：{}",
+                    String::from_utf8_lossy(entry.name_raw())
+                ),
             });
         };
         let relative = enclosed_name.to_path_buf();
