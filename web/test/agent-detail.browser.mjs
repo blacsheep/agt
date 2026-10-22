@@ -59,15 +59,23 @@ try {
   // Arrow keys move between tabs and keep focus on the tab list.
   await evaluate('document.querySelector("[data-detail-tab=chats]").focus(); document.querySelector("[role=tablist]").dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}))');
   assert.equal(await evaluate('document.activeElement.dataset.detailTab'), 'runs');
-  // Live status refreshes in place without losing the open tab.
-  await evaluate(`state.scheduler = {online:true,discussions:[],tasks:[{id:'t',principal:'tech-lead',conversation:${JSON.stringify(shared.id)},discussion:'d',state:'responding'}],usage:[]};
-    state.runs = [{id:'r1',agent:${JSON.stringify(reference)},conversation:${JSON.stringify(shared.id)},state:'completed',model_steps:3,tool_failures:0,started_at:Date.now()-60000,ended_at:Date.now()-30000}]; renderActivity();`);
-  assert.equal(await evaluate('document.querySelector("#agent-detail").classList.contains("working")'), true);
-  assert.equal(await evaluate('document.querySelector("[data-detail-tab=runs]").getAttribute("aria-selected")'), 'true');
-  assert.equal(await evaluate('document.querySelectorAll(".agent-runs [data-detail-run]").length'), 1);
-  assert.equal(await evaluate('document.activeElement.dataset.detailTab'), 'runs');
-  await click('[data-detail-tab=overview]');
-  assert.match(await evaluate('document.querySelector(".agent-now").textContent'), /正在回复.*共同的群/);
+  // Live status refreshes in place without losing the open tab. The injected
+  // status and every reading happen in one script, so a real scheduler update
+  // from the console's event stream cannot replace it in between.
+  const live = await evaluate(`(() => {
+    state.scheduler = {online:true,discussions:[],tasks:[{id:'t',principal:'tech-lead',conversation:${JSON.stringify(shared.id)},discussion:'d',state:'responding'}],usage:[]};
+    state.runs = [{id:'r1',agent:${JSON.stringify(reference)},conversation:${JSON.stringify(shared.id)},state:'completed',model_steps:3,tool_failures:0,started_at:Date.now()-60000,ended_at:Date.now()-30000}]; renderActivity();
+    const seen = {working: document.querySelector("#agent-detail").classList.contains("working"),
+      selected: document.querySelector("[data-detail-tab=runs]").getAttribute("aria-selected"),
+      runs: document.querySelectorAll(".agent-runs [data-detail-run]").length, focus: document.activeElement.dataset.detailTab};
+    document.querySelector("[data-detail-tab=overview]").click();
+    return {...seen, now: document.querySelector(".agent-now").textContent};
+  })()`);
+  assert.equal(live.working, true);
+  assert.equal(live.selected, 'true');
+  assert.equal(live.runs, 1);
+  assert.equal(live.focus, 'runs');
+  assert.match(live.now, /正在回复.*共同的群/);
   // Reduced motion removes the slide-in, so geometry is measured at rest.
   await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
   assert.equal(await evaluate('document.querySelector("#agent-detail").getAnimations({subtree:true}).filter(a => a.playState === "running").length'), 0);
