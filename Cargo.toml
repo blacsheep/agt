@@ -66,7 +66,7 @@ tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
 toml = "0.8"
 url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # The profile that 'dist' will build with
 [profile.dist]
