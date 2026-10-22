@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.2 - 2026-10-22
+
+### Updates you choose
+
+agt now tells you when a new release is out, and changes nothing until you ask.
+
+- **AGT Studio** looks for a new version at startup and every six hours, instead of only at startup, and no longer installs it on its own. A **New version** button appears at the bottom of the navigation and **Update to …** in the tray menu, with one notification per version. The dialog says how many agents are working; **Update and restart** downloads with progress, stops the scheduler, installs and restarts. The tray menu also has **Check for updates**. See [Desktop app](docs/guide/desktop.md#updates).
+- **`agt upgrade`** shows both versions and asks, then runs the new release's installer into the directory you installed to. `agt upgrade --check` only reports. An `agt` installed with Cargo or built from a clone is left alone, with instructions. See [Updating](docs/guide/installation.md#updating).
+- **The CLI** ends a command run at a terminal with a one-line notice when a newer release exists, at most once a day. It never shows in JSON output, in scripts or agents whose output is not a terminal, or in CI.
+- **The Web console** shows the same **New version** button, with the `agt upgrade` command to run.
+- Set `AGT_NO_UPDATE_CHECK=1` to turn off the automatic checks.
+
+AGT Studio 0.6.1 still installs 0.6.2 by itself at startup, as before; the new dialog applies from 0.6.2 on.
+
+### Maintenance
+
+- Skill archives are read with `zip` 9, replacing the yanked 2.4.2.
+
 ## 0.6.1 - 2026-10-21
 
 From running whole werewolf games on agt from a single request: the lead set up the team, a host agent ran the game, and other agents made the audio and the replay, with nobody watching.
