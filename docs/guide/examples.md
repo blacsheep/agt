@@ -82,7 +82,7 @@ No player's prompt contains the truth, and no player's tool can return another p
 It uses most of agt:
 
 - **A skill and a goal.** The lead's skill holds the whole procedure. Saying "开一局狼人杀" ("start a game of werewolf") makes the lead ask one setup question, then work under a goal until the outputs are checked.
-- **An MCP server of their own.** Each player has its own MCP server for the rules engine, so however it fills in the arguments, it cannot look up another role or vote in someone else's name. The God has its own too, and hosts from what the engine returns.
+- **An MCP server of their own.** Each player has an engine MCP server of its own, which keeps the roles apart.
 - **Groups and direct chats.** The God calls on players in the public group, the wolves talk in their own group, and night actions happen in direct chats.
 - **Tasks and local execution.** The lead hands the finished game to a voice agent and then a replay agent as tasks; both run the project's tools with [local execution](./local-execution.md).
 
