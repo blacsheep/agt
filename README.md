@@ -39,14 +39,17 @@ In most multi-agent frameworks you define the agents, their tools and how they c
 
 ## See it work
 
-Two real runs, each started by a single message to the lead. The [examples page](docs/guide/examples.md) walks through both, step by step.
+A complete project and two real runs, each started by a single message to the lead. The [examples page](docs/guide/examples.md) walks through all three.
 
-- **A research team that argues.** Asked whether to migrate to Postgres 17, the lead created a performance researcher, an operations researcher and a reviewer, and opened a group chat. The reviewer challenged both researchers, and after two rounds the group reached a verdict.
-- **A murder mystery with a tool built by Codex.** The lead had a Codex agent write a clue server, then created a game master and three players, gave each player a copy of the server locked to that player, and ran the game.
+**[AI Werewolf](https://github.com/blacsheep/werewolf-game), a full project on agt.** Twelve AI players and an AI God play a 12-seat Werewolf game. Each player has an engine MCP server of its own, which keeps the roles apart. One message to the lead runs a whole game; voice and replay agents then turn it into audio, a web replay and a video.
+
+![God's-view replay of an AI Werewolf game](docs/public/showcase/werewolf-replay.webp)
+
+**A murder mystery with a tool built by Codex.** The lead had a Codex agent write a clue server, then created a game master and three players, gave each player a copy of the server locked to that player, and ran the game.
 
 ![Sped-up recording: Codex writes the clue server, each role gets its own locked instance, and the game plays through to the reveal](docs/public/showcase/mystery-run.webp)
 
-**A full project on agt: [AI Werewolf](https://github.com/blacsheep/werewolf-game).** Twelve AI players and an AI God play a 12-seat Werewolf game. Each player has an engine MCP server of its own, which keeps the roles apart. One message to the lead runs a whole game; voice and replay agents then turn it into audio, a web replay and a video.
+**A research team that argues.** Asked whether to migrate to Postgres 17, the lead created a performance researcher, an operations researcher and a reviewer, and opened a group chat. The reviewer challenged both researchers, and after two rounds the group reached a verdict. The recording at the top of this page is this run.
 
 ## Install
 

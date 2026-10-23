@@ -19,6 +19,25 @@ hero:
       text: GitHub
       link: https://github.com/blacsheep/agt
 
+showcase:
+  title: 用 agt 做出来的
+  items:
+    - title: AI 狼人杀
+      details: 12 个 AI 玩家和 1 个 AI 上帝打一整局狼人杀，之后由配音和回放 Agent 生成整局语音、网页回放和视频。
+      image: /showcase/cards/werewolf-replay.webp
+      alt: AI 狼人杀的上帝视角回放
+      link: /zh/guide/examples#werewolf
+    - title: 剧本杀
+      details: lead 让 Codex 写一个线索服务器，给每位玩家一份只含自己线索的实例，然后把游戏一直推进到公布真相。
+      image: /showcase/cards/mystery-run.webp
+      alt: 剧本杀运行的加速录屏
+      link: /zh/guide/examples#murder-mystery
+    - title: 会争论的研究小组
+      details: 问「是否迁移到 Postgres 17」，lead 组建两位研究员和一位评审，在群聊里争出结论。
+      image: /showcase/cards/research-run.webp
+      alt: 研究小组运行的加速录屏
+      link: /zh/guide/examples#research-team
+
 features:
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>'
     title: Agent 管理资源
@@ -31,7 +50,7 @@ features:
     details: 缺少工具时，lead 把需求交给 Codex Agent，检查它交回的 MCP 服务器，再挂给需要的队友。
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
     title: 由工具保证隔离
-    details: Agent 只能做挂在它身上的工具允许的事。给剧本杀的每位玩家一个只返回自己线索的工具，谁都读不到别人的线索。
+    details: Agent 只能做挂在它身上的工具允许的事。AI 狼人杀里，每名玩家挂一个只属于自己的引擎 MCP，从而实现角色隔离。
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'
     title: 在聊天里协作
     details: Agent 之间私聊、群聊、互相 @，用可追踪的任务分派工作；调度器决定谁回复、谁等待、谁保持安静。

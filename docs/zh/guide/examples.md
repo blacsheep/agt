@@ -1,8 +1,25 @@
 # 示例
 
-两次真实运行，各自从一句请求开始，到得出结果为止。下面出现的 Agent、Prompt、工具和消息都是 Agent 自己创建的，截图是运行结束后在 Web 控制台里截取的。
+先看一个基于 agt 的完整项目，再看两次真实运行，一步步了解 lead 怎样从一句请求组建团队。
 
-## 准备工作
+## 完整项目：AI 狼人杀 {#werewolf}
+
+[AI 狼人杀](https://github.com/blacsheep/werewolf-game) 是基于 agt 的完整项目，可以看作下面剧本杀的大幅扩展版：12 名玩家和 1 名上帝打一局 12 人预女猎守，每局最后产出整局语音、网页回放和视频。
+
+![一局结束后的上帝视角回放](../../public/showcase/werewolf-replay.webp)
+
+它用到了 agt 的大部分能力：
+
+- **Skill 和 Goal。** lead 的 skill 里写好了整套流程。对 lead 说「开一局狼人杀」，它只确认一次配置，之后在 Goal 下一直做到产出验收完成。
+- **每人一个独属自己的 MCP。** 每名玩家挂一个只属于自己的引擎 MCP，从而实现角色隔离。
+- **群聊和私聊。** 上帝在公共群里点名，狼人在狼队群里商量，夜间行动在私聊里完成。
+- **任务和本机命令执行。** 对局结束后，lead 用任务把配音和回放依次交给 voice 和 replay 两个 Agent，它们用[本机命令执行](./local-execution.md)运行项目里的工具。
+
+仓库里有 setup 脚本、提示词、skill，以及一局示例对局；示例对局的回放不调用模型也能生成。
+
+## 两次运行的准备工作 {#setup}
+
+下面两次运行各自从一句请求开始，到得出结果为止。出现的 Agent、Prompt、工具和消息都是 Agent 自己创建的，截图是运行结束后在 Web 控制台里截取的。
 
 两次运行使用同一个全新的 home，按[快速开始](./quick-start.md)配置：
 
@@ -15,7 +32,38 @@
 
 仅此而已。下面看到的其他 Agent、Prompt、群聊和工具，都是 lead 自己创建的。
 
-## 会争论的研究小组
+## 由 Codex 造工具的剧本杀 {#murder-mystery}
+
+**请求**，在一个有 lead 的群里发送：
+
+> 我们想玩一局剧本杀。请让 toolsmith 用 Codex 写一个 MCP 服务器，保管凶案的秘密线索，并且只把每位玩家自己的线索交给他本人。然后创建一位主持人和三位玩家 Agent，把这个工具挂给需要的人，在这个群里开局。只玩一轮：每位玩家发言一次并给出指认，主持人公布真相。
+
+![剧本杀运行的加速录屏](../../public/showcase/mystery-run.webp)
+
+上面的录屏是同一请求在 agt 0.3.0 上的另一次运行，经过加速，全程无人干预。Codex 写的服务器一次就能用，lead 为每个角色注册了一个用环境变量锁定身份的实例。用时约 26 分钟。下面的步骤和截图来自第一次运行。
+
+**lead 做了什么：**
+
+1. 为主持人和三位玩家写好 Prompt，创建这四个 Agent。
+2. 给 toolsmith 发了一个[任务](./tasks.md)，规格写得很严：真相和线索只保存在服务器里；每个服务器进程由环境变量锁定一个身份（`MURDER_ROLE=host`，或 `player` 加 `MURDER_PLAYER_ID`）；玩家工具 `get_my_clue` 不接受任何参数，玩家无法索取别人的线索；只有主持人能调用 `reveal_truth`。
+3. Codex 用 Python 标准库写出 MCP 服务器，并附带 4 个通过的测试。
+4. lead 用这一个脚本注册了**四个** MCP 服务器，每个身份一个，逐个探测工具是否正常，再给每个 Agent 恰好挂上一个。
+
+![lead 验收 toolsmith 的交付：测试、四个隔离实例、全部探测通过](../../public/showcase/mystery-tool.webp)
+
+在 Agent 团队页可以看到结果：每个游戏 Agent 恰好挂了一个 MCP 服务器，下一个示例里研究小组的 Agent 一个都没有，只有 lead 和 toolsmith 能管理资源。
+
+![九个 Agent，其中七个由 lead 创建](../../public/showcase/team.webp)
+
+主持人开局后依次点名。每位玩家先取自己的线索，再发言一次并给出指认：
+
+![玩家依次发言，各自只用自己的秘密线索](../../public/showcase/mystery-play.webp)
+
+![主持人公布真相](../../public/showcase/mystery-reveal.webp)
+
+玩家的 Prompt 里没有真相，玩家的工具也取不到别人的线索，秘密是靠工具的接法保住的。延伸阅读：[Codex Agent](./codex.md)、[MCP 服务器](./mcp.md)。
+
+## 会争论的研究小组 {#research-team}
 
 **请求**，在与 lead 的私聊中发送：
 
@@ -41,52 +89,6 @@
 **结果**：请求发出约 17 分钟后，两位研究员各发言两轮，评审完成质询，最终裁决为 **Hold**：暂不批准生产迁移，但可以进入「在生产等价环境中补齐证据」的阶段，并列出了需要补齐的具体证据。
 
 延伸阅读：[lead 如何组建团队](./lead-team.md)，以及 Agent 直接互相 @ 的[群聊](./conversations.md)。
-
-## 由 Codex 造工具的剧本杀
-
-**请求**，在一个有 lead 的群里发送：
-
-> 我们想玩一局剧本杀。请让 toolsmith 用 Codex 写一个 MCP 服务器，保管凶案的秘密线索，并且只把每位玩家自己的线索交给他本人。然后创建一位主持人和三位玩家 Agent，把这个工具挂给需要的人，在这个群里开局。只玩一轮：每位玩家发言一次并给出指认，主持人公布真相。
-
-![剧本杀运行的加速录屏](../../public/showcase/mystery-run.webp)
-
-上面的录屏是同一请求在 agt 0.3.0 上的另一次运行，经过加速，全程无人干预。Codex 写的服务器一次就能用，lead 为每个角色注册了一个用环境变量锁定身份的实例。用时约 26 分钟。下面的步骤和截图来自第一次运行。
-
-**lead 做了什么：**
-
-1. 为主持人和三位玩家写好 Prompt，创建这四个 Agent。
-2. 给 toolsmith 发了一个[任务](./tasks.md)，规格写得很严：真相和线索只保存在服务器里；每个服务器进程由环境变量锁定一个身份（`MURDER_ROLE=host`，或 `player` 加 `MURDER_PLAYER_ID`）；玩家工具 `get_my_clue` 不接受任何参数，玩家无法索取别人的线索；只有主持人能调用 `reveal_truth`。
-3. Codex 用 Python 标准库写出 MCP 服务器，并附带 4 个通过的测试。
-4. lead 用这一个脚本注册了**四个** MCP 服务器，每个身份一个，逐个探测工具是否正常，再给每个 Agent 恰好挂上一个。
-
-![lead 验收 toolsmith 的交付：测试、四个隔离实例、全部探测通过](../../public/showcase/mystery-tool.webp)
-
-在 Agent 团队页可以看到结果：每个游戏 Agent 恰好挂了一个 MCP 服务器，研究小组的 Agent 一个都没有，只有 lead 和 toolsmith 能管理资源。
-
-![九个 Agent，其中七个由 lead 创建](../../public/showcase/team.webp)
-
-主持人开局后依次点名。每位玩家先取自己的线索，再发言一次并给出指认：
-
-![玩家依次发言，各自只用自己的秘密线索](../../public/showcase/mystery-play.webp)
-
-![主持人公布真相](../../public/showcase/mystery-reveal.webp)
-
-玩家的 Prompt 里没有真相，玩家的工具也取不到别人的线索，秘密是靠工具的接法保住的。延伸阅读：[Codex Agent](./codex.md)、[MCP 服务器](./mcp.md)。
-
-## 完整项目：AI 狼人杀
-
-[AI 狼人杀](https://github.com/blacsheep/werewolf-game) 把剧本杀扩展成了一个完整项目：12 名玩家和 1 名上帝打一局 12 人预女猎守，每局最后产出整局语音、网页回放和视频。
-
-![一局结束后的上帝视角回放](../../public/showcase/werewolf-replay.webp)
-
-它用到了 agt 的大部分能力：
-
-- **Skill 和 Goal。** lead 的 skill 里写好了整套流程。对 lead 说「开一局狼人杀」，它只确认一次配置，之后在 Goal 下一直做到产出验收完成。
-- **每人一个独属自己的 MCP。** 每名玩家挂一个只属于自己的引擎 MCP，从而实现角色隔离。
-- **群聊和私聊。** 上帝在公共群里点名，狼人在狼队群里商量，夜间行动在私聊里完成。
-- **任务和本机命令执行。** 对局结束后，lead 用任务把配音和回放依次交给 voice 和 replay 两个 Agent，它们用[本机命令执行](./local-execution.md)运行项目里的工具。
-
-仓库里有 setup 脚本、提示词、skill，以及一局示例对局；示例对局的回放不调用模型也能生成。
 
 ## 自己尝试时会遇到什么
 

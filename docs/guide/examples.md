@@ -1,8 +1,25 @@
 # Examples
 
-Two real runs, each from a single request to a finished result. The agents created every agent, prompt, tool and message shown here; the screenshots were taken in the Web console afterwards. The console was in Chinese and the requests were in Chinese, so the agents wrote in Chinese. Each section summarizes what they said.
+A complete project built on agt, then two real runs that show step by step how the lead builds a team from a single request.
 
-## Setup
+## A full project: AI Werewolf {#werewolf}
+
+[AI Werewolf](https://github.com/blacsheep/werewolf-game) is a complete project built on agt, and takes the idea of the murder mystery below much further. Twelve players and a God play a 12-seat Werewolf game in Chinese, and every game ends as audio, a web replay and a video.
+
+![God's-view replay of a finished game](../public/showcase/werewolf-replay.webp)
+
+It uses most of agt:
+
+- **A skill and a goal.** The lead's skill holds the whole procedure. Saying "开一局狼人杀" ("start a game of werewolf") makes the lead ask one setup question, then work under a goal until the outputs are checked.
+- **An MCP server of their own.** Each player has an engine MCP server of its own, which keeps the roles apart.
+- **Groups and direct chats.** The God calls on players in the public group, the wolves talk in their own group, and night actions happen in direct chats.
+- **Tasks and local execution.** The lead hands the finished game to a voice agent and then a replay agent as tasks; both run the project's tools with [local execution](./local-execution.md).
+
+The repository has the setup scripts, prompts, skills and a sample game whose replay you can build without calling a model.
+
+## Setup for the two runs {#setup}
+
+The two runs below each went from a single request to a finished result. The agents created every agent, prompt, tool and message shown; the screenshots were taken in the Web console afterwards. The console and the requests were in Chinese, so the agents wrote in Chinese, and each section summarizes what they said.
 
 Both runs used one fresh home, set up as in the [Quick start](./quick-start.md):
 
@@ -15,7 +32,38 @@ Both runs used one fresh home, set up as in the [Quick start](./quick-start.md):
 
 That was all. The lead created every other agent, prompt, group and tool you see below.
 
-## A research team that argues
+## A murder mystery with a tool built by Codex {#murder-mystery}
+
+**The request**, sent in a group with the lead:
+
+> We want to play a murder mystery. Have toolsmith use Codex to write an MCP server that keeps the secret clues and gives each player only their own. Then create a game master and three players, attach the tool to whoever needs it, and start the game in this group. One round: each player speaks once and accuses someone, then the game master reveals the truth.
+
+![Sped-up recording of the murder-mystery run](../public/showcase/mystery-run.webp)
+
+The recording above is a later run of the same request with agt 0.3.0, sped up, with no one stepping in. Codex's server worked the first time, and the lead registered one instance per role, locked by environment variables. It took about 26 minutes. The steps and screenshots below are from the first run.
+
+**What the lead did:**
+
+1. Wrote prompts for a game master and three players and created the four agents.
+2. Sent the toolsmith a [task](./tasks.md) with a precise spec: the truth and clues live only in the server; each server process is locked to one role by its environment (`MURDER_ROLE=host`, or `player` with `MURDER_PLAYER_ID`); the player tool `get_my_clue` takes no arguments, so a player cannot ask for anyone else's clue; only the host can call `reveal_truth`.
+3. Codex wrote a Python MCP server using only the standard library, with four passing tests.
+4. The lead registered **four** MCP servers from that one script, one per role, probed each to check its tools, and attached exactly one to each agent.
+
+![The lead reviews the toolsmith's delivery: tests, four isolated instances, all probes passing](../public/showcase/mystery-tool.webp)
+
+The Agent team page shows the result. Each game agent has exactly one MCP server, the research team's agents from the next run have none, and only the lead and the toolsmith can manage resources:
+
+![Nine agents, seven of them created by the lead](../public/showcase/team.webp)
+
+The game master opened the case and called on each player. Every player fetched its own clue, made one statement and one accusation:
+
+![Players speak in turn, each using only their own secret clue](../public/showcase/mystery-play.webp)
+
+![The game master reveals the truth](../public/showcase/mystery-reveal.webp)
+
+No player's prompt contains the truth, and no player's tool can return another player's clue, so the secrets are kept by how the tools are wired. Read more about [Codex agents](./codex.md) and [MCP servers](./mcp.md).
+
+## A research team that argues {#research-team}
 
 **The request**, sent to the lead in a direct chat:
 
@@ -41,52 +89,6 @@ The researchers then worked without the lead relaying anything. The reviewer cha
 **The result**, about 17 minutes after the request: two rounds from each researcher, a review, and a final verdict of **Hold**: no production migration yet, but go ahead with gathering the missing evidence in a production-like environment, with a list of exactly what that evidence is.
 
 Read more about [how the lead builds a team](./lead-team.md) and about [group chats](./conversations.md), where agents @mention each other directly.
-
-## A murder mystery with a tool built by Codex
-
-**The request**, sent in a group with the lead:
-
-> We want to play a murder mystery. Have toolsmith use Codex to write an MCP server that keeps the secret clues and gives each player only their own. Then create a game master and three players, attach the tool to whoever needs it, and start the game in this group. One round: each player speaks once and accuses someone, then the game master reveals the truth.
-
-![Sped-up recording of the murder-mystery run](../public/showcase/mystery-run.webp)
-
-The recording above is a later run of the same request with agt 0.3.0, sped up, with no one stepping in. Codex's server worked the first time, and the lead registered one instance per role, locked by environment variables. It took about 26 minutes. The steps and screenshots below are from the first run.
-
-**What the lead did:**
-
-1. Wrote prompts for a game master and three players and created the four agents.
-2. Sent the toolsmith a [task](./tasks.md) with a precise spec: the truth and clues live only in the server; each server process is locked to one role by its environment (`MURDER_ROLE=host`, or `player` with `MURDER_PLAYER_ID`); the player tool `get_my_clue` takes no arguments, so a player cannot ask for anyone else's clue; only the host can call `reveal_truth`.
-3. Codex wrote a Python MCP server using only the standard library, with four passing tests.
-4. The lead registered **four** MCP servers from that one script, one per role, probed each to check its tools, and attached exactly one to each agent.
-
-![The lead reviews the toolsmith's delivery: tests, four isolated instances, all probes passing](../public/showcase/mystery-tool.webp)
-
-The Agent team page shows the result. Each game agent has exactly one MCP server, the research agents have none, and only the lead and the toolsmith can manage resources:
-
-![Nine agents, seven of them created by the lead](../public/showcase/team.webp)
-
-The game master opened the case and called on each player. Every player fetched its own clue, made one statement and one accusation:
-
-![Players speak in turn, each using only their own secret clue](../public/showcase/mystery-play.webp)
-
-![The game master reveals the truth](../public/showcase/mystery-reveal.webp)
-
-No player's prompt contains the truth, and no player's tool can return another player's clue, so the secrets are kept by how the tools are wired. Read more about [Codex agents](./codex.md) and [MCP servers](./mcp.md).
-
-## A full project: AI Werewolf
-
-[AI Werewolf](https://github.com/blacsheep/werewolf-game) grows the murder mystery into a complete project. Twelve players and a God play a 12-seat Werewolf game in Chinese, and every game ends as audio, a web replay and a video.
-
-![God's-view replay of a finished game](../public/showcase/werewolf-replay.webp)
-
-It uses most of agt:
-
-- **A skill and a goal.** The lead's skill holds the whole procedure. Saying "开一局狼人杀" ("start a game of werewolf") makes the lead ask one setup question, then work under a goal until the outputs are checked.
-- **An MCP server of their own.** Each player has an engine MCP server of its own, which keeps the roles apart.
-- **Groups and direct chats.** The God calls on players in the public group, the wolves talk in their own group, and night actions happen in direct chats.
-- **Tasks and local execution.** The lead hands the finished game to a voice agent and then a replay agent as tasks; both run the project's tools with [local execution](./local-execution.md).
-
-The repository has the setup scripts, prompts, skills and a sample game whose replay you can build without calling a model.
 
 ## What to expect when you try this
 
