@@ -118,6 +118,10 @@ agt is meant for one person on a trusted machine. It is not a hosted or multi-us
 
 Build and test instructions, the crate layout and the release process are in [CONTRIBUTING.md](CONTRIBUTING.md). The internal design is documented in [Architecture](docs/zh/architecture/index.md) (Chinese).
 
+## Acknowledgements
+
+Thanks to the [LINUX DO](https://linux.do) community for its support and discussions.
+
 ## Citation and license
 
 If you use agt in research, cite it with [CITATION.cff](CITATION.cff). agt is released under the [MIT License](LICENSE).

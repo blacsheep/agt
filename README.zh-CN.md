@@ -118,6 +118,10 @@ agt 面向在可信机器上使用的单个用户，不是托管服务，也不�
 
 构建与测试方法、crate 结构和发布流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。内部设计见[架构文档](docs/zh/architecture/index.md)。
 
+## 致谢
+
+感谢 [LINUX DO](https://linux.do) 社区的支持与交流。
+
 ## 引用与许可证
 
 如果在研究中使用了 agt，请按 [CITATION.cff](CITATION.cff) 引用。agt 以 [MIT 许可证](LICENSE)发布。
