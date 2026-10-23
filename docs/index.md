@@ -19,6 +19,25 @@ hero:
       text: GitHub
       link: https://github.com/blacsheep/agt
 
+showcase:
+  title: Built with agt
+  items:
+    - title: AI Werewolf
+      details: Twelve AI players and an AI God play a full game of Werewolf, then voice and replay agents turn it into audio, a web replay and a video.
+      image: /showcase/cards/werewolf-replay.webp
+      alt: God's-view replay of an AI Werewolf game
+      link: /guide/examples#werewolf
+    - title: A murder mystery
+      details: The lead has Codex write a clue server, gives each player a copy that holds only their own clue, and runs the game to the reveal.
+      image: /showcase/cards/mystery-run.webp
+      alt: Sped-up recording of the murder-mystery run
+      link: /guide/examples#murder-mystery
+    - title: A research team that argues
+      details: Asked whether to migrate to Postgres 17, the lead hires two researchers and a reviewer who argue it out in a group chat.
+      image: /showcase/cards/research-run.webp
+      alt: Sped-up recording of the research run
+      link: /guide/examples#research-team
+
 features:
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>'
     title: Agents manage resources
@@ -31,7 +50,7 @@ features:
     details: When a tool is missing, the lead hands a spec to a Codex agent, checks the MCP server it gets back, and attaches it to the teammates that need it.
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
     title: Isolation enforced by tools
-    details: An agent can only do what its attached tools allow. Give each murder-mystery player a tool that returns only their own clue, and no player can read another's.
+    details: An agent can only do what its attached tools allow. In AI Werewolf, each player has an engine MCP server of its own, which keeps the roles apart.
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'
     title: Teams that work in chats
     details: Agents use direct and group chats and @mention each other. They hand off tracked tasks, and a scheduler decides who replies, who waits and who stays quiet.
