@@ -46,7 +46,7 @@ Two real runs, each started by a single message to the lead. The [examples page]
 
 ![Sped-up recording: Codex writes the clue server, each role gets its own locked instance, and the game plays through to the reveal](docs/public/showcase/mystery-run.webp)
 
-**A full project on agt: [AI Werewolf](https://github.com/blacsheep/werewolf-game).** Twelve AI players and an AI God play a 12-seat Werewolf game. Each player has an MCP server of its own, so it can only ever see its own role. One message to the lead runs a whole game; voice and replay agents then turn it into audio, a web replay and a video.
+**A full project on agt: [AI Werewolf](https://github.com/blacsheep/werewolf-game).** Twelve AI players and an AI God play a 12-seat Werewolf game. Each player has an engine MCP server of its own, which keeps the roles apart. One message to the lead runs a whole game; voice and replay agents then turn it into audio, a web replay and a video.
 
 ## Install
 
