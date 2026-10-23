@@ -46,6 +46,8 @@ agt 是一个在你自己机器上运行的多 Agent（多智能体）编排框�
 
 ![加速录屏：Codex 写出线索服务器，每个角色挂载各自锁定的实例，游戏一直进行到公布真相](docs/public/showcase/mystery-run.webp)
 
+**基于 agt 的完整项目：[AI 狼人杀](https://github.com/blacsheep/werewolf-game)。** 12 个 AI 玩家和 1 个 AI 上帝打一局 12 人预女猎守，规则引擎给每个座位一个锁定的 MCP 服务器。给 lead 发一句话就能跑完一整局，之后由配音和回放 Agent 生成整局语音、网页回放和视频。
+
 ## 安装
 
 agt 有命令行和桌面应用两种形式，两者使用同一份数据，可以随时切换。

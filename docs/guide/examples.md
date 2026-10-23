@@ -73,6 +73,21 @@ The game master opened the case and called on each player. Every player fetched 
 
 No player's prompt contains the truth, and no player's tool can return another player's clue, so the secrets are kept by how the tools are wired. Read more about [Codex agents](./codex.md) and [MCP servers](./mcp.md).
 
+## A full project: AI Werewolf
+
+[AI Werewolf](https://github.com/blacsheep/werewolf-game) grows the murder mystery into a complete project. Twelve players and a God play a 12-seat Werewolf game in Chinese, and every game ends as audio, a web replay and a video.
+
+![God's-view replay of a finished game](../public/showcase/werewolf-replay.webp)
+
+It uses most of agt:
+
+- **A skill and a goal.** The lead's skill holds the whole procedure. Saying "开一局狼人杀" ("start a game of werewolf") makes the lead ask one setup question, then work under a goal until the outputs are checked.
+- **One MCP server, locked per seat.** The rules engine runs as one instance per seat, so no player can read another's role, and the God hosts from what the engine returns.
+- **Groups and direct chats.** The God calls on players in the public group, the wolves talk in their own group, and night actions happen in direct chats.
+- **Tasks and local execution.** The lead hands the finished game to a voice agent and then a replay agent as tasks; both run the project's tools with [local execution](./local-execution.md).
+
+The repository has the setup scripts, prompts, skills and a sample game whose replay you can build without calling a model.
+
 ## What to expect when you try this
 
 - **Expect to wait minutes.** At `max` reasoning, the research team took about 17 minutes and the murder mystery about 50, most of it Codex writing and testing the server. A lower reasoning effort is faster and cheaper.
