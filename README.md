@@ -14,6 +14,7 @@
   <a href="https://github.com/blacsheep/agt/releases/latest"><img src="https://img.shields.io/github/v/release/blacsheep/agt" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/blacsheep/agt" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey" alt="Linux | macOS | Windows">
+  <a href="https://blacsheep.github.io/agt/"><img src="https://img.shields.io/badge/docs-online-blue" alt="Documentation"></a>
 </p>
 
 agt is a multi-agent orchestration framework that runs on your own machine. You talk to one agent, the lead. Tell it what you want done, and it writes the role prompts, creates the agents, has a coding agent build any tool that is missing, puts everyone in a group chat and runs the work. You watch, step in when you want to, and approve what needs approving.

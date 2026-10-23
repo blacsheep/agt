@@ -14,6 +14,7 @@
   <a href="https://github.com/blacsheep/agt/releases/latest"><img src="https://img.shields.io/github/v/release/blacsheep/agt" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/blacsheep/agt" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey" alt="Linux | macOS | Windows">
+  <a href="https://blacsheep.github.io/agt/zh/"><img src="https://img.shields.io/badge/%E6%96%87%E6%A1%A3-%E5%9C%A8%E7%BA%BF-blue" alt="Documentation"></a>
 </p>
 
 agt 是一个在你自己机器上运行的多 Agent（多智能体）编排框架。你只需要和其中一个 Agent 对话：lead。告诉它要做什么，它会写好角色 Prompt、创建 Agent、让编程 Agent 把缺的工具做出来，再把大家拉进群里推进工作。你可以旁观，随时插话，需要审批的操作由你决定。
