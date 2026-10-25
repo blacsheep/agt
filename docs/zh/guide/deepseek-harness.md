@@ -44,7 +44,7 @@ agt harness resource test builder      # 启动 dsh 并检查 ACP 握手，不�
 ## agt 怎么和 DeepSeek Harness 对接
 
 - **agt 工具：** 每一轮 agt 在 `127.0.0.1` 上临时开一个带随机令牌的 MCP 端点，作为名为 `agt` 的服务挂载到 ACP 会话里。工具调用在 agt 内部执行，照常做权限检查。
-- **审批：** 权限请求（`session/request_permission`）进入 agt 的审批队列，按 **Harness** 审批模式处理，见[权限审批](./permissions.md#codex-审批)。可以批准本次、拒绝或取消这一轮。
+- **审批：** 权限请求（`session/request_permission`）进入 agt 的审批队列，按 **Harness** 审批模式处理，见[权限审批](./permissions.md#harness-审批)。可以批准本次、拒绝或取消这一轮。
 - **模型和档位：** 通过 ACP 的会话配置项逐个会话设置。
 - **会话：** 每个 Agent 在每个会话里保留一个会话；agt 每轮结束后关闭它，下一个进程才能接着用。`/new` 开始新会话。
 

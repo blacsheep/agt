@@ -35,7 +35,7 @@ A `mentioned` agent responds only when a message mentions it, whether the messag
 
 An agent can only wait while another member is actively working, for example replying or about to reply. It waits for those members to finish their current step, and decides again when one of them does or when a new message arrives. If nothing new was said in the meantime, it decides again without the option to wait: the members it waited for are done, so the message may now be its own to act on, as when a host waits for the last speaker to finish. When nobody else is working, there is nothing to wait for, so the agent decides right away. A discussion that has gone quiet therefore stops on its own. While an agent waits, further messages from teammates join its pending decision instead of queuing a separate one each.
 
-Codex agents support `mentioned` and `manual`.
+Harness agents (Codex, Claude Code, DeepSeek Harness) support `mentioned` and `manual`.
 
 ## Auto-reply and discussions
 
@@ -71,13 +71,13 @@ Type `/` in the message box to list the commands available in this conversation.
 | `/stop` | End this round: stop the agents working in this conversation |
 | `/status` | Show each agent's state, engine and recent runs |
 | `/timers` | See this conversation's [timers](./timers.md) and cancel them |
-| `/model` | Choose the model and reasoning level of a Codex agent for this conversation |
+| `/model` | Choose the model and reasoning level of a Codex or Claude Code agent for this conversation |
 | `/compact` | Ask Codex to compact its context |
 | `/rename` | Name the Codex session |
 | `/skills`, `/mcp` | Show the skills and MCP servers configured in Codex |
 | `/permissions` | Show the Codex session's file permissions |
 
-The last five apply to [Codex agents](./codex.md). To send a message that starts with `/`, type `//`.
+`/model` applies to [Codex](./codex.md) and [Claude Code](./claude-code.md) agents, the last four to Codex agents only. To send a message that starts with `/`, type `//`.
 
 ## Watching agents work
 

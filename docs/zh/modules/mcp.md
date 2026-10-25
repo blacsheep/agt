@@ -13,7 +13,7 @@
 
 MCP 资源描述如何启动（stdio）或连接（HTTP）一个 [Model Context Protocol](https://modelcontextprotocol.io) 服务。把它挂载到 Native Agent 上，Agent 就能调用它的工具。每次执行开始时，Agent 会连接自己的 MCP 服务；每次调用都会按工具的输入 schema 和[审批策略](./permissions.md)检查。
 
-注册服务不会让任何人获得使用权；只有挂载了它的 Agent 才能使用。Codex Agent 不使用这些资源，请在 Codex 中配置 MCP。
+注册服务不会让任何人获得使用权；只有挂载了它的 Agent 才能使用。Harness Agent（Codex、Claude Code、DeepSeek Harness）不使用这些资源，请在 Harness 中配置 MCP。
 
 ## 怎么用
 
@@ -121,4 +121,4 @@ agt agent update researcher --add-mcp files
 
 - [Agent](./agent.md)：挂载服务
 - [权限审批](./permissions.md)：每次调用的审批
-- [Harness](./harness.md)：使用自身 MCP 配置的 Codex Agent
+- [Harness](./harness.md)：使用自身 MCP 配置的 Harness Agent

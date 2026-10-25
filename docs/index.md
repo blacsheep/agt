@@ -47,7 +47,7 @@ features:
     details: The built-in lead prompt knows how agt works. Give it a goal and it writes role prompts, creates and enables the agents, and opens a group chat with them.
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
     title: Tools built on request
-    details: When a tool is missing, the lead hands a spec to a Codex agent, checks the MCP server it gets back, and attaches it to the teammates that need it.
+    details: When a tool is missing, the lead hands a spec to a coding agent on Codex, Claude Code or DeepSeek Harness, checks the MCP server it gets back, and attaches it to the teammates that need it.
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
     title: Isolation enforced by tools
     details: An agent can only do what its attached tools allow. In AI Werewolf, each player has an engine MCP server of its own, which keeps the roles apart.

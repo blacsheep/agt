@@ -45,7 +45,7 @@ Then create the agent on it, as for Codex: `agt agent create reviewer --harness 
 
 - **Instructions:** the agent's role prompt and skills are added to Claude Code's system prompt (`--append-system-prompt`).
 - **agt tools:** agt's messaging, memory, task and resource tools are offered to Claude Code as an MCP server named `agt` inside the agt process, so they appear as `mcp__agt__…`. Claude Code does not ask for approval for them; agt checks them itself.
-- **Approvals:** when Claude Code wants to do something its permission mode does not allow, the request comes to agt's approval queue and follows the **Harness** approval mode; see [Permissions](./permissions.md#codex-approvals). You can approve once, deny, or cancel the turn.
+- **Approvals:** when Claude Code wants to do something its permission mode does not allow, the request comes to agt's approval queue and follows the **Harness** approval mode; see [Permissions](./permissions.md#harness-approvals). You can approve once, deny, or cancel the turn.
 - **Sessions:** each agent keeps one Claude Code session per conversation and resumes it each turn. `/new` starts a fresh session.
 
 ## What Claude Code agents can and cannot use

@@ -16,7 +16,7 @@ The `default/lead` prompt (created by `agt init` and on first start) teaches the
 - **check before creating**: list existing models, prompts, MCP servers and agents, and reuse them;
 - **build working teammates**: write a role prompt, define the agent, create its identity, bind it, confirm it is enabled, and add it to a conversation;
 - **grant the minimum**: new agents do not inherit the lead's capabilities, and the lead adds only what each role needs;
-- **have Codex build missing tools**: delegate an MCP server to a Codex agent with contract tests, register it, probe it, and attach it to the agents that need it. When each role may only see its own data, it registers one instance per role, locked to that role by environment variables, instead of telling roles apart by tool arguments or shared tokens;
+- **have a coding agent build missing tools**: delegate an MCP server to a harness agent (Codex, Claude Code or DeepSeek Harness) with contract tests, register it, probe it, and attach it to the agents that need it. When each role may only see its own data, it registers one instance per role, locked to that role by environment variables, instead of telling roles apart by tool arguments or shared tokens;
 - **delegate and follow up**: use tracked tasks for work that must produce a result, report back to the original conversation, and start the next step as soon as the results it waits for arrive;
 - **let the team run itself**: give standing rules once (who does what, who talks to whom, when to escalate) instead of relaying every step;
 - **join groups properly**: in a group someone else created, the lead is a plain member and cannot invite anyone, so it asks the owner to make it an admin or to add the members;
@@ -35,11 +35,11 @@ agt tool call --principal me --manager agent_bind --args '{"principal":"lead","a
 
 The lead makes many tool calls. Set an approval policy you are comfortable with before you start; see [Permissions](./permissions.md). A strong model with reliable tool calling works best for the lead; teammates can use cheaper models.
 
-### Optional: a Codex agent for building tools
+### Optional: a coding agent for building tools
 
-For the lead to build tools, create a Codex agent it can delegate to:
+For the lead to build tools, create a harness agent it can delegate to. It can run on [Codex](./codex.md), [Claude Code](./claude-code.md) or [DeepSeek Harness](./deepseek-harness.md):
 
-1. Create a [harness](./codex.md) that points at a working directory for tools, with `workspace_write` access.
+1. Create a harness that points at a working directory for tools, with `workspace_write` access.
 2. Create an agent on that harness, for example `toolsmith`, with a short prompt such as "You build and test MCP servers in this directory."
 
 Tell the lead it exists, or let it find it with `resource_list`.

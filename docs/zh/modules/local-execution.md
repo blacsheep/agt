@@ -54,7 +54,7 @@ agt agent update builder --add-builtin-tool local_execution
 
 ### 限制
 
-- 仅 Native Agent；Codex Agent 使用 Codex 自己的 Shell 和沙箱。
+- 仅 Native Agent；Harness Agent 使用 Harness 自己的 Shell 和沙箱。
 - 不支持交互式输入，不支持在命令结束后继续存活的后台服务。
 - 取消或停止讨论会终止进程组。如果 agt 本身被强行杀死，命令可能仍在运行。
 - `resource_management` 不包含这项能力，被创建的 Agent 也不会继承。

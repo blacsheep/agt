@@ -20,7 +20,7 @@ Notes belong to one identity, and every recall re-checks that the agent can stil
 
 ## How to use it
 
-Memory tools are available to every hosted agent (native or Codex) while `memory.enabled` is true. People and scripts can call them for their own identity:
+Memory tools are available to every hosted agent (native or on a harness) while `memory.enabled` is true. People and scripts can call them for their own identity:
 
 ```bash
 agt tool call --principal me memory_search --args '{"query":"release","kind":"messages"}'

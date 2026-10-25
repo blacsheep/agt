@@ -45,7 +45,7 @@ agt harness resource test reviewer      # 检查可执行文件确实是 Claude 
 
 - **指令：** Agent 的角色 Prompt 和 Skills 追加到 Claude Code 的系统提示词里（`--append-system-prompt`）。
 - **agt 工具：** agt 的消息、记忆、任务和资源工具，以 agt 进程内一个名为 `agt` 的 MCP 服务提供给 Claude Code，显示为 `mcp__agt__…`。Claude Code 调用它们时不会再请求审批，由 agt 自己检查权限。
-- **审批：** Claude Code 想做权限模式不允许的事时，请求会进入 agt 的审批队列，按 **Harness** 审批模式处理，见[权限审批](./permissions.md#codex-审批)。可以批准本次、拒绝或取消这一轮。
+- **审批：** Claude Code 想做权限模式不允许的事时，请求会进入 agt 的审批队列，按 **Harness** 审批模式处理，见[权限审批](./permissions.md#harness-审批)。可以批准本次、拒绝或取消这一轮。
 - **会话：** 每个 Agent 在每个会话里保留一个 Claude Code 会话，每一轮接着用。`/new` 开始新会话。
 
 ## Claude Code Agent 能用和不能用的

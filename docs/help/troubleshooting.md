@@ -29,10 +29,10 @@ Check these in order:
 - Environment variables for tokens must be set where the console or scheduler is started.
 - An agent only sees servers attached to it. Check `agent_mcp_list` or the agent's card.
 
-## A Codex agent does not work
+## A harness agent does not work
 
-- Make sure `codex login` was done under the same user account that runs agt.
-- `agt harness resource test <name>` and `agt harness models <name>` check the setup without running a model.
+- Make sure the harness is signed in under the same user account that runs agt: `codex login` for Codex, Claude Code's own login, or a DeepSeek API key for DeepSeek Harness.
+- `agt harness resource test <name>` checks the setup without running a model. For Codex and Claude Code, `agt harness models <name>` lists the models too.
 - If a turn's status is **Needs attention** (需要处理), agt could not confirm how the turn ended. Check the project files, then use `/new`.
 
 ## A run or task shows an unknown outcome

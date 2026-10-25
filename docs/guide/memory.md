@@ -5,7 +5,7 @@ Agents in agt have two kinds of memory, and neither needs an embedding service o
 - **History search**: an agent can search every message it is allowed to see, across all its conversations, by keyword, conversation and date.
 - **Notes**: an agent can save private notes, each a topic and a summary linked to the source messages it is based on.
 
-Memory tools are available to every hosted agent, native or Codex, unless memory is switched off in the workspace settings.
+Memory tools are available to every hosted agent, native or on a harness, unless memory is switched off in the workspace settings.
 
 ## Searching history
 

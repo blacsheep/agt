@@ -11,15 +11,15 @@
 
 ## What it does
 
-A harness lets an agent run on [Codex](https://github.com/openai/codex) instead of agt's own model loop. Codex brings file editing, shell commands and its own sandbox, so Codex agents can write and test code, including MCP servers for the rest of the team.
+A harness lets an agent run on an external coding agent instead of agt's own model loop: [Codex](https://github.com/openai/codex), [Claude Code](../guide/claude-code.md), [DeepSeek Harness](../guide/deepseek-harness.md) or another ACP agent. The harness brings file editing, shell commands and its own sandbox, so these agents can write and test code, including MCP servers for the rest of the team.
 
-agt starts `codex app-server`, keeps one Codex session per agent per conversation, forwards Codex's approval requests to the [approval queue](./permissions.md), and publishes Codex's final answer as the agent's reply. Codex uses its own login and configuration; agt stores no Codex credentials.
+For Codex, agt starts `codex app-server`, keeps one Codex session per agent per conversation, forwards Codex's approval requests to the [approval queue](./permissions.md), and publishes Codex's final answer as the agent's reply. Codex uses its own login and configuration; agt stores no Codex credentials.
 
 A harness can use [Claude Code](../guide/claude-code.md) instead (`"engine": "claude-code"`). agt runs it headless, one process per turn, offers agt's tools to it as an in-process MCP server, and sends its permission prompts to the same approval queue. [DeepSeek Harness](../guide/deepseek-harness.md) (`"engine": "deepseek-harness"`) is driven over the Agent Client Protocol, with agt's tools mounted as a loopback HTTP MCP server for each turn.
 
 ## How to use it
 
-1. Install Codex and run `codex login` as the user that runs agt.
+1. Install the engine and sign in as the user that runs agt; for Codex, run `codex login`.
 2. Create the harness:
 
 ```bash
@@ -35,7 +35,7 @@ agt harness models toolsmith
 
 | Parameter | Meaning |
 | --- | --- |
-| `working_directory` | The project Codex works in |
+| `working_directory` | The project the harness works in |
 | `sandbox` | `read_only` or `workspace_write` |
 | `model`, `reasoning_effort` | Defaults for new sessions |
 
@@ -121,7 +121,7 @@ Each agent has one session per conversation. Sessions keep the configuration the
 
 These need `resource_management`. The caller and `target` must both be members of the conversation. Sessions that are running or need review reject changes.
 
-### What Codex agents support
+### What harness agents support
 
 | Supported | Not supported |
 | --- | --- |
@@ -130,7 +130,9 @@ These need `resource_management`. The caller and `target` must both be members o
 | Response policies `mentioned` and `manual` | Response policy `all` |
 | Streaming preview, `/stop`, `/new` | `/review`, `/diff`, importing or forking Codex threads |
 
+Which conversation commands each engine supports is listed on the [Codex](../guide/codex.md), [Claude Code](../guide/claude-code.md) and [DeepSeek Harness](../guide/deepseek-harness.md) pages.
+
 ## Related modules
 
 - [Agent](./agent.md): choosing a harness instead of a model
-- [Permissions](./permissions.md#all-parameters): approving Codex's requests
+- [Permissions](./permissions.md#all-parameters): approving harness requests

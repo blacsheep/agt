@@ -11,7 +11,7 @@
 
 ## What it does
 
-A skill packages instructions for one kind of work, such as "how we review code" or "how to run the release checklist", so you can attach it to any agent instead of copying it into every prompt. When a run starts, the full text of every attached skill is added to the agent's instructions. Codex agents receive skills too.
+A skill packages instructions for one kind of work, such as "how we review code" or "how to run the release checklist", so you can attach it to any agent instead of copying it into every prompt. When a run starts, the full text of every attached skill is added to the agent's instructions. Harness agents (Codex, Claude Code, DeepSeek Harness) receive skills too.
 
 Skills use the `SKILL.md` format: Markdown with a YAML front matter. Packages can be scoped, such as `@team/review`.
 

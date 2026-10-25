@@ -11,15 +11,15 @@
 
 ## 作用
 
-Harness 让 Agent 运行在 [Codex](https://github.com/openai/codex) 上，而不是 agt 自己的模型循环。Codex 自带文件编辑、Shell 命令和沙箱，因此 Codex Agent 可以编写和测试代码，包括供团队其他成员使用的 MCP 服务。
+Harness 让 Agent 运行在外部编程 Agent 上，而不是 agt 自己的模型循环：[Codex](https://github.com/openai/codex)、[Claude Code](../guide/claude-code.md)、[DeepSeek Harness](../guide/deepseek-harness.md) 或其他 ACP Agent。Harness 自带文件编辑、Shell 命令和沙箱，因此这些 Agent 可以编写和测试代码，包括供团队其他成员使用的 MCP 服务。
 
-agt 启动 `codex app-server`，为每个 Agent 在每个会话中保持一个 Codex 会话，把 Codex 的审批请求转发到 [审批队列](./permissions.md)，并把 Codex 的最终答复发布为 Agent 的回复。Codex 使用自己的登录和配置；agt 不保存 Codex 凭据。
+对 Codex，agt 启动 `codex app-server`，为每个 Agent 在每个会话中保持一个 Codex 会话，把 Codex 的审批请求转发到 [审批队列](./permissions.md)，并把 Codex 的最终答复发布为 Agent 的回复。Codex 使用自己的登录和配置；agt 不保存 Codex 凭据。
 
 Harness 也可以改用 [Claude Code](../guide/claude-code.md)（`"engine": "claude-code"`）。agt 以无界面模式运行它，每一轮一个进程，以进程内 MCP 服务的方式把 agt 工具提供给它，并把它的权限请求发到同一个审批队列。[DeepSeek Harness](../guide/deepseek-harness.md)（`"engine": "deepseek-harness"`）通过 Agent Client Protocol 驱动，每一轮把 agt 工具作为本机 HTTP MCP 服务挂载给它。
 
 ## 怎么用
 
-1. 安装 Codex，并以运行 agt 的用户执行 `codex login`。
+1. 安装引擎，并以运行 agt 的用户登录；Codex 执行 `codex login`。
 2. 创建 Harness：
 
 ```bash
@@ -35,7 +35,7 @@ agt harness models toolsmith
 
 | 参数 | 含义 |
 | --- | --- |
-| `working_directory` | Codex 工作的项目 |
+| `working_directory` | Harness 工作的项目 |
 | `sandbox` | `read_only` 或 `workspace_write` |
 | `model`、`reasoning_effort` | 新会话的默认值 |
 
@@ -92,7 +92,7 @@ agt harness models toolsmith
 
 ### `agt harness session`
 
-每个 Agent 在每个会话中有一个 Codex 会话。会话保留其开始时的配置；修改 Harness 只影响新会话。
+每个 Agent 在每个会话中有一个 Harness 会话。会话保留其开始时的配置；修改 Harness 只影响新会话。
 
 | 命令 | 选项 | 含义 |
 | --- | --- | --- |
@@ -115,13 +115,13 @@ agt harness models toolsmith
 | 工具 | 参数 | 含义 |
 | --- | --- | --- |
 | `harness_models` | `reference` | Harness 的模型和推理档位 |
-| `harness_session_get` | `conversation`, `target` | Agent `target` 在某个会话中的 Codex 会话 |
+| `harness_session_get` | `conversation`, `target` | Agent `target` 在某个会话中的 Harness 会话 |
 | `harness_session_models` | `conversation`, `target`, `session` | 该会话的可选项 |
 | `harness_session_configure` | `conversation`, `target`, `session`, `model`, `effort?` | 修改该会话的模型和推理档位 |
 
 这些工具需要 `resource_management`。调用者和 `target` 都必须是该会话的成员。正在执行或需要处理的会话会拒绝修改。
 
-### Codex Agent 支持的功能
+### Harness Agent 支持的功能
 
 | 支持 | 不支持 |
 | --- | --- |
@@ -130,7 +130,9 @@ agt harness models toolsmith
 | 响应策略 `mentioned` 和 `manual` | 响应策略 `all` |
 | 流式预览、`/stop`、`/new` | `/review`、`/diff`、导入或分叉 Codex 线程 |
 
+各引擎支持哪些会话命令，见 [Codex](../guide/codex.md)、[Claude Code](../guide/claude-code.md) 和 [DeepSeek Harness](../guide/deepseek-harness.md) 页面。
+
 ## 相关模块
 
 - [Agent](./agent.md)：选择 Harness 而不是 Model
-- [权限审批](./permissions.md#全部参数)：审批 Codex 的请求
+- [权限审批](./permissions.md#全部参数)：审批 Harness 的请求

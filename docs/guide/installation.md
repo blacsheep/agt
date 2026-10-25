@@ -98,7 +98,7 @@ agt keeps everything in one *home* directory, `~/.agt` by default, created autom
   config.yaml          # workspace settings (scheduler, permissions, memory, local commands)
   providers/ models/ prompts/ skills/ mcps/ agents/ harnesses/   # resources
   im/im.db             # conversations and messages
-  runtime/runtime.db   # bindings, runs, tasks, approvals, Codex sessions
+  runtime/runtime.db   # bindings, runs, tasks, approvals, harness sessions
 ```
 
 To keep the data somewhere else, set `AGT_HOME` to an absolute path in your shell profile:

@@ -46,7 +46,7 @@ agt agent update reviewer --add-builtin-tool task_collaboration
 | 选项 | 可重复 | 含义 |
 | --- | --- | --- |
 | `--model <引用>` | | 使用该模型的 Native 引擎（或 `--harness`） |
-| `--harness <引用>` | | 使用该 Harness 的 Codex 引擎（或 `--model`） |
+| `--harness <引用>` | | 使用该 Harness 的外部引擎（Codex、Claude Code、DeepSeek Harness）（或 `--model`） |
 | `--prompt <引用>` | | 角色 Prompt |
 | `--skill <引用>` | 是 | 挂载 Skill |
 | `--mcp <引用>` | 是 | 挂载 MCP 服务（仅 Native） |
@@ -119,7 +119,7 @@ builtin_tools: [task_collaboration]
 
 | 能力 | Web 标签 | 赋予 Agent |
 | --- | --- | --- |
-| `resource_management` | 资源管理 | 全部[资源](./resources.md)工具、Agent 身份与绑定、Codex 会话工具 |
+| `resource_management` | 资源管理 | 全部[资源](./resources.md)工具、Agent 身份与绑定、Harness 会话工具 |
 | `task_collaboration` | 任务协作 | [任务](./tasks.md)工具 |
 | `local_execution` | 本机命令 | [本机命令](./local-execution.md)工具（仅 Native；还需开启 `execution.enabled`） |
 
@@ -139,8 +139,8 @@ Agent 创建的其他 Agent 不会继承能力。消息和[记忆](./memory.md)�
 
 | 设置 | 默认值 | 含义 |
 | --- | --- | --- |
-| `working_directory` | home | 本机命令的默认目录。Codex Agent 始终使用 Harness 的目录。 |
-| `policy` | `mentioned` | `mentioned`：私聊和被提及时。`all`：考虑每条消息。`manual`：从不自动回复。Codex Agent 会把 `all` 保存为 `mentioned`。 |
+| `working_directory` | home | 本机命令的默认目录。Harness Agent 始终使用 Harness 的目录。 |
+| `policy` | `mentioned` | `mentioned`：私聊和被提及时。`all`：考虑每条消息。`manual`：从不自动回复。Harness Agent 会把 `all` 保存为 `mentioned`。 |
 
 这些工具在 CLI 中需要 `--manager`，Agent 则需要 `resource_management`。
 

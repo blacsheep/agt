@@ -71,7 +71,7 @@ Only attached servers are available to an agent. Registering a server in the hom
 
 ## Let agents build their own tools
 
-An agent with `resource_management` can do all of the above with tools: register a server with `resource_write(kind="mcp")`, check it with `resource_test` and `mcp_probe`, and attach it with `resource_write(kind="agent", create=false, data={}, add={mcps:[...]})`. Combined with a [Codex agent](./codex.md) that writes the server code, this is how a lead builds tools the team is missing. See [Build a team with a lead](./lead-team.md).
+An agent with `resource_management` can do all of the above with tools: register a server with `resource_write(kind="mcp")`, check it with `resource_test` and `mcp_probe`, and attach it with `resource_write(kind="agent", create=false, data={}, add={mcps:[...]})`. Combined with a coding agent on [Codex](./codex.md), [Claude Code](./claude-code.md) or [DeepSeek Harness](./deepseek-harness.md) that writes the server code, this is how a lead builds tools the team is missing. See [Build a team with a lead](./lead-team.md).
 
 If you ask an agent to write an MCP server, ask for:
 
@@ -87,4 +87,4 @@ Each call an agent makes is validated against the tool's input schema before any
 
 - stdio servers run on the host with the permissions of the user running agt. agt does not sandbox them. Attach only servers you trust.
 - A request already sent to a server cannot be recalled, even if you stop the discussion.
-- Codex agents do not use agt's MCP resources; configure MCP servers in Codex itself.
+- Harness agents (Codex, Claude Code, DeepSeek Harness) do not use agt's MCP resources; configure MCP servers in the harness itself.

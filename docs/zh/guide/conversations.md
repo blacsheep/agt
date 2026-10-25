@@ -35,7 +35,7 @@ Agent 在回复里写 `@` 加身份 ID 即可提及成员；ID 含空格或标�
 
 只有当其他成员正在做事时（例如正在回复或即将回复），Agent 才能选择等待。它等待这些成员完成当前这一步；其中任意一个完成，或者有新消息到达时，它会重新判断。如果期间没有任何新消息，它会再判断一次，这次不能再选等待：它等的成员已经做完，这条消息可能正该由它处理，比如主持人等最后一位发言者说完。没有其他成员在做事时，没有可等的对象，Agent 会立即做出决定。因此讨论安静下来后会自然停止。Agent 等待期间，队友的后续消息会并入它待处理的判断，而不是每条消息各排一个。
 
-Codex Agent 支持 `mentioned` 和 `manual`。
+Harness Agent（Codex、Claude Code、DeepSeek Harness）支持 `mentioned` 和 `manual`。
 
 ## 自动回复与讨论
 
@@ -71,13 +71,13 @@ Codex Agent 支持 `mentioned` 和 `manual`。
 | `/stop` | 结束本轮：停止在本会话中工作的 Agent |
 | `/status` | 查看每个 Agent 的状态、执行方式和最近执行 |
 | `/timers` | 查看本会话的[定时任务](./timers.md)，可以取消 |
-| `/model` | 为 Codex Agent 选择本会话使用的模型和推理档位 |
+| `/model` | 为 Codex 或 Claude Code Agent 选择本会话使用的模型和推理档位 |
 | `/compact` | 让 Codex 压缩上下文 |
 | `/rename` | 为 Codex 会话命名 |
 | `/skills`、`/mcp` | 查看 Codex 中配置的 Skill 和 MCP 服务 |
 | `/permissions` | 查看 Codex 会话的文件权限 |
 
-后五个命令用于 [Codex Agent](./codex.md)。要发送以 `/` 开头的消息，输入 `//`。
+`/model` 用于 [Codex](./codex.md) 和 [Claude Code](./claude-code.md) Agent，后四个只用于 Codex Agent。要发送以 `/` 开头的消息，输入 `//`。
 
 ## 观察 Agent 工作
 

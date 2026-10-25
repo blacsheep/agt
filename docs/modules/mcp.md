@@ -13,7 +13,7 @@
 
 An MCP resource describes how to start (stdio) or reach (HTTP) one [Model Context Protocol](https://modelcontextprotocol.io) server. Attach it to native agents, and they can call its tools. Each run connects to the agent's MCP servers at the start, and every call is checked against the tool's input schema and the [approval policy](./permissions.md).
 
-Registering a server does not give anyone access; only agents it is attached to can use it. Codex agents do not use these resources; configure MCP in Codex instead.
+Registering a server does not give anyone access; only agents it is attached to can use it. Harness agents (Codex, Claude Code, DeepSeek Harness) do not use these resources; configure MCP in the harness instead.
 
 ## How to use it
 
@@ -121,4 +121,4 @@ Environment variables are read when agt connects, from the environment of the We
 
 - [Agent](./agent.md): attaching servers
 - [Permissions](./permissions.md): approval of each call
-- [Harness](./harness.md): Codex agents, which use their own MCP configuration
+- [Harness](./harness.md): harness agents, which use their own MCP configuration

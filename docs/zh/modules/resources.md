@@ -19,7 +19,7 @@
 | Prompt | 角色描述 | [Prompt](./prompt.md) |
 | Skill | 可复用的指令包 | [Skill](./skill.md) |
 | MCP | 提供工具的 MCP 服务 | [MCP](./mcp.md) |
-| Harness | 外部执行引擎（Codex）及其项目 | [Harness](./harness.md) |
+| Harness | 外部执行引擎（Codex、Claude Code 或 DeepSeek Harness）及其项目 | [Harness](./harness.md) |
 | Agent | Model 或 Harness，加上 Prompt、Skill、MCP 服务和能力 | [Agent](./agent.md) |
 
 七种资源共用同样的命名、分类、删除规则和 Agent 工具，本页统一说明。人和 Agent 通过同一套代码修改资源，校验和锁也相同。

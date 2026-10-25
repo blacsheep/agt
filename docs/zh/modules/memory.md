@@ -20,7 +20,7 @@
 
 ## 怎么用
 
-`memory.enabled` 为 true 时，每个托管 Agent（Native 或 Codex）都有记忆工具。人和脚本也可以为自己的身份调用：
+`memory.enabled` 为 true 时，每个托管 Agent（Native 或 Harness）都有记忆工具。人和脚本也可以为自己的身份调用：
 
 ```bash
 agt tool call --principal me memory_search --args '{"query":"发布","kind":"messages"}'

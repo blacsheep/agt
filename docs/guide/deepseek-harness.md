@@ -44,7 +44,7 @@ Then create the agent on it: `agt agent create builder --harness builder --promp
 ## How agt connects to DeepSeek Harness
 
 - **agt tools:** for each turn agt opens a temporary MCP endpoint on `127.0.0.1` with a random token and mounts it in the ACP session as the server `agt`. Tool calls run inside agt with its usual checks.
-- **Approvals:** permission requests (`session/request_permission`) go to agt's approval queue and follow the **Harness** approval mode; see [Permissions](./permissions.md#codex-approvals). You can approve once, deny, or cancel the turn.
+- **Approvals:** permission requests (`session/request_permission`) go to agt's approval queue and follow the **Harness** approval mode; see [Permissions](./permissions.md#harness-approvals). You can approve once, deny, or cancel the turn.
 - **Model and level:** set per session through ACP configuration options.
 - **Sessions:** each agent keeps one session per conversation; agt closes it after each turn so the next process can resume it. `/new` starts a fresh session.
 

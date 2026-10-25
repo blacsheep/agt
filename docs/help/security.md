@@ -19,11 +19,11 @@ An agent can only do what its tools allow:
 | Manage every resource in the home, create and enable agents | `resource_management` |
 | Delegate tracked tasks | `task_collaboration` |
 | Run shell commands as your user | `local_execution` plus `execution.enabled` |
-| Edit files in a project | A Codex harness, within its sandbox |
+| Edit files in a project | A harness (Codex, Claude Code, DeepSeek Harness), within its sandbox |
 
 New agents do not inherit their creator's abilities. `resource_management` is the most powerful capability: an agent with it can change any agent's configuration, including adding capabilities to other agents. Give it only to agents you would trust to administer the workspace.
 
-On top of this, every native tool call passes through the [approval policy](../guide/permissions.md), and Codex's own requests go to the approvals queue.
+On top of this, every native tool call passes through the [approval policy](../guide/permissions.md), and harness agents' own requests go to the approvals queue.
 
 ## Secrets
 
@@ -36,7 +36,7 @@ On top of this, every native tool call passes through the [approval policy](../g
 
 - **MCP servers and local commands run as your user.** agt does not sandbox them. A malicious MCP server or an approved command can do anything your account can.
 - **Requests already sent cannot be recalled.** Stopping a discussion stops future work, not a request already made to an external service.
-- **Codex's file access** is governed by Codex's sandbox and the operating system, not by agt. Agents sharing a working directory share its files.
+- **A harness's file access** is governed by the harness's own sandbox or permission settings and the operating system, not by agt. Agents sharing a working directory share its files.
 - **Prompt injection.** Content that agents read (web pages, files, messages from other agents) can try to change their behavior. Keep powerful capabilities and approvals in mind when agents process untrusted content.
 
 ## Reporting a vulnerability

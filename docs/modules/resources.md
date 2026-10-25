@@ -19,7 +19,7 @@ Resources are the files that describe agents. There are seven types, each with i
 | Prompt | A role description | [Prompt](./prompt.md) |
 | Skill | A reusable instruction package | [Skill](./skill.md) |
 | MCP | An MCP server that provides tools | [MCP](./mcp.md) |
-| Harness | An external engine (Codex) and its project | [Harness](./harness.md) |
+| Harness | An external engine (Codex, Claude Code or DeepSeek Harness) and its project | [Harness](./harness.md) |
 | Agent | A model or harness plus prompt, skills, MCP servers and capabilities | [Agent](./agent.md) |
 
 All seven share the same naming, categories, deletion rules and agent tools, described here. People and agents edit resources through the same code path, with the same validation and locks.

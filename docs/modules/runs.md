@@ -13,7 +13,7 @@
 
 Every time an agent replies to a message or works on a task, agt records a **run**: its input, status, model calls, tool calls and output. Runs let you see what an agent did, why it failed, and what it cost in calls.
 
-A native run loops between the model and tools until the model gives a final answer. Messages that arrive meanwhile are delivered at the next tool boundary (`steering`) or after the current work (`follow_up`). Codex runs are a Codex turn, with Codex's own tool loop.
+A native run loops between the model and tools until the model gives a final answer. Messages that arrive meanwhile are delivered at the next tool boundary (`steering`) or after the current work (`follow_up`). A harness run is one turn of the harness (Codex, Claude Code, DeepSeek Harness), with its own tool loop.
 
 `completed` means the model finished normally, not that the goal was achieved; check the tool failures and the output. A run cut off during a model or tool call is never retried automatically, because the call may already have had an effect.
 
@@ -57,7 +57,7 @@ Runs an agent once, outside any conversation. Options are listed in [Agent](./ag
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `scheduler.model_steps` | `null` | Maximum model calls in one native run. `null` for unlimited. Does not limit Codex. Takes effect for new runs. |
+| `scheduler.model_steps` | `null` | Maximum model calls in one native run. `null` for unlimited. Does not limit harness agents. Takes effect for new runs. |
 
 ### Run status
 

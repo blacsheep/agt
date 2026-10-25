@@ -83,9 +83,9 @@ MCP 客户端配置：
 | 任务（仅自己的任务）与定时任务 | 是 | 是 | [任务](./tasks.md#全部参数) |
 | 资源、分类 | | 是 | [资源通用操作](./resources.md#agent-工具) |
 | 身份与绑定 | | 是 | [Agent](./agent.md#身份与绑定) |
-| Codex 会话 | | 是 | [Harness](./harness.md#agent-工具) |
+| Harness 会话 | | 是 | [Harness](./harness.md#agent-工具) |
 
-在 Agent 执行中，工具名带有 `framework_` 前缀，例如 `framework_message_send`。Agent 通过 `resource_management` 获得资源、身份和 Codex 工具，而不是 `--manager`。
+在 Agent 执行中，工具名带有 `framework_` 前缀，例如 `framework_message_send`。Agent 通过 `resource_management` 获得资源、身份和 Harness 工具，而不是 `--manager`。
 
 ### 错误格式
 
