@@ -13,7 +13,7 @@
 
 Agent 每次回复消息或处理任务，agt 都会记录一次**执行**（Run）：输入、状态、模型调用、工具调用和输出。通过执行记录可以看到 Agent 做了什么、为什么失败、调用了多少次。
 
-Native 执行在模型和工具之间循环，直到模型给出最终答复。期间到达的消息会在下一个工具边界（`steering`）或当前工作结束后（`follow_up`）送达。Codex 执行是一轮 Codex turn，使用 Codex 自己的工具循环。
+Native 执行在模型和工具之间循环，直到模型给出最终答复。期间到达的消息会在下一个工具边界（`steering`）或当前工作结束后（`follow_up`）送达。Harness 执行是 Harness（Codex、Claude Code、DeepSeek Harness）的一轮，使用它自己的工具循环。
 
 `completed` 表示模型正常结束，不代表目标达成；请检查工具失败和输出。在模型或工具调用中途被中断的执行永远不会被自动重做，因为那次调用可能已经产生了效果。
 
@@ -57,7 +57,7 @@ agt run tool-detail <执行> --activity <活动>
 
 | 键 | 默认值 | 含义 |
 | --- | --- | --- |
-| `scheduler.model_steps` | `null` | 单次 Native 执行的最大模型调用次数。`null` 不限。不限制 Codex。对新执行生效。 |
+| `scheduler.model_steps` | `null` | 单次 Native 执行的最大模型调用次数。`null` 不限。不限制 Harness Agent。对新执行生效。 |
 
 ### 执行状态
 

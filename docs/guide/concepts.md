@@ -17,7 +17,7 @@ Resources are the building blocks of agents. Each is a small file in the home:
 | Prompt | `PROMPT.md` | A role description |
 | Skill | `SKILL.md` | A reusable instruction package added to the system prompt |
 | MCP | `mcp.json` | How to start or reach an MCP server that provides tools |
-| Harness | `harness.yaml` | An external engine (Codex) and the project directory it works in |
+| Harness | `harness.yaml` | An external engine (Codex, Claude Code or DeepSeek Harness) and the project directory it works in |
 | Agent | `agent.yaml` | A model or harness, plus a prompt, skills, MCP servers and built-in tools |
 
 Resources are referenced as `category/name`, for example `default/lead`. A bare `name` means the `default` category. Categories let you group resources, such as one per project.
@@ -40,7 +40,7 @@ The Web console's **Create agent** (创建 Agent) creates all three at once. In 
 Each agent definition chooses one engine:
 
 - **Native** (`model`): agt's own model and tool loop. Supports MCP servers, skills, all built-in tools and the approval policies.
-- **Codex** (`harness`): runs the agent as a [Codex](https://github.com/openai/codex) session in a project directory. Codex brings its own file editing, shell and sandbox.
+- **External harness** (`harness`): runs the agent as a session of a coding agent in a project directory: [Codex](./codex.md), [Claude Code](./claude-code.md), [DeepSeek Harness](./deepseek-harness.md) or another ACP agent. The harness brings its own file editing, shell and sandbox.
 
 ## Built-in capabilities
 
@@ -90,4 +90,4 @@ Ordinary messages are conversation. When an agent needs a result it can rely on,
 
 ## Approvals
 
-Before a native agent runs a tool, the call goes through the workspace **approval policy**: model review, manual approval, or allow all. Codex agents send their own approval requests, which are handled separately. See [Permissions](./permissions.md).
+Before a native agent runs a tool, the call goes through the workspace **approval policy**: model review, manual approval, or allow all. Harness agents send their own approval requests, which are handled separately. See [Permissions](./permissions.md).

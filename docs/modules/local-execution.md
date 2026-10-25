@@ -54,7 +54,7 @@ Result: exit code, duration, and stdout and stderr truncated to `execution.outpu
 
 ### Limits
 
-- Native agents only; Codex agents use Codex's own shell and sandbox.
+- Native agents only; harness agents use their harness's own shell and sandbox.
 - No interactive input, no background services that outlive the command.
 - Cancelling or stopping the discussion kills the process group. If agt itself is killed, a command may keep running.
 - `resource_management` does not include this capability, and created agents do not inherit it.

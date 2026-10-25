@@ -101,7 +101,7 @@ Pick a person or agent, then one of their conversations, to read it as they see 
 
 A graph of messages and task delegations between agents, with filters. Click a node or edge for details. **Approvals** (权限审批) opens the approvals queue for the whole workspace; see [Permissions](./permissions.md).
 
-The page opens in **Global view** (全局视角), which shows every conversation any identity can see, including chats between agents that you are not in, such as the lead briefing a Codex agent. It refreshes every few seconds. To see exactly what one agent sees, pick it under **Scope and filters** (观察范围与筛选).
+The page opens in **Global view** (全局视角), which shows every conversation any identity can see, including chats between agents that you are not in, such as the lead briefing a coding agent. It refreshes every few seconds. To see exactly what one agent sees, pick it under **Scope and filters** (观察范围与筛选).
 
 ### 资源库 (Resources)
 
@@ -124,7 +124,7 @@ Type `/` in the message box for the commands available in this conversation. Com
 | `/stop` | End this round and stop the agents working here |
 | `/status` | Each agent's state, engine and recent runs |
 | `/timers` | This conversation's timers, with cancel |
-| `/model` | Codex agents: choose model and reasoning level for this conversation |
+| `/model` | Codex and Claude Code agents: choose model and reasoning level for this conversation |
 | `/compact` | Codex agents: compact the context |
 | `/rename` | Codex agents: name the session |
 | `/skills`, `/mcp` | Codex agents: skills and MCP servers configured in Codex |

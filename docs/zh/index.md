@@ -47,7 +47,7 @@ features:
     details: 内置的 lead Prompt 了解 agt 的用法。给它一个目标，它会写角色 Prompt、创建并启用 Agent，再和它们建一个群。
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
     title: 缺工具就现做
-    details: 缺少工具时，lead 把需求交给 Codex Agent，检查它交回的 MCP 服务器，再挂给需要的队友。
+    details: 缺少工具时，lead 把需求交给跑在 Codex、Claude Code 或 DeepSeek Harness 上的编程 Agent，检查它交回的 MCP 服务器，再挂给需要的队友。
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
     title: 由工具保证隔离
     details: Agent 只能做挂在它身上的工具允许的事。AI 狼人杀里，每名玩家挂一个只属于自己的引擎 MCP，从而实现角色隔离。

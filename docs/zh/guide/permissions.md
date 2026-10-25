@@ -1,6 +1,6 @@
 # 权限审批
 
-给 Agent 挂载工具，决定了它*能*调用什么；审批决定某一次调用*是否可以*执行。agt 有两条审批路径：一条处理 Native Agent 的工具调用，一条处理 Codex 发出的请求。
+给 Agent 挂载工具，决定了它*能*调用什么；审批决定某一次调用*是否可以*执行。agt 有两条审批路径：一条处理 Native Agent 的工具调用，一条处理 Harness Agent（Codex、Claude Code、DeepSeek Harness）发出的请求。
 
 ## Native 工具调用
 
@@ -33,16 +33,16 @@ agt permission rules
 agt permission forget --agent default/lead --tool framework_resource_write
 ```
 
-## Codex 审批
+## Harness 审批
 
-当命令、文件修改或额外权限超出 Codex 沙箱时，Codex 会自己请求审批。这些请求使用 `permissions.harness_mode`：
+当命令、文件修改或额外权限超出沙箱或权限模式时，Harness Agent 会自己请求审批：Codex、[Claude Code](./claude-code.md) 和 [DeepSeek Harness](./deepseek-harness.md) 都会把这些请求发给 agt。这些请求使用 `permissions.harness_mode`：
 
 | 模式 | 行为 |
 | --- | --- |
-| `manual`（默认） | 每个请求都等待你的决定。可以批准本次、批准本会话、拒绝或取消本轮。 |
-| `auto_allow` | agt 接受 Codex 的请求，仅限该请求或该轮。 |
+| `manual`（默认） | 每个请求都等待你的决定。可以批准本次、拒绝或取消本轮；Codex 还提供批准本会话。 |
+| `auto_allow` | agt 接受 Harness 的请求，仅限该请求或该轮。 |
 
-两种模式都不会改变 Codex 的沙箱设置。
+两种模式都不会改变 Harness 的沙箱设置。
 
 ## 在哪里审批
 

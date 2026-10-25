@@ -46,7 +46,7 @@ agt agent update reviewer --add-builtin-tool task_collaboration
 | Option | Repeatable | Meaning |
 | --- | --- | --- |
 | `--model <ref>` | | Native engine with this model (or `--harness`) |
-| `--harness <ref>` | | Codex engine with this harness (or `--model`) |
+| `--harness <ref>` | | External harness engine (Codex, Claude Code, DeepSeek Harness) with this harness (or `--model`) |
 | `--prompt <ref>` | | Role prompt |
 | `--skill <ref>` | yes | Attach a skill |
 | `--mcp <ref>` | yes | Attach an MCP server (native only) |
@@ -119,7 +119,7 @@ Use `add` / `remove` (for `skills`, `mcps`, `builtin_tools`) to change single it
 
 | Capability | Web label | Gives the agent |
 | --- | --- | --- |
-| `resource_management` | 资源管理 | All [resource](./resources.md) tools, agent identities and bindings, Codex session tools |
+| `resource_management` | 资源管理 | All [resource](./resources.md) tools, agent identities and bindings, harness session tools |
 | `task_collaboration` | 任务协作 | The [task](./tasks.md) tools |
 | `local_execution` | 本机命令 | The [local command](./local-execution.md) tool (native only; also needs `execution.enabled`) |
 
@@ -139,8 +139,8 @@ Binding settings:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `working_directory` | the home | Default directory for local commands. Codex agents always use the harness directory. |
-| `policy` | `mentioned` | `mentioned`: direct chats and mentions. `all`: considers every message. `manual`: never replies automatically. Codex agents save `all` as `mentioned`. |
+| `working_directory` | the home | Default directory for local commands. Harness agents always use the harness directory. |
+| `policy` | `mentioned` | `mentioned`: direct chats and mentions. `all`: considers every message. `manual`: never replies automatically. Harness agents save `all` as `mentioned`. |
 
 These tools need `--manager` from the CLI, or `resource_management` for agents.
 

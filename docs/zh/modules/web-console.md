@@ -101,7 +101,7 @@ agt web
 
 Agent 之间消息和任务委派的关系图，支持筛选。点击节点或连线查看详情。**权限审批**打开整个工作空间的审批队列；见[权限审批](./permissions.md)。
 
-页面默认使用**全局视角**：显示任一身份能看到的所有会话，包括你不在其中的 Agent 之间的私聊，比如 lead 给 Codex Agent 布置任务。页面每隔几秒自动刷新。想看某个 Agent 自己能看到什么，在**观察范围与筛选**里选择它。
+页面默认使用**全局视角**：显示任一身份能看到的所有会话，包括你不在其中的 Agent 之间的私聊，比如 lead 给编程 Agent 布置任务。页面每隔几秒自动刷新。想看某个 Agent 自己能看到什么，在**观察范围与筛选**里选择它。
 
 ### 资源库
 
@@ -124,7 +124,7 @@ Agent 之间消息和任务委派的关系图，支持筛选。点击节点或�
 | `/stop` | 结束本轮，停止在这里工作的 Agent |
 | `/status` | 每个 Agent 的状态、执行方式和最近执行 |
 | `/timers` | 本会话的定时任务，可以取消 |
-| `/model` | Codex Agent：选择本会话的模型和推理档位 |
+| `/model` | Codex 和 Claude Code Agent：选择本会话的模型和推理档位 |
 | `/compact` | Codex Agent：压缩上下文 |
 | `/rename` | Codex Agent：为会话命名 |
 | `/skills`、`/mcp` | Codex Agent：Codex 中配置的 Skill 和 MCP 服务 |

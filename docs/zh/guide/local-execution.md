@@ -37,5 +37,5 @@ agt agent update builder --add-builtin-tool local_execution
 - 不支持交互式输入，也不支持在命令结束后继续存活的后台服务。
 - 长时间的工作请委派为[任务](./tasks.md)，以便等待和取消。
 - 停止讨论或取消执行会终止命令的进程组。如果 agt 本身被强行杀死，命令可能仍在运行；重试前请检查宿主机。
-- Codex Agent 不使用这项能力。它们通过 Codex 执行命令，受 Codex 沙箱约束。
+- Harness Agent（Codex、Claude Code、DeepSeek Harness）不使用这项能力。它们用自己的 Shell 执行命令，受 Harness 沙箱约束。
 - 会话中只显示执行了命令，不显示命令内容和输出。完整细节在执行记录中，供操作者查看。

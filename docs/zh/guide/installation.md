@@ -98,7 +98,7 @@ agt 把所有数据放在一个 *home* 目录中，默认是 `~/.agt`，首次�
   config.yaml          # 工作空间设置（调度、权限、记忆、本机命令）
   providers/ models/ prompts/ skills/ mcps/ agents/ harnesses/   # 资源
   im/im.db             # 会话和消息
-  runtime/runtime.db   # 绑定、执行、任务、审批、Codex 会话
+  runtime/runtime.db   # 绑定、执行、任务、审批、Harness 会话
 ```
 
 如果想把数据放在别处，在 shell 配置文件中把 `AGT_HOME` 设为绝对路径：

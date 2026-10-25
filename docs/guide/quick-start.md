@@ -58,7 +58,7 @@ The lead checks existing resources, writes role prompts, creates and enables eac
 
 ## 5. Let it build tools
 
-With a [Codex agent](./codex.md) available, the lead can also build tools. Ask for something that needs a tool that does not exist yet, for example a small MCP server for a board game or a data source. The lead delegates the code to a Codex agent, registers the result as an MCP server, tests that it starts, and attaches it to the agents that need it. See [Build a team with a lead](./lead-team.md).
+With a coding agent available on [Codex](./codex.md), [Claude Code](./claude-code.md) or [DeepSeek Harness](./deepseek-harness.md), the lead can also build tools. Ask for something that needs a tool that does not exist yet, for example a small MCP server for a board game or a data source. The lead delegates the code to that agent, registers the result as an MCP server, tests that it starts, and attaches it to the agents that need it. See [Build a team with a lead](./lead-team.md).
 
 ## Doing the same from the CLI
 

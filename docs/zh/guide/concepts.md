@@ -17,7 +17,7 @@
 | Prompt | `PROMPT.md` | 角色描述 |
 | Skill | `SKILL.md` | 可复用的指令包，会加入系统提示词 |
 | MCP | `mcp.json` | 如何启动或连接一个提供工具的 MCP 服务 |
-| Harness | `harness.yaml` | 外部执行引擎（Codex）及其工作的项目目录 |
+| Harness | `harness.yaml` | 外部执行引擎（Codex、Claude Code 或 DeepSeek Harness）及其工作的项目目录 |
 | Agent | `agent.yaml` | 一个 Model 或 Harness，加上 Prompt、Skill、MCP 服务和内置工具 |
 
 资源用 `category/name` 引用，例如 `default/lead`。只写 `name` 表示 `default` 分类。分类用来给资源分组，比如每个项目一个分类。
@@ -40,7 +40,7 @@ Web 控制台的**创建 Agent**会一次创建这三样。在 CLI 和 Agent 工
 每个 Agent 定义选择一种引擎：
 
 - **Native**（`model`）：agt 自己的模型与工具循环。支持 MCP 服务、Skill、全部内置工具和审批策略。
-- **Codex**（`harness`）：把 Agent 作为项目目录中的 [Codex](https://github.com/openai/codex) 会话运行。Codex 自带文件编辑、Shell 和沙箱。
+- **外部 Harness**（`harness`）：把 Agent 作为项目目录中某个编程 Agent 的会话运行：[Codex](./codex.md)、[Claude Code](./claude-code.md)、[DeepSeek Harness](./deepseek-harness.md) 或其他 ACP Agent。Harness 自带文件编辑、Shell 和沙箱。
 
 ## 内置能力
 
@@ -90,4 +90,4 @@ Agent 不会自己运行。人在开启自动回复的情况下发送消息（�
 
 ## 审批
 
-Native Agent 执行工具之前，调用要经过工作空间的**审批策略**：模型审核、人工审批或全部放行。Codex Agent 会发出自己的审批请求，单独处理。见[权限审批](./permissions.md)。
+Native Agent 执行工具之前，调用要经过工作空间的**审批策略**：模型审核、人工审批或全部放行。Harness Agent 会发出自己的审批请求，单独处理。见[权限审批](./permissions.md)。

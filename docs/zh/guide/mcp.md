@@ -71,7 +71,7 @@ Agent 只能使用挂载给它的服务。在 home 中注册服务并不会让�
 
 ## 让 Agent 自己造工具
 
-拥有 `resource_management` 的 Agent 可以通过工具完成上述所有操作：用 `resource_write(kind="mcp")` 注册服务，用 `resource_test` 和 `mcp_probe` 检查，再用 `resource_write(kind="agent", create=false, data={}, add={mcps:[...]})` 挂载。配合一个编写服务代码的 [Codex Agent](./codex.md)，lead 就能造出团队缺少的工具。见[让 lead 组建团队](./lead-team.md)。
+拥有 `resource_management` 的 Agent 可以通过工具完成上述所有操作：用 `resource_write(kind="mcp")` 注册服务，用 `resource_test` 和 `mcp_probe` 检查，再用 `resource_write(kind="agent", create=false, data={}, add={mcps:[...]})` 挂载。配合一个编写服务代码、跑在 [Codex](./codex.md)、[Claude Code](./claude-code.md) 或 [DeepSeek Harness](./deepseek-harness.md) 上的编程 Agent，lead 就能造出团队缺少的工具。见[让 lead 组建团队](./lead-team.md)。
 
 让 Agent 编写 MCP 服务时，建议要求：
 
@@ -87,4 +87,4 @@ Agent 的每次调用在执行任何操作前，都会先按工具的输入 sche
 
 - stdio 服务在宿主机上以运行 agt 的用户权限运行，agt 不对其做沙箱隔离。只挂载你信任的服务。
 - 已经发给服务的请求无法撤回，即使你停止了讨论。
-- Codex Agent 不使用 agt 的 MCP 资源；请在 Codex 中配置 MCP 服务。
+- Harness Agent（Codex、Claude Code、DeepSeek Harness）不使用 agt 的 MCP 资源；请在 Harness 自己的配置中设置 MCP 服务。

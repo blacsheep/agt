@@ -29,10 +29,10 @@
 - token 用的环境变量必须在启动控制台或调度器的地方设置。
 - Agent 只能看到挂载给它的服务。用 `agent_mcp_list` 或 Agent 卡片检查。
 
-## Codex Agent 无法使用
+## Harness Agent 无法使用
 
-- 确认在运行 agt 的同一用户账号下执行过 `codex login`。
-- `agt harness resource test <名称>` 和 `agt harness models <名称>` 可以在不运行模型的情况下检查配置。
+- 确认 Harness 在运行 agt 的同一用户账号下已经登录：Codex 执行过 `codex login`，Claude Code 完成了自己的登录，DeepSeek Harness 配好了 DeepSeek API key。
+- `agt harness resource test <名称>` 可以在不运行模型的情况下检查配置。Codex 和 Claude Code 还可以用 `agt harness models <名称>` 列出模型。
 - 如果一轮的状态是**需要处理**，说明 agt 无法确认这一轮如何结束。请检查项目文件，然后使用 `/new`。
 
 ## 执行或任务显示结果不明确

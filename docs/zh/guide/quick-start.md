@@ -54,7 +54,7 @@ lead 会先查看已有资源，然后编写角色 Prompt、创建并启用每�
 
 ## 5. 让它自己造工具
 
-如果有可用的 [Codex Agent](./codex.md)，lead 还能自己造工具。让它做一件需要新工具的事，例如为桌游或某个数据源写一个小型 MCP 服务。lead 会把代码交给 Codex Agent 编写，把结果注册为 MCP 服务，测试它能正常启动，再挂载给需要它的 Agent。见[让 lead 组建团队](./lead-team.md)。
+如果有跑在 [Codex](./codex.md)、[Claude Code](./claude-code.md) 或 [DeepSeek Harness](./deepseek-harness.md) 上的编程 Agent，lead 还能自己造工具。让它做一件需要新工具的事，例如为桌游或某个数据源写一个小型 MCP 服务。lead 会把代码交给这个 Agent 编写，把结果注册为 MCP 服务，测试它能正常启动，再挂载给需要它的 Agent。见[让 lead 组建团队](./lead-team.md)。
 
 ## 用 CLI 完成同样的事
 

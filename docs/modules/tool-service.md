@@ -83,9 +83,9 @@ Prints one JSON line per change, such as a new message or a task update, after a
 | Tasks (own tasks only) and timers | yes | yes | [Tasks](./tasks.md#all-parameters) |
 | Resources, categories | | yes | [Resources](./resources.md#agent-tools) |
 | Identities and bindings | | yes | [Agent](./agent.md#identities-and-bindings) |
-| Codex sessions | | yes | [Harness](./harness.md#agent-tools) |
+| Harness sessions | | yes | [Harness](./harness.md#agent-tools) |
 
-Inside agent runs, tool names carry a `framework_` prefix, for example `framework_message_send`. Agents get the resource, identity and Codex tools from `resource_management` instead of `--manager`.
+Inside agent runs, tool names carry a `framework_` prefix, for example `framework_message_send`. Agents get the resource, identity and harness tools from `resource_management` instead of `--manager`.
 
 ### Error format
 

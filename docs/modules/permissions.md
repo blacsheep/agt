@@ -2,7 +2,7 @@
 
 | Overview | |
 | --- | --- |
-| **What it is** | Approval of individual tool calls and of Codex's requests |
+| **What it is** | Approval of individual tool calls and of harness agents' requests |
 | **CLI** | `agt permission` |
 | **Web console** | Execution bar in conversations; **Interactions** → **Approvals**; **Settings** → **Tool approvals** |
 | **Settings** | `permissions.*` |
@@ -11,7 +11,7 @@
 
 ## What it does
 
-Every MCP tool call, local command and built-in tool call that writes or reaches outside agt goes through the workspace approval policy before it runs. Built-in tools that only read agt's own data skip it, since membership and discussion limits already decide what they return. Codex agents send their own approval requests when they need to go beyond their sandbox. Both kinds end up in one approval queue.
+Every MCP tool call, local command and built-in tool call that writes or reaches outside agt goes through the workspace approval policy before it runs. Built-in tools that only read agt's own data skip it, since membership and discussion limits already decide what they return. Harness agents (Codex, Claude Code, DeepSeek Harness) send their own approval requests when they need to go beyond their sandbox or permission mode. Both kinds end up in one approval queue.
 
 | Native policy | Behavior |
 | --- | --- |
@@ -39,7 +39,7 @@ agt permission decide <id> --expected-revision 1 --decision '"allow"' --reason '
 | --- | --- |
 | `permissions.mode` | Native policy |
 | `permissions.reviewer_model` | Model resource used for review |
-| `permissions.harness_mode` | `manual` or `auto_allow` for Codex requests |
+| `permissions.harness_mode` | `manual` or `auto_allow` for harness requests |
 
 ## All parameters
 
@@ -51,7 +51,7 @@ agt permission decide <id> --expected-revision 1 --decision '"allow"' --reason '
 | `permissions.reviewer_model` | `null` | A model resource reference. Without it, `model_review` sends every call to a person. |
 | `permissions.review_timeout_seconds` | `30` | Time limit for the reviewer, 1 to 120. On timeout the call goes to a person. |
 | `permissions.request_timeout_seconds` | `600` | How long a native call waits for any decision. On timeout the run is cancelled. |
-| `permissions.harness_mode` | `manual` | `manual`: each Codex request waits for a person. `auto_allow`: accept what Codex asks for, for that request or turn only. |
+| `permissions.harness_mode` | `manual` | `manual`: each harness request waits for a person. `auto_allow`: accept what the harness asks for, for that request or turn only. |
 
 Changes apply to requests waiting now and to later ones. Decisions already made stand.
 
@@ -72,6 +72,7 @@ Changes apply to requests waiting now and to later ones. Decisions already made 
 | Native call | `"allow"`, `"allow_always"` (allow and save a rule for this agent and tool), `"deny"`, `"cancel"` (cancel the run) |
 | Codex command or file change | Accept once, accept for the session, decline, cancel the turn (as offered by Codex) |
 | Codex permission request | Grant for this turn, deny, cancel the turn |
+| Claude Code or DeepSeek Harness request | Approve once, deny, cancel the turn |
 
 ### How model review works
 
@@ -81,10 +82,10 @@ The reviewer receives the tool name, the arguments and the request the agent is 
 
 - Grant a tool the agent does not have, or bypass membership and discussion limits.
 - Recall a call that was already approved and sent.
-- Change Codex's sandbox.
+- Change a harness's sandbox.
 
 ## Related modules
 
 - [Agent](./agent.md): which tools an agent has
 - [Model](./model.md): the reviewer is an ordinary model resource
-- [Harness](./harness.md): where Codex requests come from
+- [Harness](./harness.md): where harness requests come from

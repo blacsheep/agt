@@ -1,6 +1,6 @@
 # Permissions and approvals
 
-Attaching a tool to an agent decides what it *can* call. Approvals decide whether a particular call *may* run. agt has two approval paths: one for native agents' tool calls and one for requests from Codex.
+Attaching a tool to an agent decides what it *can* call. Approvals decide whether a particular call *may* run. agt has two approval paths: one for native agents' tool calls and one for requests from harness agents (Codex, Claude Code, DeepSeek Harness).
 
 ## Native tool calls
 
@@ -33,16 +33,16 @@ agt permission rules
 agt permission forget --agent default/lead --tool framework_resource_write
 ```
 
-## Codex approvals
+## Harness approvals
 
-Codex asks for approval itself when a command, a file change or extra permissions fall outside its sandbox. These requests use `permissions.harness_mode`:
+Harness agents ask for approval themselves when a command, a file change or extra permissions fall outside their sandbox or permission mode: Codex, [Claude Code](./claude-code.md) and [DeepSeek Harness](./deepseek-harness.md) all send these requests to agt. They use `permissions.harness_mode`:
 
 | Mode | Behavior |
 | --- | --- |
-| `manual` (default) | Each request waits for you. You can approve once, approve for the session, decline, or cancel the turn. |
-| `auto_allow` | agt accepts what Codex asks for, for that request or that turn only. |
+| `manual` (default) | Each request waits for you. You can approve once, decline, or cancel the turn; Codex also offers approval for the session. |
+| `auto_allow` | agt accepts what the harness asks for, for that request or that turn only. |
 
-Neither mode changes Codex's sandbox setting.
+Neither mode changes the harness's sandbox setting.
 
 ## Where to approve
 

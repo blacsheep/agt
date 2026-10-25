@@ -24,7 +24,7 @@ builtin_tools: [task_collaboration]
 | 字段 | 含义 |
 | --- | --- |
 | **资源名称 / 身份 ID** | 定义名称，同时也是 Agent 的聊天身份 |
-| **执行方式** | **AGT 内置**（选择模型）或**外部 Harness**（Codex，选择 Harness） |
+| **执行方式** | **AGT 内置**（选择模型）或**外部 Harness**（Codex、Claude Code、DeepSeek Harness 等，选择 Harness） |
 | **角色 Prompt** | **使用已有 Prompt**（选择已有 Prompt）或**新写一份** |
 | Skills / MCP | 可选，挂载的 Skill 和 MCP 服务 |
 | **框架内置工具** | **资源管理**、**任务协作**、**本机命令** |

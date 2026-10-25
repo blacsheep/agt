@@ -90,7 +90,7 @@ agt config apply config.yaml       # 校验并替换整个文件
 | `permissions.reviewer_model` | `null` | 模型审核使用的模型 | [权限审批](./permissions.md#全部参数) |
 | `permissions.review_timeout_seconds` | `30` | 审核模型的时限 | [权限审批](./permissions.md#全部参数) |
 | `permissions.request_timeout_seconds` | `600` | 调用等待决定的时限 | [权限审批](./permissions.md#全部参数) |
-| `permissions.harness_mode` | `manual` | Codex 审批请求的处理方式 | [权限审批](./permissions.md#全部参数) |
+| `permissions.harness_mode` | `manual` | Harness 审批请求的处理方式 | [权限审批](./permissions.md#全部参数) |
 | `memory.enabled` | `true` | 历史搜索与笔记 | [记忆](./memory.md#全部参数) |
 | `execution.enabled` | `false` | 允许执行宿主机命令 | [本机命令](./local-execution.md#全部参数) |
 | `execution.timeout_seconds` | `300` | 每条命令的时限 | [本机命令](./local-execution.md#全部参数) |
@@ -109,7 +109,7 @@ agt config apply config.yaml       # 校验并替换整个文件
   harnesses/<category>/<name>/harness.yaml
   agents/<category>/<name>/agent.yaml
   im/im.db               # 身份、会话、消息
-  runtime/runtime.db     # 绑定、讨论、执行、任务、审批、Codex 会话
+  runtime/runtime.db     # 绑定、讨论、执行、任务、审批、Harness 会话
   memory/memory.db       # Agent 的笔记
   .trash/                # 已删除的资源
 ```

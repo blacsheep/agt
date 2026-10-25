@@ -17,7 +17,9 @@
   <a href="https://blacsheep.github.io/agt/zh/"><img src="https://img.shields.io/badge/%E6%96%87%E6%A1%A3-%E5%9C%A8%E7%BA%BF-blue" alt="Documentation"></a>
 </p>
 
-agt 是一个在你自己机器上运行的多 Agent（多智能体）编排框架。你只需要和其中一个 Agent 对话：lead。告诉它要做什么，它会写好角色 Prompt、创建 Agent、让编程 Agent 把缺的工具做出来，再把大家拉进群里推进工作。你可以旁观，随时插话，需要审批的操作由你决定。
+agt 是一个在你自己机器上运行的多 Agent（多智能体）编排框架。你只需要和其中一个 Agent 对话：lead。
+
+告诉它要做什么，它会写好角色 Prompt、创建 Agent、让编程 Agent 把缺的工具做出来，再把大家拉进群里推进工作。你可以旁观，随时插话，需要审批的操作由你决定。
 
 ![加速录屏：给 lead 发一条消息，它创建三人研究小组，两轮讨论后给出结论，全程无人干预](docs/public/showcase/research-run.webp)
 
@@ -31,7 +33,7 @@ agt 是一个在你自己机器上运行的多 Agent（多智能体）编排框�
 
 **隔离由工具保证。** Agent 能做的事只取决于挂在它身上的工具，新建的 Agent 也不会继承创建者的工具。下面的剧本杀里，每位玩家的工具只能返回他自己的线索，用不着在 Prompt 里叮嘱谁别偷看。
 
-**Codex 也是团队成员。** Agent 可以跑在 [Codex](https://github.com/openai/codex) 会话上，而不是内置的模型循环。lead 把需求交给它，拿回一个测试过的 MCP 服务器，再挂给需要的 Agent。
+**接入现有的编程 Agent。** Agent 可以不走内置的模型循环，而是跑在 [Codex](https://github.com/openai/codex)、[Claude Code](https://claude.com/claude-code)、[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）或其他 ACP Agent 上。它们保留自己的工具和沙箱，同时用 agt 的消息、任务和记忆和其他成员协作。lead 可以把需求交给它们，拿回一个测试过的 MCP 服务器，再挂给需要的 Agent。
 
 **重启不丢工作。** 会话、执行、任务和审批都保存在 SQLite 里。未完成的工作会从中断处继续；结果不确定的工作会标记出来交给你处理，而不是再执行一遍。
 
@@ -75,7 +77,7 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/blacsheep/agt/rele
 
 AGT Studio 是控制台的桌面版，支持 macOS、Windows 和 Linux，带托盘图标和系统通知。从[最新发布](https://github.com/blacsheep/agt/releases/latest)下载对应系统的安装包（`.dmg`、`-setup.exe`、`.AppImage` 或 `.deb`）。见[桌面客户端](docs/zh/guide/desktop.md)。
 
-两种方式都需要一个支持工具调用的模型接口：OpenAI 或兼容服务、Anthropic、Google Gemini 都可以。编程类 Agent 还需要它所运行的工具，例如 [Codex CLI](https://github.com/openai/codex) 或 [Claude Code](https://claude.com/claude-code)。
+两种方式都需要一个支持工具调用的模型接口：OpenAI 或兼容服务、Anthropic、Google Gemini 都可以。编程类 Agent 还需要它所运行的工具，例如 [Codex CLI](https://github.com/openai/codex)、[Claude Code](https://claude.com/claude-code) 或 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)。
 
 ## 快速开始
 
@@ -95,7 +97,7 @@ agt web
 | 让 lead 组建第一个团队 | [快速开始](docs/zh/guide/quick-start.md) |
 | 看两次完整运行 | [示例](docs/zh/guide/examples.md) |
 | 理解各个组成部分 | [核心概念](docs/zh/guide/concepts.md) |
-| 配置模型、Agent、MCP、Codex、任务、记忆或审批 | [使用指南](docs/zh/guide/models.md) |
+| 配置模型、Agent、MCP、编程 Agent、任务、记忆或审批 | [使用指南](docs/zh/guide/models.md) |
 | 查某个命令或配置项 | [模块](docs/zh/modules/workspace.md) |
 | Agent 不回复怎么办 | [常见问题与排错](docs/zh/help/troubleshooting.md) |
 | 了解哪些地方不能对外暴露 | [安全模型](docs/zh/help/security.md) |
@@ -109,10 +111,22 @@ agt web
   config.yaml                       工作空间设置
   providers/ models/ prompts/ skills/ mcps/ agents/ harnesses/
   im/im.db                          会话和消息
-  runtime/runtime.db                执行、任务、审批、Codex 会话
+  runtime/runtime.db                执行、任务、审批、Harness 会话
 ```
 
 agt 面向在可信机器上使用的单个用户，不是托管服务，也不支持多用户。
+
+## 现状与可以延伸的方向
+
+agt 是一个初步想法的实现：让 Agent 自己组建团队，在聊天里协作。它还很早期，可能有各种 bug，也可能有设计上考虑不周的地方。
+
+如果其中的思路对你有启发，欢迎 fork 后按自己的需要改造。下面是我们想到的几个方向：
+
+- **用一个 lead 管理多个项目。** 每个 harness 有自己的工作目录，可以把不同项目目录下的 Codex、Claude Code、DeepSeek Harness 都接进来，由各自的 harness 负责各自的项目，你只和一个 lead 对话。现在已经有一些在会话管理上做得更好的项目，也欢迎从 agt 这样的思路出发，做出更好的东西。
+- **为需要会话隔离的多 Agent 场景提供底层框架。** 每个 Agent 只看到自己参与的会话和挂给它的工具，适合 AI 狼人杀、剧本杀这类信息不对称的场景。[AI 狼人杀](https://github.com/blacsheep/werewolf-game)就是这样做的。
+- **类似 AI 小镇的模拟。** 用 agt 把每个角色隔离开，再在它们之间加一层交互层：由它决定谁在什么时候遇到谁、听到什么，再把消息发给对应的 Agent。每个角色有自己的记忆，各自行动，整个世界怎么演化由交互层推动。
+
+也欢迎提 Issue 和 PR。
 
 ## 参与开发
 

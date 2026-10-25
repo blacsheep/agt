@@ -2,7 +2,7 @@
 
 | 概览 | |
 | --- | --- |
-| **是什么** | 单次工具调用和 Codex 请求的审批 |
+| **是什么** | 单次工具调用和 Harness Agent 请求的审批 |
 | **CLI** | `agt permission` |
 | **Web 控制台** | 会话中的执行横条；**交互观察** → **权限审批**；**运行设置** → **工具权限审批** |
 | **设置** | `permissions.*` |
@@ -11,7 +11,7 @@
 
 ## 作用
 
-Native Agent 的 MCP 工具调用、本机命令，以及会写入数据或访问 agt 外部的内置工具，在执行前都要经过工作空间审批策略。只读取 agt 自身数据的内置工具不经过审批，因为成员关系和讨论范围已经限定了它们能返回的内容。Codex Agent 需要超出沙箱时会发出自己的审批请求。两类请求进入同一个审批队列。
+Native Agent 的 MCP 工具调用、本机命令，以及会写入数据或访问 agt 外部的内置工具，在执行前都要经过工作空间审批策略。只读取 agt 自身数据的内置工具不经过审批，因为成员关系和讨论范围已经限定了它们能返回的内容。Harness Agent（Codex、Claude Code、DeepSeek Harness）需要超出沙箱或权限模式时会发出自己的审批请求。两类请求进入同一个审批队列。
 
 | Native 策略 | 行为 |
 | --- | --- |
@@ -39,7 +39,7 @@ agt permission decide <id> --expected-revision 1 --decision '"allow"' --reason '
 | --- | --- |
 | `permissions.mode` | Native 策略 |
 | `permissions.reviewer_model` | 用于审核的 Model 资源 |
-| `permissions.harness_mode` | Codex 请求的 `manual` 或 `auto_allow` |
+| `permissions.harness_mode` | Harness 请求的 `manual` 或 `auto_allow` |
 
 ## 全部参数
 
@@ -51,7 +51,7 @@ agt permission decide <id> --expected-revision 1 --decision '"allow"' --reason '
 | `permissions.reviewer_model` | `null` | 一个 Model 资源引用。未设置时，`model_review` 会把每次调用交给人。 |
 | `permissions.review_timeout_seconds` | `30` | 审核模型的时限，1 到 120。超时后调用交给人。 |
 | `permissions.request_timeout_seconds` | `600` | Native 调用等待任何决定的时长。超时后取消执行。 |
-| `permissions.harness_mode` | `manual` | `manual`：每个 Codex 请求等待人决定。`auto_allow`：接受 Codex 的请求，仅限该请求或该轮。 |
+| `permissions.harness_mode` | `manual` | `manual`：每个 Harness 请求等待人决定。`auto_allow`：接受 Harness 的请求，仅限该请求或该轮。 |
 
 修改对正在等待和之后的请求生效。已作出的决定保持不变。
 
@@ -72,6 +72,7 @@ agt permission decide <id> --expected-revision 1 --decision '"allow"' --reason '
 | Native 调用 | `"allow"`、`"allow_always"`（批准并为该 Agent 和工具保存规则）、`"deny"`、`"cancel"`（取消执行） |
 | Codex 命令或文件修改 | 批准本次、批准本会话、拒绝、取消本轮（以 Codex 提供的为准） |
 | Codex 权限请求 | 授予本轮、拒绝、取消本轮 |
+| Claude Code 或 DeepSeek Harness 请求 | 批准本次、拒绝、取消本轮 |
 
 ### 模型审核如何工作
 
@@ -81,10 +82,10 @@ agt permission decide <id> --expected-revision 1 --decision '"allow"' --reason '
 
 - 给 Agent 它没有的工具，或绕过成员资格和讨论限制。
 - 撤回已被批准并发出的调用。
-- 改变 Codex 的沙箱。
+- 改变 Harness 的沙箱。
 
 ## 相关模块
 
 - [Agent](./agent.md)：Agent 有哪些工具
 - [Model](./model.md)：审核者是普通的 Model 资源
-- [Harness](./harness.md)：Codex 请求的来源
+- [Harness](./harness.md)：Harness 请求的来源

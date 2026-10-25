@@ -11,7 +11,7 @@
 
 ## 作用
 
-Skill 把某一类工作的指令打包，例如“我们如何审查代码”或“如何执行发布检查清单”，这样可以挂载到任何 Agent 上，而不必复制到每个 Prompt 里。执行开始时，所有挂载的 Skill 的完整正文会加入 Agent 的指令。Codex Agent 也会收到 Skill。
+Skill 把某一类工作的指令打包，例如“我们如何审查代码”或“如何执行发布检查清单”，这样可以挂载到任何 Agent 上，而不必复制到每个 Prompt 里。执行开始时，所有挂载的 Skill 的完整正文会加入 Agent 的指令。Harness Agent（Codex、Claude Code、DeepSeek Harness）也会收到 Skill。
 
 Skill 使用 `SKILL.md` 格式：带 YAML front matter 的 Markdown。包名可以带作用域，例如 `@team/review`。
 

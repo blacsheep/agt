@@ -19,11 +19,11 @@ Agent 只能做它的工具允许的事：
 | 管理 home 中的所有资源、创建并启用 Agent | `resource_management` |
 | 委派可追踪任务 | `task_collaboration` |
 | 以你的用户身份执行 Shell 命令 | `local_execution` 加 `execution.enabled` |
-| 编辑项目中的文件 | Codex Harness，在其沙箱范围内 |
+| 编辑项目中的文件 | Harness（Codex、Claude Code、DeepSeek Harness），在其沙箱范围内 |
 
 新 Agent 不会继承创建者的能力。`resource_management` 是权限最大的能力：拥有它的 Agent 可以修改任何 Agent 的配置，包括给其他 Agent 增加能力。只把它交给你信任其管理工作空间的 Agent。
 
-此外，每次 Native 工具调用都要经过[审批策略](../guide/permissions.md)，Codex 自己的请求也会进入审批队列。
+此外，每次 Native 工具调用都要经过[审批策略](../guide/permissions.md)，Harness Agent 自己的请求也会进入审批队列。
 
 ## 密钥
 
@@ -36,7 +36,7 @@ Agent 只能做它的工具允许的事：
 
 - **MCP 服务和本机命令以你的用户身份运行。** agt 不对它们做沙箱隔离。恶意的 MCP 服务或被批准的命令可以做你的账号能做的任何事。
 - **已发出的请求无法撤回。** 停止讨论只阻止之后的工作，不能撤回已经发给外部服务的请求。
-- **Codex 的文件访问**由 Codex 沙箱和操作系统控制，而不是 agt。共享同一工作目录的 Agent 共享其中的文件。
+- **Harness 的文件访问**由 Harness 自己的沙箱或权限设置和操作系统控制，而不是 agt。共享同一工作目录的 Agent 共享其中的文件。
 - **提示词注入。** Agent 读取的内容（网页、文件、其他 Agent 的消息）可能试图改变它们的行为。当 Agent 处理不可信内容时，请留意它拥有的强大能力和审批设置。
 
 ## 报告漏洞

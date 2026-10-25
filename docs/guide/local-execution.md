@@ -37,5 +37,5 @@ Each call also goes through the [approval policy](./permissions.md), so with man
 - No interactive input, and no background services that outlive the command.
 - For long jobs, delegate a [task](./tasks.md) instead, so it can be waited on and cancelled.
 - Stopping a discussion or cancelling a run terminates the command's process group. If agt itself is killed, the command may keep running; check the host before trying again.
-- Codex agents do not use this capability. They run commands through Codex, within Codex's sandbox.
+- Harness agents (Codex, Claude Code, DeepSeek Harness) do not use this capability. They run commands through their own shell, within the harness's sandbox.
 - The conversation shows only that a command was run, not the command or its output. The full details are available to the operator in the execution record.

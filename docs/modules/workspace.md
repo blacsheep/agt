@@ -90,7 +90,7 @@ Initializes a home: creates the resource directories, the conversation database,
 | `permissions.reviewer_model` | `null` | Model used for model review | [Permissions](./permissions.md#all-parameters) |
 | `permissions.review_timeout_seconds` | `30` | Time limit for the reviewer | [Permissions](./permissions.md#all-parameters) |
 | `permissions.request_timeout_seconds` | `600` | Time a call waits for a decision | [Permissions](./permissions.md#all-parameters) |
-| `permissions.harness_mode` | `manual` | Handling of Codex approval requests | [Permissions](./permissions.md#all-parameters) |
+| `permissions.harness_mode` | `manual` | Handling of harness approval requests | [Permissions](./permissions.md#all-parameters) |
 | `memory.enabled` | `true` | History search and notes | [Memory](./memory.md#all-parameters) |
 | `execution.enabled` | `false` | Allow host commands | [Local commands](./local-execution.md#all-parameters) |
 | `execution.timeout_seconds` | `300` | Time limit per command | [Local commands](./local-execution.md#all-parameters) |
@@ -109,7 +109,7 @@ Initializes a home: creates the resource directories, the conversation database,
   harnesses/<category>/<name>/harness.yaml
   agents/<category>/<name>/agent.yaml
   im/im.db               # identities, conversations, messages
-  runtime/runtime.db     # bindings, discussions, runs, tasks, approvals, Codex sessions
+  runtime/runtime.db     # bindings, discussions, runs, tasks, approvals, harness sessions
   memory/memory.db       # agents' notes
   .trash/                # deleted resources
 ```
