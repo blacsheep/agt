@@ -220,9 +220,16 @@ impl Acp {
             turn.session = session.clone();
             event(Event::Thread(&session))?;
             self.configure(harness, &mut turn, event)?;
+            // ACP has no system prompt, so the role prompt, skills and AGT's turn
+            // instructions lead every prompt, as Codex receives them every turn.
+            let text = if execution.instructions.is_empty() {
+                execution.input.to_owned()
+            } else {
+                format!("{}\n\n{}", execution.instructions, execution.input)
+            };
             let prompt = self.send_request(
                 "session/prompt",
-                json!({"sessionId":session,"prompt":[{"type":"text","text":execution.input}]}),
+                json!({"sessionId":session,"prompt":[{"type":"text","text":text}]}),
             )?;
             turn.prompt = prompt;
             turn.submitted = true;
