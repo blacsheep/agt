@@ -139,6 +139,11 @@ fn a_turn_mounts_agt_tools_over_http_and_streams_the_reply() {
             .starts_with("http://127.0.0.1:")
     );
     assert!(frames.iter().any(|f| f["method"] == "session/close"));
+    let prompt = frames
+        .iter()
+        .find(|f| f["method"] == "session/prompt")
+        .unwrap();
+    assert_eq!(prompt["params"]["prompt"][0]["text"], "role\n\nTOOL");
     let listed: Value =
         serde_json::from_str(&std::fs::read_to_string(dir.path().join("tools.json")).unwrap())
             .unwrap();
