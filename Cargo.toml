@@ -26,7 +26,7 @@ license = "MIT"
 publish = false
 repository = "https://github.com/blacsheep/agt"
 rust-version = "1.96.1"
-version = "0.6.2"
+version = "0.6.3"
 
 [workspace.dependencies]
 agt-harness = { path = "crates/agt-harness" }
