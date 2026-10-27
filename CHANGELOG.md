@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.3 - 2026-10-27
+
+### Fixes
+
+- **DeepSeek Harness and other ACP agents** now receive their role prompt, skills and agt's turn instructions. Since 0.5.0 they got only the conversation input, so they did not know their role, their identity in agt, or that their final answer is posted for them. The instructions now lead every prompt, as Codex and Claude Code already receive them.
+
+### Documentation
+
+- The docs no longer present Codex as the only coding agent. Wherever a statement holds for every engine, they say harness agents (Codex, Claude Code, DeepSeek Harness), and they spell out what differs: `/model` works for Codex and Claude Code, the other session commands for Codex only. The permissions section "Codex approvals" is now "Harness approvals".
+- The README leads with the showcase, starting with [AI Werewolf](https://github.com/blacsheep/werewolf-game), a complete project built on agt, and gains a section on the project's status and directions it could take.
+
 ## 0.6.2 - 2026-10-22
 
 ### Updates you choose
